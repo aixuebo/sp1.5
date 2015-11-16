@@ -55,7 +55,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
   private val settings = new ConcurrentHashMap[String, String]()
 
   if (loadDefaults) {
-    // Load any spark.* system properties
+    // Load any spark.* system properties 加载系统属性集合,以spark，开头的都允许被加载
     for ((key, value) <- Utils.getSystemProperties if key.startsWith("spark.")) {
       set(key, value)
     }
@@ -87,7 +87,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
     set("spark.app.name", name)
   }
 
-  /** Set JAR files to distribute to the cluster. */
+  /** Set JAR files to distribute to the cluster. jar集合解析成按照逗号拆分的字符串*/
   def setJars(jars: Seq[String]): SparkConf = {
     for (jar <- jars if (jar == null)) logWarning("null jar passed to SparkContext constructor")
     set("spark.jars", jars.filter(_ != null).mkString(","))
@@ -102,6 +102,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
    * Set an environment variable to be used when launching executors for this application.
    * These variables are stored as properties of the form spark.executorEnv.VAR_NAME
    * (for example spark.executorEnv.PATH) but this method makes them easier to set.
+   * 设置允许时候的环境key=value
    */
   def setExecutorEnv(variable: String, value: String): SparkConf = {
     set("spark.executorEnv." + variable, value)
@@ -111,6 +112,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
    * Set multiple environment variables to be used when launching executors.
    * These variables are stored as properties of the form spark.executorEnv.VAR_NAME
    * (for example spark.executorEnv.PATH) but this method makes them easier to set.
+   * 设置一组集合
    */
   def setExecutorEnv(variables: Seq[(String, String)]): SparkConf = {
     for ((k, v) <- variables) {
@@ -134,7 +136,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
     set("spark.home", home)
   }
 
-  /** Set multiple parameters together */
+  /** Set multiple parameters together 设置一组元祖属性信息*/
   def setAll(settings: Traversable[(String, String)]): SparkConf = {
     settings.foreach { case (k, v) => set(k, v) }
     this

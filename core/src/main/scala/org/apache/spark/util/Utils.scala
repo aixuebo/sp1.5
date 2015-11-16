@@ -1498,9 +1498,11 @@ private[spark] object Utils extends Logging {
     * properties which have been set explicitly, as well as those for which only a default value
     * has been defined. */
   def getSystemProperties: Map[String, String] = {
+    //循环属性中每一个key,因为key是Set集合,因此sysProps返回值也是Set集合,只是Set存储的是元祖
     val sysProps = for (key <- System.getProperties.stringPropertyNames()) yield
       (key, System.getProperty(key))
 
+      //将元祖Set返回成Map
     sysProps.toMap
   }
 

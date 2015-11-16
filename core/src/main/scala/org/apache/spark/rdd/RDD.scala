@@ -45,6 +45,7 @@ import org.apache.spark.util.random.{BernoulliSampler, PoissonSampler, Bernoulli
 
 /**
  * A Resilient Distributed Dataset (RDD), the basic abstraction in Spark. Represents an immutable,
+ * RDD是弹性的分布式数据集,在spark中抽象的基础类,代表不变的类,
  * partitioned collection of elements that can be operated on in parallel. This class contains the
  * basic operations available on all RDDs, such as `map`, `filter`, and `persist`. In addition,
  * [[org.apache.spark.rdd.PairRDDFunctions]] contains operations available only on RDDs of key-value
