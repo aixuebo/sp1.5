@@ -20,6 +20,7 @@ import java.io.{ObjectInputStream, ObjectOutputStream}
 
 import org.apache.hadoop.conf.Configuration
 
+//将hadoop的Configuration信息序列化与反序列化,使用java的方式进行的序列化与发序列化
 private[spark]
 class SerializableConfiguration(@transient var value: Configuration) extends Serializable {
   private def writeObject(out: ObjectOutputStream): Unit = Utils.tryOrIOException {

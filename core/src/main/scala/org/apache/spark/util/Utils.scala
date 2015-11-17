@@ -51,7 +51,10 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.serializer.{DeserializationStream, SerializationStream, SerializerInstance}
 
-/** CallSite represents a place in user code. It can have a short and a long form. */
+/** CallSite represents a place in user code. It can have a short and a long form. 
+ * 参数 shortForm 表示堆栈信息的短小名称
+ * 参数  longForm表示堆栈信息的字符串形式
+ **/
 private[spark] case class CallSite(shortForm: String, longForm: String)
 
 private[spark] object CallSite {
@@ -75,7 +78,9 @@ private[spark] object Utils extends Logging {
   @volatile private var localRootDirs: Array[String] = null
 
 
-  /** Serialize an object using Java serialization */
+  /** Serialize an object using Java serialization 
+   *  使用java的序列化方法将参数T对应的object写入输出流中,返回写入的字节数组  
+   **/
   def serialize[T](o: T): Array[Byte] = {
     val bos = new ByteArrayOutputStream()
     val oos = new ObjectOutputStream(bos)
@@ -84,14 +89,18 @@ private[spark] object Utils extends Logging {
     bos.toByteArray
   }
 
-  /** Deserialize an object using Java serialization */
+  /** Deserialize an object using Java serialization 
+   *  使用java的反序列化方法将参数对应的字节数组,反序列化成对象  
+   **/
   def deserialize[T](bytes: Array[Byte]): T = {
     val bis = new ByteArrayInputStream(bytes)
     val ois = new ObjectInputStream(bis)
     ois.readObject.asInstanceOf[T]
   }
 
-  /** Deserialize an object using Java serialization and the given ClassLoader */
+  /** Deserialize an object using Java serialization and the given ClassLoader 
+   *  使用java的反序列化方法将参数对应的字节数组,反序列化成对象  
+   **/
   def deserialize[T](bytes: Array[Byte], loader: ClassLoader): T = {
     val bis = new ByteArrayInputStream(bytes)
     val ois = new ObjectInputStream(bis) {
@@ -104,7 +113,9 @@ private[spark] object Utils extends Logging {
     ois.readObject.asInstanceOf[T]
   }
 
-  /** Deserialize a Long value (used for [[org.apache.spark.api.python.PythonPartitioner]]) */
+  /** Deserialize a Long value (used for [[org.apache.spark.api.python.PythonPartitioner]]) 
+   *  从字节数组中读取8个字节,转换成long类型返回  
+   **/
   def deserializeLongValue(bytes: Array[Byte]) : Long = {
     // Note: we assume that we are given a Long value encoded in network (big-endian) byte order
     var result = bytes(7) & 0xFFL
@@ -117,7 +128,8 @@ private[spark] object Utils extends Logging {
     result + ((bytes(0) & 0xFFL) << 56)
   }
 
-  /** Serialize via nested stream using specific serializer */
+  /** Serialize via nested stream using specific serializer 
+   **/
   def serializeViaNestedStream(os: OutputStream, ser: SerializerInstance)(
       f: SerializationStream => Unit): Unit = {
     val osWrapper = ser.serializeStream(new OutputStream {
@@ -168,7 +180,7 @@ private[spark] object Utils extends Logging {
   }
 
   // scalastyle:off classforname
-  /** Preferred alternative to Class.forName(className) */
+  /** Preferred alternative to Class.forName(className) 实例化一个class*/
   def classForName(className: String): Class[_] = {
     Class.forName(className, true, getContextOrSparkClassLoader)
     // scalastyle:on classforname
@@ -176,6 +188,7 @@ private[spark] object Utils extends Logging {
 
   /**
    * Primitive often used when writing [[java.nio.ByteBuffer]] to [[java.io.DataOutput]]
+   * 将ByteBuffer的内容写入ObjectOutput中
    */
   def writeByteBuffer(bb: ByteBuffer, out: ObjectOutput): Unit = {
     if (bb.hasArray) {
@@ -192,6 +205,7 @@ private[spark] object Utils extends Logging {
    *
    * @param file the file whose permissions will be modified
    * @return true if the permissions were successfully changed, false otherwise.
+   * 为file设置700权限
    */
   def chmod700(file: File): Boolean = {
     file.setReadable(false, false) &&
@@ -205,6 +219,7 @@ private[spark] object Utils extends Logging {
   /**
    * Create a directory inside the given parent directory. The directory is guaranteed to be
    * newly created, and is not marked for automatic deletion.
+   * 在root目录下,创建namePrefix+uuid的文件夹
    */
   def createDirectory(root: String, namePrefix: String = "spark"): File = {
     var attempts = 0
@@ -230,11 +245,12 @@ private[spark] object Utils extends Logging {
   /**
    * Create a temporary directory inside the given parent directory. The directory will be
    * automatically deleted when the VM shuts down.
+   * 在root目录下,创建namePrefix+uuid的文件夹
    */
   def createTempDir(
       root: String = System.getProperty("java.io.tmpdir"),
       namePrefix: String = "spark"): File = {
-    val dir = createDirectory(root, namePrefix)
+    val dir = createDirectory(root, namePrefix) //在root目录下,创建namePrefix+uuid的文件夹
     ShutdownHookManager.registerShutdownDeleteDir(dir)
     dir
   }
@@ -369,7 +385,7 @@ private[spark] object Utils extends Logging {
       doFetchFile(url, targetDir, fileName, conf, securityMgr, hadoopConf)
     }
 
-    // Decompress the file if it's a .tar or .tar.gz
+    // Decompress the file if it's a .tar or .tar.gz 对下载下来的文件进行解压缩操作
     if (fileName.endsWith(".tar.gz") || fileName.endsWith(".tgz")) {
       logInfo("Untarring " + fileName)
       executeAndGetOutput(Seq("tar", "-xzf", fileName), targetDir)
@@ -378,6 +394,7 @@ private[spark] object Utils extends Logging {
       executeAndGetOutput(Seq("tar", "-xf", fileName), targetDir)
     }
     // Make the file executable - That's necessary for scripts
+    //对目标文件设置权限
     FileUtil.chmod(targetFile.getAbsolutePath, "a+x")
 
     // Windows does not grant read permission by default to non-admin users
@@ -775,11 +792,13 @@ private[spark] object Utils extends Logging {
     }
   }
 
+  //自定义的host
   private var customHostname: Option[String] = sys.env.get("SPARK_LOCAL_HOSTNAME")
 
   /**
    * Allow setting a custom host name because when we run on Mesos we need to use the same
    * hostname it reports to the master.
+   * 设置host,不允许带有port
    */
   def setCustomHostname(hostname: String) {
     // DEBUG code
@@ -801,18 +820,22 @@ private[spark] object Utils extends Logging {
     customHostname.getOrElse(InetAddresses.toUriString(localIpAddress))
   }
 
+  //校验参数一定是host,不能有port
   def checkHost(host: String, message: String = "") {
     assert(host.indexOf(':') == -1, message)
   }
 
+  //校验参数一定是host:port格式存储
   def checkHostPort(hostPort: String, message: String = "") {
     assert(hostPort.indexOf(':') != -1, message)
   }
 
   // Typically, this will be of order of number of nodes in cluster
   // If not, we should change it to LRUCache or something.
+  //key是host:port,value是host和port组成的元组
   private val hostPortParseResults = new ConcurrentHashMap[String, (String, Int)]()
 
+  //解析url,返回有host和port组成的元组
   def parseHostPort(hostPort: String): (String, Int) = {
     // Check cache first.
     val cached = hostPortParseResults.get(hostPort)
@@ -824,7 +847,7 @@ private[spark] object Utils extends Logging {
     // This is potentially broken - when dealing with ipv6 addresses for example, sigh ...
     // but then hadoop does not support ipv6 right now.
     // For now, we assume that if port exists, then it is valid - not check if it is an int > 0
-    if (-1 == indx) {
+    if (-1 == indx) {//说明没有端口号被设置,因此端口号设置为0
       val retval = (hostPort, 0)
       hostPortParseResults.put(hostPort, retval)
       return retval
@@ -837,11 +860,13 @@ private[spark] object Utils extends Logging {
 
   /**
    * Return the string to tell how long has passed in milliseconds.
+   * 返回当前时间与参数时间的差,返回的单位是毫秒
    */
   def getUsedTimeMs(startTimeMs: Long): String = {
     " " + (System.currentTimeMillis - startTimeMs) + " ms"
   }
 
+  //安全的获取该file的所有子文件集合
   private def listFilesSafely(file: File): Seq[File] = {
     if (file.exists()) {
       val files = file.listFiles()
@@ -858,6 +883,7 @@ private[spark] object Utils extends Logging {
    * Delete a file or directory and its contents recursively.
    * Don't follow directories if they are symlinks.
    * Throws an exception if deletion is unsuccessful.
+   * 递归删除该文件或者文件夹
    */
   def deleteRecursively(file: File) {
     if (file != null) {
@@ -899,6 +925,7 @@ private[spark] object Utils extends Logging {
 
   /**
    * Check to see if file is a symbolic link.
+   * 判断该参数是否是符号连接
    */
   def isSymlink(file: File): Boolean = {
     if (file == null) throw new NullPointerException("File must not be null")
@@ -917,7 +944,8 @@ private[spark] object Utils extends Logging {
    *
    * @param dir must be the path to a directory, or IllegalArgumentException is thrown
    * @param cutoff measured in seconds. Returns true if there are any files or directories in the
-   *               given directory whose last modified time is later than this many seconds ago
+   *               given directory whose last modified time is later than this many seconds ago 单位是秒
+   *  true表示在file的子目录中有肯定有文件在最近的 cutoff秒内有过修改文件的情况            
    */
   def doesDirectoryContainAnyNewFiles(dir: File, cutoff: Long): Boolean = {
     if (!dir.isDirectory) {
@@ -926,6 +954,10 @@ private[spark] object Utils extends Logging {
     val filesAndDirs = dir.listFiles()
     val cutoffTimeInMillis = System.currentTimeMillis - (cutoff * 1000)
 
+    /**
+     * 1.最近cutoff秒内有过修改文件的情况
+     * 2.递归寻找子目录中存在最近cutoff秒内有过修改文件的情况
+     */
     filesAndDirs.exists(_.lastModified() > cutoffTimeInMillis) ||
     filesAndDirs.filter(_.isDirectory).exists(
       subdir => doesDirectoryContainAnyNewFiles(subdir, cutoff)
@@ -995,6 +1027,7 @@ private[spark] object Utils extends Logging {
 
   /**
    * Convert a quantity in bytes to a human-readable string such as "4.0 MB".
+   * 将long类型的byte字节长度转换成KB等信息
    */
   def bytesToString(size: Long): String = {
     val TB = 1L << 40
@@ -1020,6 +1053,7 @@ private[spark] object Utils extends Logging {
 
   /**
    * Returns a human-readable string representing a duration such as "35ms"
+   * 将为毫秒的long参数转换成毫秒、分、小时等可视化信息
    */
   def msDurationToString(ms: Long): String = {
     val second = 1000
@@ -1040,6 +1074,7 @@ private[spark] object Utils extends Logging {
 
   /**
    * Convert a quantity in megabytes to a human-readable string such as "4.0 MB".
+   * 参数单位是M,因此将M转换成字节,然后在转换成可视化单位 
    */
   def megabytesToString(megabytes: Long): String = {
     bytesToString(megabytes * 1024L * 1024L)
@@ -1047,6 +1082,9 @@ private[spark] object Utils extends Logging {
 
   /**
    * Execute a command and return the process running the command.
+   * 在workingDir目录下执行command命令集合,并且赋予环境变量集合extraEnvironment
+   * 
+   * @redirectStderr true表示输出错误日志,将错误日志输出到log日志中
    */
   def executeCommand(
       command: Seq[String],
@@ -1059,7 +1097,7 @@ private[spark] object Utils extends Logging {
       environment.put(key, value)
     }
     val process = builder.start()
-    if (redirectStderr) {
+    if (redirectStderr) {//true表示输出错误日志,将错误日志输出到log日志中
       val threadName = "redirect stderr for command " + command(0)
       def log(s: String): Unit = logInfo(s)
       processStreamByLine(threadName, process.getErrorStream, log)
@@ -1069,32 +1107,46 @@ private[spark] object Utils extends Logging {
 
   /**
    * Execute a command and get its output, throwing an exception if it yields a code other than 0.
+   * 在workingDir目录下执行command命令集合,并且赋予环境变量集合extraEnvironment
+   * 
+   * @redirectStderr true表示输出错误日志,将错误日志输出到log日志中
+   * 
+   * @return 返回正常的输出字符串
    */
   def executeAndGetOutput(
       command: Seq[String],
       workingDir: File = new File("."),
       extraEnvironment: Map[String, String] = Map.empty,
       redirectStderr: Boolean = true): String = {
+    //redirectStderr true表示输出错误日志,将错误日志输出到log日志中
     val process = executeCommand(command, workingDir, extraEnvironment, redirectStderr)
+    
+    //创建正常的输出流
     val output = new StringBuffer
-    val threadName = "read stdout for " + command(0)
-    def appendToOutput(s: String): Unit = output.append(s)
+    val threadName = "read stdout for " + command(0)//正常输出流线程名称
+    def appendToOutput(s: String): Unit = output.append(s)//每一行字符串写入output输出流中
+    //将正常的输出流写入到output中
     val stdoutThread = processStreamByLine(threadName, process.getInputStream, appendToOutput)
-    val exitCode = process.waitFor()
+    val exitCode = process.waitFor()//获取退出状态
     stdoutThread.join()   // Wait for it to finish reading output
-    if (exitCode != 0) {
+    if (exitCode != 0) {//如果不是正常退出,则抛异常
       logError(s"Process $command exited with code $exitCode: $output")
       throw new SparkException(s"Process $command exited with code $exitCode")
     }
+    
+    //返回正常的输出字符串
     output.toString
   }
 
   /**
    * Return and start a daemon thread that processes the content of the input stream line by line.
+   * 启动一个后台线程,去读取输入流,每一行信息使用processLine函数处理
+   * 
+   * @processLine 表示读取一行数据进行处理的函数,参数是字符串,返回值是无
    */
   def processStreamByLine(
-      threadName: String,
-      inputStream: InputStream,
+      threadName: String,//线程名称
+      inputStream: InputStream,//读取的输入流
       processLine: String => Unit): Thread = {
     val t = new Thread(threadName) {
       override def run() {
@@ -1113,6 +1165,7 @@ private[spark] object Utils extends Logging {
    * default UncaughtExceptionHandler
    *
    * NOTE: This method is to be called by the spark-started JVM process.
+   * 在try里面执行函数block,该函数没有参数,没有返回值
    */
   def tryOrExit(block: => Unit) {
     try {
@@ -1130,6 +1183,8 @@ private[spark] object Utils extends Logging {
    * NOTE: This method is to be called by the driver-side components to avoid stopping the
    * user-started JVM process completely; in contrast, tryOrExit is to be called in the
    * spark-started JVM process .
+   * 在try里面执行函数block,该函数没有参数,没有返回值
+   * 并且异常时候停止SparkContext,执行sc的stop方法
    */
   def tryOrStopSparkContext(sc: SparkContext)(block: => Unit) {
     try {
@@ -1154,6 +1209,7 @@ private[spark] object Utils extends Logging {
    * exceptions as IOException.  This is used when implementing Externalizable and Serializable's
    * read and write methods, since Java's serializer will not report non-IOExceptions properly;
    * see SPARK-4080 for more context.
+   * 在try里面执行函数block,该函数没有参数,没有返回值
    */
   def tryOrIOException(block: => Unit) {
     try {
@@ -1169,6 +1225,7 @@ private[spark] object Utils extends Logging {
    * exceptions as IOException. This is used when implementing Externalizable and Serializable's
    * read and write methods, since Java's serializer will not report non-IOExceptions properly;
    * see SPARK-4080 for more context.
+   * 在try里面执行函数block,该函数没有参数,返回值是泛型T
    */
   def tryOrIOException[T](block: => T): T = {
     try {
@@ -1179,7 +1236,9 @@ private[spark] object Utils extends Logging {
     }
   }
 
-  /** Executes the given block. Log non-fatal errors if any, and only throw fatal errors */
+  /** Executes the given block. Log non-fatal errors if any, and only throw fatal errors 
+   *  在try里面执行函数block,该函数没有参数,没有返回值
+   **/
   def tryLogNonFatalError(block: => Unit) {
     try {
       block
@@ -1198,6 +1257,8 @@ private[spark] object Utils extends Logging {
    * in `out.write`, it's likely `out` may be corrupted and `out.close` will
    * fail as well. This would then suppress the original/likely more meaningful
    * exception from the original `out.write` call.
+   * 在try里面执行函数block,该函数没有参数,返回T
+   * 也会执行finallyBlock函数,没有参数,没有返回值
    */
   def tryWithSafeFinally[T](block: => T)(finallyBlock: => Unit): T = {
     // It would be nice to find a method on Try that did this
@@ -1226,7 +1287,13 @@ private[spark] object Utils extends Logging {
     }
   }
 
-  /** Default filtering function for finding call sites using `getCallSite`. */
+  /** Default filtering function for finding call sites using `getCallSite`.
+   * 给定一个class全路径,判断该class是否是spark内部的class类
+   * true表示该class是spark内部的class
+   * 
+   * 1.如果class以scala开头,则认为是spark内部类
+   * 2.如果是org\.apache\.spark开头的,认为是spark内部类
+   **/
   private def sparkInternalExclusionFunction(className: String): Boolean = {
     // A regular expression to match classes of the internal Spark API's
     // that we want to skip when finding the call site of a method.
@@ -1247,15 +1314,16 @@ private[spark] object Utils extends Logging {
    * This is used, for example, to tell users where in their code each RDD got created.
    *
    * @param skipClass Function that is used to exclude non-user-code classes.
+   * 参数是一个函数,该函数的参数是字符串,返回boolean,默认函数是sparkInternalExclusionFunction
    */
   def getCallSite(skipClass: String => Boolean = sparkInternalExclusionFunction): CallSite = {
     // Keep crawling up the stack trace until we find the first function not inside of the spark
     // package. We track the last (shallowest) contiguous Spark method. This might be an RDD
     // transformation, a SparkContext function (such as parallelize), or anything else that leads
     // to instantiation of an RDD. We also track the first (deepest) user method, file, and line.
-    var lastSparkMethod = "<unknown>"
-    var firstUserFile = "<unknown>"
-    var firstUserLine = 0
+    var lastSparkMethod = "<unknown>"//最后一个spark方法
+    var firstUserFile = "<unknown>"//执行第一个用户定义的文件
+    var firstUserLine = 0//执行第一个用户定义的文件的文件行
     var insideSpark = true
     var callStack = new ArrayBuffer[String]() :+ "<unknown>"
 
@@ -1746,6 +1814,7 @@ private[spark] object Utils extends Logging {
    *
    * If the supplied path does not contain a scheme, or is a relative path, it will be
    * converted into an absolute path with a file:// scheme.
+   * 根据路径,获取URI对象
    */
   def resolveURI(path: String): URI = {
     try {
@@ -1878,6 +1947,7 @@ private[spark] object Utils extends Logging {
 
   /**
    * Maximum number of retries when binding to a port before giving up.
+   * 获取最大尝试次数
    */
   def portMaxRetries(conf: SparkConf): Int = {
     val maxRetries = conf.getOption("spark.port.maxRetries").map(_.toInt)
@@ -1898,6 +1968,7 @@ private[spark] object Utils extends Logging {
    *                     This is expected to throw java.net.BindException on port collision.
    * @param conf A SparkConf used to get the maximum number of retries when binding to a port.
    * @param serviceName Name of the service.
+   * 尝试创建一个server,和真实端口
    */
   def startServiceOnPort[T](
       startPort: Int,
@@ -1909,7 +1980,7 @@ private[spark] object Utils extends Logging {
       "startPort should be between 1024 and 65535 (inclusive), or 0 for a random free port.")
 
     val serviceString = if (serviceName.isEmpty) "" else s" '$serviceName'"
-    val maxRetries = portMaxRetries(conf)
+    val maxRetries = portMaxRetries(conf)//最大尝试次数
     for (offset <- 0 to maxRetries) {
       // Do not increment port if startPort is 0, which is treated as a special port
       val tryPort = if (startPort == 0) {
@@ -1942,6 +2013,7 @@ private[spark] object Utils extends Logging {
 
   /**
    * Return whether the exception is caused by an address-port collision when binding.
+   * 确定是否是BindException异常
    */
   def isBindCollision(exception: Throwable): Boolean = {
     exception match {
@@ -1958,6 +2030,7 @@ private[spark] object Utils extends Logging {
 
   /**
    * configure a new log4j level
+   * 设置log4j日志级别
    */
   def setLogLevel(l: org.apache.log4j.Level) {
     org.apache.log4j.Logger.getRootLogger().setLevel(l)

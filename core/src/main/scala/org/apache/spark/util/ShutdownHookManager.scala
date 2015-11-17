@@ -30,7 +30,7 @@ import org.apache.spark.Logging
  * Various utility methods used by Spark.
  */
 private[spark] object ShutdownHookManager extends Logging {
-  val DEFAULT_SHUTDOWN_PRIORITY = 100
+  val DEFAULT_SHUTDOWN_PRIORITY = 100//默认钩子优先级
 
   /**
    * The shutdown priority of the SparkContext instance. This is lower than the default
@@ -51,10 +51,11 @@ private[spark] object ShutdownHookManager extends Logging {
     manager
   }
 
+  //关闭的时候删除的目录
   private val shutdownDeletePaths = new scala.collection.mutable.HashSet[String]()
   private val shutdownDeleteTachyonPaths = new scala.collection.mutable.HashSet[String]()
 
-  // Add a shutdown hook to delete the temp dirs when the JVM exits
+  // Add a shutdown hook to delete the temp dirs when the JVM exits 当jvm退出的时候,要添加一个钩子,删除指定文件夹
   addShutdownHook(TEMP_DIR_SHUTDOWN_PRIORITY) { () =>
     logInfo("Shutdown hook called")
     shutdownDeletePaths.foreach { dirPath =>
@@ -68,6 +69,7 @@ private[spark] object ShutdownHookManager extends Logging {
   }
 
   // Register the path to be deleted via shutdown hook
+  //注册 关闭系统的时候删除的目录集合
   def registerShutdownDeleteDir(file: File) {
     val absolutePath = file.getAbsolutePath()
     shutdownDeletePaths.synchronized {
@@ -118,6 +120,7 @@ private[spark] object ShutdownHookManager extends Logging {
   // Note: if file is child of some registered path, while not equal to it, then return true;
   // else false. This is to ensure that two shutdown hooks do not try to delete each others
   // paths - resulting in IOException and incomplete cleanup.
+  //例如要删除的目录中有一个/aa/bb/cc目录,而参数File的目录是/aa/bb/cc/dd/ee,则返回true,说明参数是有一个根节点在等待删除的集合中
   def hasRootAsShutdownDeleteDir(file: File): Boolean = {
     val absolutePath = file.getAbsolutePath()
     val retval = shutdownDeletePaths.synchronized {
@@ -173,6 +176,7 @@ private[spark] object ShutdownHookManager extends Logging {
    *
    * @param hook The code to run during shutdown.
    * @return A handle that can be used to unregister the shutdown hook.
+   * 添加钩子,并且添加优先级
    */
   def addShutdownHook(hook: () => Unit): AnyRef = {
     addShutdownHook(DEFAULT_SHUTDOWN_PRIORITY)(hook)
@@ -184,6 +188,7 @@ private[spark] object ShutdownHookManager extends Logging {
    *
    * @param hook The code to run during shutdown.
    * @return A handle that can be used to unregister the shutdown hook.
+   * 添加钩子,并且添加优先级
    */
   def addShutdownHook(priority: Int)(hook: () => Unit): AnyRef = {
     shutdownHooks.add(priority, hook)
@@ -203,8 +208,9 @@ private[spark] object ShutdownHookManager extends Logging {
 
 private [util] class SparkShutdownHookManager {
 
+  //优先级队列
   private val hooks = new PriorityQueue[SparkShutdownHook]()
-  private var shuttingDown = false
+  private var shuttingDown = false//true表示正在关闭中
 
   /**
    * Install a hook to run at shutdown and run all registered hooks in order. Hadoop 1.x does not
@@ -228,6 +234,7 @@ private [util] class SparkShutdownHookManager {
     }
   }
 
+  //运行全部的钩子
   def runAll(): Unit = synchronized {
     shuttingDown = true
     while (!hooks.isEmpty()) {
@@ -235,6 +242,7 @@ private [util] class SparkShutdownHookManager {
     }
   }
 
+  //添加一个钩子以及优先级
   def add(priority: Int, hook: () => Unit): AnyRef = synchronized {
     checkState()
     val hookRef = new SparkShutdownHook(priority, hook)
@@ -261,6 +269,7 @@ private class SparkShutdownHook(private val priority: Int, hook: () => Unit)
     other.priority - priority
   }
 
+  //运行钩子方法
   def run(): Unit = hook()
 
 }

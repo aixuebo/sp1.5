@@ -23,6 +23,7 @@ import com.google.common.io.Files
 
 import org.apache.spark.util.Utils
 
+//将本地文件copy到baseDir目录下
 private[spark] class HttpFileServer(
     conf: SparkConf,
     securityManager: SecurityManager,
@@ -36,7 +37,7 @@ private[spark] class HttpFileServer(
   var serverUri : String = null
 
   def initialize() {
-    baseDir = Utils.createTempDir(Utils.getLocalDir(conf), "httpd")
+    baseDir = Utils.createTempDir(Utils.getLocalDir(conf), "httpd") //在root目录下,创建httpd+uuid的文件夹
     fileDir = new File(baseDir, "files")
     jarDir = new File(baseDir, "jars")
     fileDir.mkdir()
@@ -71,6 +72,7 @@ private[spark] class HttpFileServer(
     serverUri + "/jars/" + file.getName
   }
 
+  //将file文件复制到dir目录下,返回dir/file.getName
   def addFileToDir(file: File, dir: File) : String = {
     // Check whether the file is a directory. If it is, throw a more meaningful exception.
     // If we don't catch this, Guava throws a very confusing error message:

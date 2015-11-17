@@ -78,7 +78,7 @@ import org.apache.spark.util._
  */
 class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationClient {
 
-  // The call site where this SparkContext was constructed.
+  // The call site where this SparkContext was constructed.根据堆栈信息,返回SparkContext在什么类什么情况下被创建的
   private val creationSite: CallSite = Utils.getCallSite()
 
   // If true, log warnings instead of throwing exceptions when multiple SparkContexts are active
@@ -99,6 +99,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
 
   private[spark] val stopped: AtomicBoolean = new AtomicBoolean(false)
 
+  //校验确保没有stop
   private def assertNotStopped(): Unit = {
     if (stopped.get()) {
       throw new IllegalStateException("Cannot call methods on a stopped SparkContext")
@@ -212,8 +213,8 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * ------------------------------------------------------------------------------------- */
 
   private var _conf: SparkConf = _
-  private var _eventLogDir: Option[URI] = None
-  private var _eventLogCodec: Option[String] = None
+  private var _eventLogDir: Option[URI] = None //获取spark.eventLog.dir配置的日志存储路径
+  private var _eventLogCodec: Option[String] = None //spark.eventLog.compress属性为true的时候,获取日志文件的压缩方式
   private var _env: SparkEnv = _
   private var _metadataCleaner: MetadataCleaner = _
   private var _jobProgressListener: JobProgressListener = _
@@ -232,8 +233,8 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   private var _executorAllocationManager: Option[ExecutorAllocationManager] = None
   private var _cleaner: Option[ContextCleaner] = None
   private var _listenerBusStarted: Boolean = false
-  private var _jars: Seq[String] = _
-  private var _files: Seq[String] = _
+  private var _jars: Seq[String] = _//spark.jars配置的jar文件集合
+  private var _files: Seq[String] = _//获取spark.files配置的文件集合
   private var _shutdownHookRef: AnyRef = _
 
   /* ------------------------------------------------------------------------------------- *
@@ -251,8 +252,8 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
 
   def jars: Seq[String] = _jars
   def files: Seq[String] = _files
-  def master: String = _conf.get("spark.master")
-  def appName: String = _conf.get("spark.app.name")
+  def master: String = _conf.get("spark.master")//集群master位置
+  def appName: String = _conf.get("spark.app.name")//应用名称
 
   private[spark] def isEventLogEnabled: Boolean = _conf.getBoolean("spark.eventLog.enabled", false)
   private[spark] def eventLogDir: Option[URI] = _eventLogDir
@@ -280,6 +281,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   private[spark] def env: SparkEnv = _env
 
   // Used to store a URL for each static file/jar together with the file's local timestamp
+  //key是jar或者file路径 value是时间戳
   private[spark] val addedFiles = HashMap[String, Long]()
   private[spark] val addedJars = HashMap[String, Long]()
 
@@ -399,35 +401,41 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
 
     // System property spark.yarn.app.id must be set if user code ran by AM on a YARN cluster
     // yarn-standalone is deprecated, but still supported
+    //检测到使用yarn集群模式,但是SparkContext是不支持yarn集群模式的,yarn集群模式请使用spark-submit
     if ((master == "yarn-cluster" || master == "yarn-standalone") &&
         !_conf.contains("spark.yarn.app.id")) {
       throw new SparkException("Detected yarn-cluster mode, but isn't running on a cluster. " +
         "Deployment to YARN is not supported directly by SparkContext. Please use spark-submit.")
     }
 
+    //如果true,则打印所有的配置信息,注意:打印出来的是排序好的
     if (_conf.getBoolean("spark.logConf", false)) {
       logInfo("Spark configuration:\n" + _conf.toDebugString)
     }
 
     // Set Spark driver host and port system properties
+    //如果缺席,则添加,即如果没有该key,则添加,如果有该key,则忽略  
     _conf.setIfMissing("spark.driver.host", Utils.localHostName())
     _conf.setIfMissing("spark.driver.port", "0")
 
     _conf.set("spark.executor.id", SparkContext.DRIVER_IDENTIFIER)
 
+    //spark.jars配置的jar文件集合
     _jars = _conf.getOption("spark.jars").map(_.split(",")).map(_.filter(_.size != 0)).toSeq.flatten
+    //获取spark.files配置的文件集合
     _files = _conf.getOption("spark.files").map(_.split(",")).map(_.filter(_.size != 0))
       .toSeq.flatten
 
     _eventLogDir =
       if (isEventLogEnabled) {
         val unresolvedDir = conf.get("spark.eventLog.dir", EventLoggingListener.DEFAULT_LOG_DIR)
-          .stripSuffix("/")
+          .stripSuffix("/")//去除最后一个/字符
         Some(Utils.resolveURI(unresolvedDir))
       } else {
         None
       }
 
+    //spark.eventLog.compress属性为true的时候,获取日志文件的压缩方式
     _eventLogCodec = {
       val compress = _conf.getBoolean("spark.eventLog.compress", false)
       if (compress && isEventLogEnabled) {
@@ -1012,7 +1020,9 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       minPartitions: Int = defaultMinPartitions): RDD[(K, V)] = withScope {
     assertNotStopped()
     // A Hadoop configuration can be about 10 KB, which is pretty big, so broadcast it.
+    //使用java的方式对hadoop的Configuration信息进行序列化与发序列化
     val confBroadcast = broadcast(new SerializableConfiguration(hadoopConfiguration))
+    //定义一个函数,参数是JobConf,无返回值,该函数将path写入hadoop的输入源中
     val setInputPathsFunc = (jobConf: JobConf) => FileInputFormat.setInputPaths(jobConf, path)
     new HadoopRDD(
       this,
@@ -1615,6 +1625,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * Adds a JAR dependency for all tasks to be executed on this SparkContext in the future.
    * The `path` passed can be either a local file, a file in HDFS (or other Hadoop-supported
    * filesystems), an HTTP, HTTPS or FTP URI, or local:/path for a file on every worker node.
+   * 每一个jar包调用该方法
    */
   def addJar(path: String) {
     if (path == null) {

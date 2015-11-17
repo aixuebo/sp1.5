@@ -47,13 +47,17 @@ private[spark] class TimeStampedWeakValueHashMap[A, B](updateTimeStampOnGet: Boo
   private val internalMap = new TimeStampedHashMap[A, WeakReference[B]](updateTimeStampOnGet)
   private val insertCount = new AtomicInteger(0)
 
-  /** Return a map consisting only of entries whose values are still strongly reachable. */
+  /** Return a map consisting only of entries whose values are still strongly reachable. 
+   * 仅要非null的弱引用数据集合 
+   **/
   private def nonNullReferenceMap = internalMap.filter { case (_, ref) => ref.get != null }
 
   def get(key: A): Option[B] = internalMap.get(key)
 
+  //针对非null的弱引用进行迭代
   def iterator: Iterator[(A, B)] = nonNullReferenceMap.iterator
 
+  //添加一组kv
   override def + [B1 >: B](kv: (A, B1)): mutable.Map[A, B1] = {
     val newMap = new TimeStampedWeakValueHashMap[A, B1]
     val oldMap = nonNullReferenceMap.asInstanceOf[mutable.Map[A, WeakReference[B1]]]
@@ -62,6 +66,7 @@ private[spark] class TimeStampedWeakValueHashMap[A, B](updateTimeStampOnGet: Boo
     newMap
   }
 
+  //减少一个k
   override def - (key: A): mutable.Map[A, B] = {
     val newMap = new TimeStampedWeakValueHashMap[A, B]
     newMap.internalMap.putAll(nonNullReferenceMap.toMap)
@@ -86,14 +91,17 @@ private[spark] class TimeStampedWeakValueHashMap[A, B](updateTimeStampOnGet: Boo
 
   override def apply(key: A): B = internalMap.apply(key)
 
+  //对非null的数据进行过滤,针对函数p进行过滤,该函数接收A B参数,返回boolean
   override def filter(p: ((A, B)) => Boolean): mutable.Map[A, B] = nonNullReferenceMap.filter(p)
 
   override def empty: mutable.Map[A, B] = new TimeStampedWeakValueHashMap[A, B]()
 
   override def size: Int = internalMap.size
 
+  //循环非null的数据,每一个数据k-v作为参数,传送给函数f处理,返回U
   override def foreach[U](f: ((A, B)) => U): Unit = nonNullReferenceMap.foreach(f)
 
+  //如果缺少A这个key,则添加
   def putIfAbsent(key: A, value: B): Option[B] = internalMap.putIfAbsent(key, value)
 
   def toMap: Map[A, B] = iterator.toMap
@@ -101,7 +109,9 @@ private[spark] class TimeStampedWeakValueHashMap[A, B](updateTimeStampOnGet: Boo
   /** Remove old key-value pairs with timestamps earlier than `threshTime`. */
   def clearOldValues(threshTime: Long): Unit = internalMap.clearOldValues(threshTime)
 
-  /** Remove entries with values that are no longer strongly reachable. */
+  /** Remove entries with values that are no longer strongly reachable. 
+   *  移除value是null的弱引用  
+   **/
   def clearNullValues() {
     val it = internalMap.getEntrySet.iterator
     while (it.hasNext) {
@@ -114,11 +124,12 @@ private[spark] class TimeStampedWeakValueHashMap[A, B](updateTimeStampOnGet: Boo
   }
 
   // For testing
-
+  //返回key对应的value的时间戳
   def getTimestamp(key: A): Option[Long] = {
     internalMap.getTimeStampedValue(key).map(_.timestamp)
   }
 
+  //返回key对应的value对象
   def getReference(key: A): Option[WeakReference[B]] = {
     internalMap.getTimeStampedValue(key).map(_.value)
   }
@@ -132,10 +143,12 @@ private object TimeStampedWeakValueHashMap {
   // Number of inserts after which entries with null references are removed
   val CLEAR_NULL_VALUES_INTERVAL = 100
 
-  /* Implicit conversion methods to WeakReferences. */
-
+  /** Implicit conversion methods to WeakReferences. 
+   * 隐式转换,对v对象创建弱引用 
+   **/
   implicit def toWeakReference[V](v: V): WeakReference[V] = new WeakReference[V](v)
 
+  //对value获取弱引用
   implicit def toWeakReferenceTuple[K, V](kv: (K, V)): (K, WeakReference[V]) = {
     kv match { case (k, v) => (k, toWeakReference(v)) }
   }
@@ -145,9 +158,9 @@ private object TimeStampedWeakValueHashMap {
   }
 
   /* Implicit conversion methods from WeakReferences. */
-
+  //从弱引用中还原v
   implicit def fromWeakReference[V](ref: WeakReference[V]): V = ref.get
-
+  //从弱引用中还原v
   implicit def fromWeakReferenceOption[V](v: Option[WeakReference[V]]): Option[V] = {
     v match {
       case Some(ref) => Option(fromWeakReference(ref))
@@ -155,15 +168,18 @@ private object TimeStampedWeakValueHashMap {
     }
   }
 
+  //从弱引用中还原v
   implicit def fromWeakReferenceTuple[K, V](kv: (K, WeakReference[V])): (K, V) = {
     kv match { case (k, v) => (k, fromWeakReference(v)) }
   }
 
+  //从弱引用中还原v
   implicit def fromWeakReferenceIterator[K, V](
       it: Iterator[(K, WeakReference[V])]): Iterator[(K, V)] = {
     it.map(fromWeakReferenceTuple)
   }
 
+  //key不变,value从弱引用中还原v
   implicit def fromWeakReferenceMap[K, V](
       map: mutable.Map[K, WeakReference[V]]) : mutable.Map[K, V] = {
     mutable.Map(map.mapValues(fromWeakReference).toSeq: _*)

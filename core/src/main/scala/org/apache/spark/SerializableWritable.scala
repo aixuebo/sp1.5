@@ -26,6 +26,11 @@ import org.apache.hadoop.io.Writable
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.util.Utils
 
+/**
+ * 该类表示按照hadoop的序列化方式进行序列化与反序列化操作
+ * 
+ * 该类的反省T必须是支持hadoop的序列化的接口实现
+ */
 @DeveloperApi
 class SerializableWritable[T <: Writable](@transient var t: T) extends Serializable {
 

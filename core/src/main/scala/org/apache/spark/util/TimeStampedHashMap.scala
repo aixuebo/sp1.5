@@ -41,9 +41,11 @@ private[spark] class TimeStampedHashMap[A, B](updateTimeStampOnGet: Boolean = fa
 
   private val internalMap = new ConcurrentHashMap[A, TimeStampedValue[B]]()
 
+  //获取key对应的value,并且设置当前时间
   def get(key: A): Option[B] = {
     val value = internalMap.get(key)
     if (value != null && updateTimeStampOnGet) {
+      //key 老值 新值
       internalMap.replace(key, value, TimeStampedValue(value.value, currentTime))
     }
     Option(value).map(_.value)
@@ -89,6 +91,7 @@ private[spark] class TimeStampedHashMap[A, B](updateTimeStampOnGet: Boolean = fa
     get(key).getOrElse { throw new NoSuchElementException() }
   }
 
+  //使用p函数进行过滤,仅仅要返回true的数据集合
   override def filter(p: ((A, B)) => Boolean): mutable.Map[A, B] = {
     JavaConversions.mapAsScalaConcurrentMap(internalMap)
       .map { case (k, TimeStampedValue(v, t)) => (k, v) }
@@ -119,11 +122,12 @@ private[spark] class TimeStampedHashMap[A, B](updateTimeStampOnGet: Boolean = fa
 
   def toMap: Map[A, B] = iterator.toMap
 
+  //在threshTime时间戳之前的数据,都要进行f函数处理,该函数没有返回值,并且数据从集合中删除
   def clearOldValues(threshTime: Long, f: (A, B) => Unit) {
     val it = getEntrySet.iterator
     while (it.hasNext) {
       val entry = it.next()
-      if (entry.getValue.timestamp < threshTime) {
+      if (entry.getValue.timestamp < threshTime) {//在threshTime之前的数据都要进行if处理
         f(entry.getKey, entry.getValue.value)
         logDebug("Removing key " + entry.getKey)
         it.remove()
@@ -131,7 +135,9 @@ private[spark] class TimeStampedHashMap[A, B](updateTimeStampOnGet: Boolean = fa
     }
   }
 
-  /** Removes old key-value pairs that have timestamp earlier than `threshTime`. */
+  /** Removes old key-value pairs that have timestamp earlier than `threshTime`. 
+   *  仅仅删除过期数据  
+   **/
   def clearOldValues(threshTime: Long) {
     clearOldValues(threshTime, (_, _) => ())
   }
@@ -144,6 +150,7 @@ private[spark] class TimeStampedHashMap[A, B](updateTimeStampOnGet: Boolean = fa
     Option(internalMap.get(key))
   }
 
+  //获取A对应的时间戳
   def getTimestamp(key: A): Option[Long] = {
     getTimeStampedValue(key).map(_.timestamp)
   }

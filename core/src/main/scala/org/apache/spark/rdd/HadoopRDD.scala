@@ -50,10 +50,16 @@ import org.apache.spark.storage.StorageLevel
 
 /**
  * A Spark split class that wraps around a Hadoop InputSplit.
+ * 该对象对应一个hadoop的Partition数据块
+ * 
+ * @rddId 可以指定唯一的RDD的ID
+ * @idx 表示该InputSplit的序号
+ * @s 表示该hadoop上的一个数据块InputSplit对象
  */
 private[spark] class HadoopPartition(rddId: Int, idx: Int, @transient s: InputSplit)
   extends Partition {
 
+  //对InputSplit对象进行hadoop方式的序列化与反序列化操作
   val inputSplit = new SerializableWritable[InputSplit](s)
 
   override def hashCode(): Int = 41 * (41 + rddId) + idx
@@ -63,12 +69,15 @@ private[spark] class HadoopPartition(rddId: Int, idx: Int, @transient s: InputSp
   /**
    * Get any environment variables that should be added to the users environment when running pipes
    * @return a Map with the environment variables and corresponding values, it could be empty
+   * 设置文件的全路径
+   * 
+   * 设置上下文环境变量信息
    */
   def getPipeEnvVars(): Map[String, String] = {
-    val envVars: Map[String, String] = if (inputSplit.value.isInstanceOf[FileSplit]) {
-      val is: FileSplit = inputSplit.value.asInstanceOf[FileSplit]
+    val envVars: Map[String, String] = if (inputSplit.value.isInstanceOf[FileSplit]) {//如果InputSplit是针对FileSplit文件处理的,则进入if进行处理
+      val is: FileSplit = inputSplit.value.asInstanceOf[FileSplit]//强制转换成FileSplit对象
       // map_input_file is deprecated in favor of mapreduce_map_input_file but set both
-      // since its not removed yet
+      // since its not removed yet 设置文件的全路径
       Map("map_input_file" -> is.getPath().toString(),
         "mapreduce_map_input_file" -> is.getPath().toString())
     } else {
@@ -100,12 +109,12 @@ private[spark] class HadoopPartition(rddId: Int, idx: Int, @transient s: InputSp
 @DeveloperApi
 class HadoopRDD[K, V](
     @transient sc: SparkContext,
-    broadcastedConf: Broadcast[SerializableConfiguration],
-    initLocalJobConfFuncOpt: Option[JobConf => Unit],
-    inputFormatClass: Class[_ <: InputFormat[K, V]],
-    keyClass: Class[K],
-    valueClass: Class[V],
-    minPartitions: Int)
+    broadcastedConf: Broadcast[SerializableConfiguration],//Configuration的序列化和反序列化对象
+    initLocalJobConfFuncOpt: Option[JobConf => Unit],//定义一个函数,参数是JobConf,无返回值,例如:该函数将path写入hadoop的输入源中,eg:(jobConf: JobConf) => FileInputFormat.setInputPaths(jobConf, path)
+    inputFormatClass: Class[_ <: InputFormat[K, V]],//InputFormat hadoop的输入的key和value类型,例如FileInputFormat<LongWritable, Text>
+    keyClass: Class[K],//key的类型
+    valueClass: Class[V],//value的类型
+    minPartitions: Int)//建议每一个分区拆分的大小,这个数值意义不大
   extends RDD[(K, V)](sc, Nil) with Logging {
 
   if (initLocalJobConfFuncOpt.isDefined) {
@@ -129,20 +138,22 @@ class HadoopRDD[K, V](
       valueClass,
       minPartitions)
   }
-
+  //rdd_{id}_job_conf
   protected val jobConfCacheKey = "rdd_%d_job_conf".format(id)
 
+  //rdd_{ID}_input_format
   protected val inputFormatCacheKey = "rdd_%d_input_format".format(id)
 
   // used to build JobTracker ID
   private val createTime = new Date()
 
+  //是否clone hadoop的配置对象
   private val shouldCloneJobConf = sc.conf.getBoolean("spark.hadoop.cloneConf", false)
 
   // Returns a JobConf that will be used on slaves to obtain input splits for Hadoop reads.
   protected def getJobConf(): JobConf = {
     val conf: Configuration = broadcastedConf.value.value
-    if (shouldCloneJobConf) {
+    if (shouldCloneJobConf) {//要clone hadoop的配置对象
       // Hadoop Configuration objects are not thread-safe, which may lead to various problems if
       // one job modifies a configuration while another reads it (SPARK-2546).  This problem occurs
       // somewhat rarely because most jobs treat the configuration as though it's immutable.  One
@@ -158,7 +169,7 @@ class HadoopRDD[K, V](
         }
         newJobConf
       }
-    } else {
+    } else {//不clone hadoop的配置对象
       if (conf.isInstanceOf[JobConf]) {
         logDebug("Re-using user-broadcasted JobConf")
         conf.asInstanceOf[JobConf]
@@ -196,14 +207,19 @@ class HadoopRDD[K, V](
     newInputFormat
   }
 
+  //对hadoop的输入源进行拆分成Partition数组
   override def getPartitions: Array[Partition] = {
     val jobConf = getJobConf()
     // add the credentials here as this can be called before SparkContext initialized
     SparkHadoopUtil.get.addCredentials(jobConf)
+    
+    //如果该输入实现了Configurable接口,则要将jobConf传入到里面
     val inputFormat = getInputFormat(jobConf)
     if (inputFormat.isInstanceOf[Configurable]) {
       inputFormat.asInstanceOf[Configurable].setConf(jobConf)
     }
+    
+    //进行真正的拆分操作
     val inputSplits = inputFormat.getSplits(jobConf, minPartitions)
     val array = new Array[Partition](inputSplits.size)
     for (i <- 0 until inputSplits.size) {
@@ -215,7 +231,7 @@ class HadoopRDD[K, V](
   override def compute(theSplit: Partition, context: TaskContext): InterruptibleIterator[(K, V)] = {
     val iter = new NextIterator[(K, V)] {
 
-      val split = theSplit.asInstanceOf[HadoopPartition]
+      val split = theSplit.asInstanceOf[HadoopPartition] //每一个Partition被封装成了HadoopPartition对象
       logInfo("Input split: " + split.inputSplit)
       val jobConf = getJobConf()
 

@@ -44,10 +44,10 @@ private[spark] class ServerStateException(message: String) extends Exception(mes
  */
 private[spark] class HttpServer(
     conf: SparkConf,
-    resourceBase: File,
+    resourceBase: File,//文件根目录
     securityManager: SecurityManager,
-    requestedPort: Int = 0,
-    serverName: String = "HTTP server")
+    requestedPort: Int = 0,//在本地开的端口,该端口是期望端口,真实情况可能会变化
+    serverName: String = "HTTP server")//服务描述
   extends Logging {
 
   private var server: Server = null
@@ -70,6 +70,7 @@ private[spark] class HttpServer(
    *
    * Note that this is only best effort in the sense that we may end up binding to a nearby port
    * in the event of port collision. Return the bound server and the actual port used.
+   * 返回org.eclipse.jetty.server.Server和该服务启动的端口 组成的元组
    */
   private def doStart(startPort: Int): (Server, Int) = {
     val server = new Server()

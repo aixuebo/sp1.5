@@ -52,6 +52,7 @@ private[spark] object CompressionCodec {
     "lzf" -> classOf[LZFCompressionCodec].getName,
     "snappy" -> classOf[SnappyCompressionCodec].getName)
 
+    //获取压缩方法的段名称
   def getCodecName(conf: SparkConf): String = {
     conf.get(configKey, DEFAULT_COMPRESSION_CODEC)
   }
@@ -76,6 +77,7 @@ private[spark] object CompressionCodec {
   /**
    * Return the short version of the given codec name.
    * If it is already a short name, just return it.
+   * key可以是短名称,也可以是全路径,返回值是全路径对应的短名称
    */
   def getShortName(codecName: String): String = {
     if (shortCompressionCodecNames.contains(codecName)) {
