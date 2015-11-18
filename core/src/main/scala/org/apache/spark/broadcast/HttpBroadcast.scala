@@ -35,6 +35,8 @@ import org.apache.spark.util.{MetadataCleaner, MetadataCleanerType, TimeStampedH
  * task) is deserialized in the executor, the broadcasted data is fetched from the driver
  * (through a HTTP server running at the driver) and stored in the BlockManager of the
  * executor to speed up future accesses.
+ * 
+ * 通过HTTP协议进行传输广播对象的序列化与反序列化流
  */
 private[spark] class HttpBroadcast[T: ClassTag](
     @transient var value_ : T, isLocal: Boolean, id: Long)
@@ -42,7 +44,7 @@ private[spark] class HttpBroadcast[T: ClassTag](
 
   override protected def getValue() = value_
 
-  private val blockId = BroadcastBlockId(id)
+  private val blockId = BroadcastBlockId(id) //该广播对象的唯一标示
 
   /*
    * Broadcasted data is also stored in the BlockManager of the driver. The BlockManagerMaster
@@ -53,6 +55,7 @@ private[spark] class HttpBroadcast[T: ClassTag](
       blockId, value_, StorageLevel.MEMORY_AND_DISK, tellMaster = false)
   }
 
+  //将对象写入到文件系统中
   if (!isLocal) {
     HttpBroadcast.write(id, value_)
   }
@@ -102,24 +105,26 @@ private[spark] class HttpBroadcast[T: ClassTag](
   }
 }
 
+//通过HTTP协议进行传输广播对象的序列化与反序列化流
 private[broadcast] object HttpBroadcast extends Logging {
-  private var initialized = false
-  private var broadcastDir: File = null
-  private var compress: Boolean = false
-  private var bufferSize: Int = 65536
-  private var serverUri: String = null
-  private var server: HttpServer = null
+  private var initialized = false //是否初始化了
+  private var broadcastDir: File = null //创建broadcast文件夹,并且在该目录下常见一个服务
+  private var compress: Boolean = false //是否压缩数据
+  private var bufferSize: Int = 65536 //缓存大小
+  private var serverUri: String = null //开启的服务访问url
+  private var server: HttpServer = null //开启的服务
   private var securityManager: SecurityManager = null
 
   // TODO: This shouldn't be a global variable so that multiple SparkContexts can coexist
+  //存储文件集合,并且提供按照给定时间戳删除文件功能
   private val files = new TimeStampedHashSet[File]
-  private val httpReadTimeout = TimeUnit.MILLISECONDS.convert(5, TimeUnit.MINUTES).toInt
-  private var compressionCodec: CompressionCodec = null
+  private val httpReadTimeout = TimeUnit.MILLISECONDS.convert(5, TimeUnit.MINUTES).toInt //反序列化时,通过网络请求的延迟时间
+  private var compressionCodec: CompressionCodec = null //压缩方式
   private var cleaner: MetadataCleaner = null
 
   def initialize(isDriver: Boolean, conf: SparkConf, securityMgr: SecurityManager) {
     synchronized {
-      if (!initialized) {
+      if (!initialized) {//进行初始化
         bufferSize = conf.getInt("spark.buffer.size", 65536)
         compress = conf.getBoolean("spark.broadcast.compress", true)
         securityManager = securityMgr
@@ -127,6 +132,7 @@ private[broadcast] object HttpBroadcast extends Logging {
           createServer(conf)
           conf.set("spark.httpBroadcast.uri", serverUri)
         }
+        //获取HttpServer的uri
         serverUri = conf.get("spark.httpBroadcast.uri")
         cleaner = new MetadataCleaner(MetadataCleanerType.HTTP_BROADCAST, cleanup, conf)
         compressionCodec = CompressionCodec.createCodec(conf)
@@ -151,6 +157,7 @@ private[broadcast] object HttpBroadcast extends Logging {
   }
 
   private def createServer(conf: SparkConf) {
+    //创建broadcast文件夹,并且在该目录下常见一个服务
     broadcastDir = Utils.createTempDir(Utils.getLocalDir(conf), "broadcast")
     val broadcastPort = conf.getInt("spark.broadcast.port", 0)
     server =
@@ -160,8 +167,10 @@ private[broadcast] object HttpBroadcast extends Logging {
     logInfo("Broadcast server started at " + serverUri)
   }
 
+  //从服务上获取该广播变量文件
   def getFile(id: Long): File = new File(broadcastDir, BroadcastBlockId(id).name)
 
+  //将value对象序列化到文件中
   private def write(id: Long, value: Any) {
     val file = getFile(id)
     val fileOutputStream = new FileOutputStream(file)
@@ -186,11 +195,12 @@ private[broadcast] object HttpBroadcast extends Logging {
     }
   }
 
+  //从server上根据广播ID反序列化对象
   private def read[T: ClassTag](id: Long): T = {
     logDebug("broadcast read server: " + serverUri + " id: broadcast-" + id)
-    val url = serverUri + "/" + BroadcastBlockId(id).name
+    val url = serverUri + "/" + BroadcastBlockId(id).name //获取对象的url
 
-    var uc: URLConnection = null
+    var uc: URLConnection = null //建立连接请求
     if (securityManager.isAuthenticationEnabled()) {
       logDebug("broadcast security enabled")
       val newuri = Utils.constructURIForAuthentication(new URI(url), securityManager)
@@ -204,6 +214,7 @@ private[broadcast] object HttpBroadcast extends Logging {
     }
     Utils.setupSecureURLConnection(uc, securityManager)
 
+    //从输入流中反序列化对象
     val in = {
       uc.setReadTimeout(httpReadTimeout)
       val inputStream = uc.getInputStream
@@ -229,7 +240,7 @@ private[broadcast] object HttpBroadcast extends Logging {
    */
   def unpersist(id: Long, removeFromDriver: Boolean, blocking: Boolean): Unit = synchronized {
     SparkEnv.get.blockManager.master.removeBroadcast(id, removeFromDriver, blocking)
-    if (removeFromDriver) {
+    if (removeFromDriver) {//删除该文件
       val file = getFile(id)
       files.remove(file)
       deleteBroadcastFile(file)
@@ -239,6 +250,7 @@ private[broadcast] object HttpBroadcast extends Logging {
   /**
    * Periodically clean up old broadcasts by removing the associated map entries and
    * deleting the associated files.
+   * 删除 小于 给定参数时间戳的文件
    */
   private def cleanup(cleanupTime: Long) {
     val iterator = files.internalMap.entrySet().iterator()
@@ -246,12 +258,13 @@ private[broadcast] object HttpBroadcast extends Logging {
       val entry = iterator.next()
       val (file, time) = (entry.getKey, entry.getValue)
       if (time < cleanupTime) {
-        iterator.remove()
-        deleteBroadcastFile(file)
+        iterator.remove() //删除内存file映射
+        deleteBroadcastFile(file)//真正删除文件
       }
     }
   }
 
+  //删除一个广播文件
   private def deleteBroadcastFile(file: File) {
     try {
       if (file.exists) {

@@ -22,13 +22,17 @@ import java.util.concurrent.ConcurrentHashMap
 import scala.collection.JavaConversions
 import scala.collection.mutable.Set
 
+//扩展Set,多加了一个添加时候的时间戳,存储key与对应的时间戳,当添加一个key的时候,附上时间戳
 private[spark] class TimeStampedHashSet[A] extends Set[A] {
+  
+  //存储key与对应的时间戳,当添加一个key的时候,附上时间戳
   val internalMap = new ConcurrentHashMap[A, Long]()
 
   def contains(key: A): Boolean = {
     internalMap.contains(key)
   }
 
+  //遍历A
   def iterator: Iterator[A] = {
     val jIterator = internalMap.entrySet().iterator()
     JavaConversions.asScalaIterator(jIterator).map(_.getKey)
@@ -62,6 +66,7 @@ private[spark] class TimeStampedHashSet[A] extends Set[A] {
 
   override def size(): Int = internalMap.size()
 
+  //遍历所有数据,每一个数据调用参数f,该函数是将A原始类型转换成U类型
   override def foreach[U](f: (A) => U): Unit = {
     val iterator = internalMap.entrySet().iterator()
     while(iterator.hasNext) {
@@ -71,6 +76,7 @@ private[spark] class TimeStampedHashSet[A] extends Set[A] {
 
   /**
    * Removes old values that have timestamp earlier than `threshTime`
+   * 删除比参数时间戳小的数据
    */
   def clearOldValues(threshTime: Long) {
     val iterator = internalMap.entrySet().iterator()

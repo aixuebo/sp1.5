@@ -27,6 +27,9 @@ import org.apache.spark.util.StatCounter
 
 /**
  * Extra functions available on RDDs of Doubles through an implicit conversion.
+ * 通过一个隐式转换,为Double类型的RDD提供一些额外的有用的功能
+ * 
+ * 参数是Double类型的RDD
  */
 class DoubleRDDFunctions(self: RDD[Double]) extends Logging with Serializable {
   /** Add up the elements in this RDD. */
@@ -37,6 +40,7 @@ class DoubleRDDFunctions(self: RDD[Double]) extends Logging with Serializable {
   /**
    * Return a [[org.apache.spark.util.StatCounter]] object that captures the mean, variance and
    * count of the RDD's elements in one operation.
+   * 获取统计对象
    */
   def stats(): StatCounter = self.withScope {
     self.mapPartitions(nums => Iterator(StatCounter(nums))).reduce((a, b) => a.merge(b))
@@ -106,6 +110,9 @@ class DoubleRDDFunctions(self: RDD[Double]) extends Logging with Serializable {
    *  buckets will be [0, 50) [50, 100]. bucketCount must be at least 1
    * If the RDD contains infinity, NaN throws an exception
    * If the elements in RDD do not vary (max == min) always returns a single bucket.
+   * 
+   * @bucketCount 表示将最大值与最小值之间拆分成多少分,该值最少也要是1
+   * 获取直方图数据
    */
   def histogram(bucketCount: Int): Pair[Array[Double], Array[Long]] = self.withScope {
     // Scala's built-in range has issues. See #SI-8782

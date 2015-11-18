@@ -24,14 +24,17 @@ import scala.reflect.ClassTag
 import org.apache.spark._
 import org.apache.spark.util.Utils
 
+/**
+ * 对广播工厂的创建、初始化、stop等操作,属于工厂的代理类
+ */
 private[spark] class BroadcastManager(
     val isDriver: Boolean,
     conf: SparkConf,
     securityManager: SecurityManager)
   extends Logging {
 
-  private var initialized = false
-  private var broadcastFactory: BroadcastFactory = null
+  private var initialized = false //true表示初始化工厂完成
+  private var broadcastFactory: BroadcastFactory = null //工厂对象
 
   initialize()
 

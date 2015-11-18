@@ -87,11 +87,13 @@ abstract class TaskContext extends Serializable {
 
   /**
    * Returns true if the task has completed.
+   * true表示该任务完成
    */
   def isCompleted(): Boolean
 
   /**
    * Returns true if the task has been killed.
+   * 该任务已经被kill掉了,则返回true
    */
   def isInterrupted(): Boolean
 
@@ -108,6 +110,7 @@ abstract class TaskContext extends Serializable {
    * Adds a (Java friendly) listener to be executed on task completion.
    * This will be called in all situation - success, failure, or cancellation.
    * An example use is for HadoopRDD to register a callback to close the input stream.
+   * 当任务完成时候 执行该onTaskCompletion方法,将任务的上下文传递过来
    */
   def addTaskCompletionListener(listener: TaskCompletionListener): TaskContext
 
@@ -115,6 +118,7 @@ abstract class TaskContext extends Serializable {
    * Adds a listener in the form of a Scala closure to be executed on task completion.
    * This will be called in all situations - success, failure, or cancellation.
    * An example use is for HadoopRDD to register a callback to close the input stream.
+   * 当task任务完成的时候调用该函数f,传入参数TaskContext为任务的上下文,无返回值
    */
   def addTaskCompletionListener(f: (TaskContext) => Unit): TaskContext
 
@@ -130,6 +134,7 @@ abstract class TaskContext extends Serializable {
 
   /**
    * The ID of the stage that this task belong to.
+   * 该任务属于哪个阶段
    */
   def stageId(): Int
 
@@ -141,6 +146,7 @@ abstract class TaskContext extends Serializable {
   /**
    * How many times this task has been attempted.  The first task attempt will be assigned
    * attemptNumber = 0, and subsequent attempts will have increasing attempt numbers.
+   * 当前任务的尝试次数,即第几次执行该任务
    */
   def attemptNumber(): Int
 

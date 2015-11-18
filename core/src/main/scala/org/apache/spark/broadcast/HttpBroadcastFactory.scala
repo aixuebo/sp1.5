@@ -27,19 +27,28 @@ import org.apache.spark.{SecurityManager, SparkConf}
  * [[org.apache.spark.broadcast.HttpBroadcast]] for more details about this mechanism.
  */
 class HttpBroadcastFactory extends BroadcastFactory {
+  
+  //初始化工厂
   override def initialize(isDriver: Boolean, conf: SparkConf, securityMgr: SecurityManager) {
     HttpBroadcast.initialize(isDriver, conf, securityMgr)
   }
 
+  /**
+   * @param value value to broadcast 要广播的对象
+   * @param isLocal whether we are in local mode (single JVM process)
+   * @param id unique id representing this broadcast variable 为广播生成一个唯一编号
+   * 产生一个新的广播对象
+   */
   override def newBroadcast[T: ClassTag](value_ : T, isLocal: Boolean, id: Long): Broadcast[T] =
     new HttpBroadcast[T](value_, isLocal, id)
 
   override def stop() { HttpBroadcast.stop() }
 
   /**
-   * Remove all persisted state associated with the HTTP broadcast with the given ID.
-   * @param removeFromDriver Whether to remove state from the driver
-   * @param blocking Whether to block until unbroadcasted
+   * Remove all persisted state associated with the HTTP broadcast with the given ID. 准备要处理哪个广播对象
+   * @param removeFromDriver Whether to remove state from the driver 是销毁还是暂时删除
+   * @param blocking Whether to block until unbroadcasted 是阻塞的还是非阻塞的
+   * 对已经存在的广播对象进行销毁或者暂时删除
    */
   override def unbroadcast(id: Long, removeFromDriver: Boolean, blocking: Boolean) {
     HttpBroadcast.unpersist(id, removeFromDriver, blocking)

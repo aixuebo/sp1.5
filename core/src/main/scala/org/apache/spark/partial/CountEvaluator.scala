@@ -24,6 +24,7 @@ import org.apache.commons.math3.distribution.NormalDistribution
  *
  * TODO: There's currently a lot of shared code between this and GroupedCountEvaluator. It might
  * be best to make this a special case of GroupedCountEvaluator with one group.
+ * 仅仅统计long类型的输出结果
  */
 private[spark] class CountEvaluator(totalOutputs: Int, confidence: Double)
   extends ApproximateEvaluator[Long, BoundedDouble] {

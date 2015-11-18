@@ -76,6 +76,7 @@ private[spark] class BlockManager(
 
   private val blockInfo = new TimeStampedHashMap[BlockId, BlockInfo]
 
+  //创建线程池
   private val futureExecutionContext = ExecutionContext.fromExecutorService(
     ThreadUtils.newDaemonCachedThreadPool("block-manager-future", 128))
 
@@ -211,8 +212,8 @@ private[spark] class BlockManager(
       diskBlockManager.subDirsPerLocalDir,
       shuffleManager.getClass.getName)
 
-    val MAX_ATTEMPTS = 3
-    val SLEEP_TIME_SECS = 5
+    val MAX_ATTEMPTS = 3//尝试次数
+    val SLEEP_TIME_SECS = 5//每次睡眠时间
 
     for (i <- 1 to MAX_ATTEMPTS) {
       try {

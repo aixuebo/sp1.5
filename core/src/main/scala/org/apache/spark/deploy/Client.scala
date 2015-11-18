@@ -217,9 +217,10 @@ object Client {
     // scalastyle:on println
 
     val conf = new SparkConf()
+    //解析参数
     val driverArgs = new ClientArguments(args)
 
-    if (!driverArgs.logLevel.isGreaterOrEqual(Level.WARN)) {
+    if (!driverArgs.logLevel.isGreaterOrEqual(Level.WARN)) {//如果需要详细日志,则将事件生命周期内日志都打印出来
       conf.set("spark.akka.logLifecycleEvents", "true")
     }
     conf.set("spark.rpc.askTimeout", "10")
@@ -229,8 +230,13 @@ object Client {
     val rpcEnv =
       RpcEnv.create("driverClient", Utils.localHostName(), 0, conf, new SecurityManager(conf))
 
+    /**
+     * driverArgs.masters.map(RpcAddress.fromSparkURL)返回Array数组,每一个元素是一个元组,由host,port组成
+     * 
+     */
     val masterEndpoints = driverArgs.masters.map(RpcAddress.fromSparkURL).
       map(rpcEnv.setupEndpointRef(Master.SYSTEM_NAME, _, Master.ENDPOINT_NAME))
+      
     rpcEnv.setupEndpoint("client", new ClientEndpoint(rpcEnv, driverArgs, masterEndpoints, conf))
 
     rpcEnv.awaitTermination()

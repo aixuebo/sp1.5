@@ -186,6 +186,10 @@ private[spark] object RpcAddress {
     fromURI(new java.net.URI(uri))
   }
 
+  /**
+   * 参数是spark的url格式,例如spark://host:port
+   * 从这里面获取host和port
+   */
   def fromSparkURL(sparkUrl: String): RpcAddress = {
     val (host, port) = Utils.extractHostPortFromSparkUrl(sparkUrl)
     RpcAddress(host, port)
@@ -252,6 +256,7 @@ private[spark] object RpcTimeout {
    * @param conf configuration properties containing the timeout
    * @param timeoutProp property key for the timeout in seconds
    * @throws NoSuchElementException if property is not set
+   * 从timeoutProp作为key,查询对应的值
    */
   def apply(conf: SparkConf, timeoutProp: String): RpcTimeout = {
     val timeout = { conf.getTimeAsSeconds(timeoutProp) seconds }
@@ -265,6 +270,7 @@ private[spark] object RpcTimeout {
    * @param conf configuration properties containing the timeout
    * @param timeoutProp property key for the timeout in seconds
    * @param defaultValue default timeout value in seconds if property not found
+   * 从timeoutProp作为key,查询对应的值,如果查询不到执行默认值
    */
   def apply(conf: SparkConf, timeoutProp: String, defaultValue: String): RpcTimeout = {
     val timeout = { conf.getTimeAsSeconds(timeoutProp, defaultValue) seconds }
@@ -279,17 +285,21 @@ private[spark] object RpcTimeout {
    * @param conf configuration properties containing the timeout
    * @param timeoutPropList prioritized list of property keys for the timeout in seconds
    * @param defaultValue default timeout value in seconds if no properties found
+   * 从key集合中查找对应的值
    */
   def apply(conf: SparkConf, timeoutPropList: Seq[String], defaultValue: String): RpcTimeout = {
     require(timeoutPropList.nonEmpty)
 
     // Find the first set property or use the default value with the first property
     val itr = timeoutPropList.iterator
+    
+    //返回值元组,存在的(key,key对应的值)
     var foundProp: Option[(String, String)] = None
     while (itr.hasNext && foundProp.isEmpty){
       val propKey = itr.next()
       conf.getOption(propKey).foreach { prop => foundProp = Some(propKey, prop) }
     }
+    
     val finalProp = foundProp.getOrElse(timeoutPropList.head, defaultValue)
     val timeout = { Utils.timeStringAsSeconds(finalProp._2) seconds }
     new RpcTimeout(timeout, finalProp._1)

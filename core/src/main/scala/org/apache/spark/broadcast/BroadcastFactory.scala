@@ -33,18 +33,27 @@ import org.apache.spark.annotation.DeveloperApi
 @DeveloperApi
 trait BroadcastFactory {
 
+  //初始化工厂
   def initialize(isDriver: Boolean, conf: SparkConf, securityMgr: SecurityManager): Unit
 
   /**
    * Creates a new broadcast variable.
    *
-   * @param value value to broadcast
+   * @param value value to broadcast 要广播的对象
    * @param isLocal whether we are in local mode (single JVM process)
-   * @param id unique id representing this broadcast variable
+   * @param id unique id representing this broadcast variable 为广播生成一个唯一编号
+   * 产生一个新的广播对象
    */
   def newBroadcast[T: ClassTag](value: T, isLocal: Boolean, id: Long): Broadcast[T]
 
+  /**
+   * 对已经存在的广播对象进行销毁或者暂时删除
+   * @id 准备要处理哪个广播对象
+   * @removeFromDriver 是销毁还是暂时删除
+   * @blocking 是阻塞的还是非阻塞的
+   */
   def unbroadcast(id: Long, removeFromDriver: Boolean, blocking: Boolean): Unit
 
+  //停止工厂
   def stop(): Unit
 }

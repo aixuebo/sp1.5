@@ -24,21 +24,23 @@ import org.apache.spark.annotation.DeveloperApi
 /**
  * :: DeveloperApi ::
  * Identifies a particular Block of data, usually associated with a single file.
+ * 表示一个特别的数据块,通常关联一个单独的文件
  * A Block can be uniquely identified by its filename, but each type of Block has a different
  * set of keys which produce its unique name.
+ * 一个数据块的唯一标示是他的文件名,但是每一个类型的数据块仅仅名字唯一即可
  *
  * If your BlockId should be serializable, be sure to add it to the BlockId.apply() method.
  */
 @DeveloperApi
 sealed abstract class BlockId {
-  /** A globally unique identifier for this Block. Can be used for ser/de. */
+  /** A globally unique identifier for this Block. Can be used for ser/de. 全局唯一的名称*/
   def name: String
 
-  // convenience methods
+  // convenience methods 获取RDD数据块对象
   def asRDDId: Option[RDDBlockId] = if (isRDD) Some(asInstanceOf[RDDBlockId]) else None
-  def isRDD: Boolean = isInstanceOf[RDDBlockId]
+  def isRDD: Boolean = isInstanceOf[RDDBlockId]//是RDD数据块
   def isShuffle: Boolean = isInstanceOf[ShuffleBlockId]
-  def isBroadcast: Boolean = isInstanceOf[BroadcastBlockId]
+  def isBroadcast: Boolean = isInstanceOf[BroadcastBlockId]//是广播数据块
 
   override def toString: String = name
   override def hashCode: Int = name.hashCode
@@ -48,6 +50,7 @@ sealed abstract class BlockId {
   }
 }
 
+//RDD使用rdd的ID和拆分ID即可
 @DeveloperApi
 case class RDDBlockId(rddId: Int, splitIndex: Int) extends BlockId {
   override def name: String = "rdd_" + rddId + "_" + splitIndex
@@ -70,6 +73,7 @@ case class ShuffleIndexBlockId(shuffleId: Int, mapId: Int, reduceId: Int) extend
   override def name: String = "shuffle_" + shuffleId + "_" + mapId + "_" + reduceId + ".index"
 }
 
+//使用广播ID以及文件域即可区分
 @DeveloperApi
 case class BroadcastBlockId(broadcastId: Long, field: String = "") extends BlockId {
   override def name: String = "broadcast_" + broadcastId + (if (field == "") "" else "_" + field)
@@ -102,6 +106,8 @@ private[spark] case class TestBlockId(id: String) extends BlockId {
 
 @DeveloperApi
 object BlockId {
+  
+  //每种类型的命名正则表达式
   val RDD = "rdd_([0-9]+)_([0-9]+)".r
   val SHUFFLE = "shuffle_([0-9]+)_([0-9]+)_([0-9]+)".r
   val SHUFFLE_DATA = "shuffle_([0-9]+)_([0-9]+)_([0-9]+).data".r
@@ -111,7 +117,8 @@ object BlockId {
   val STREAM = "input-([0-9]+)-([0-9]+)".r
   val TEST = "test_(.*)".r
 
-  /** Converts a BlockId "name" String back into a BlockId. */
+  /** Converts a BlockId "name" String back into a BlockId.
+   **/
   def apply(id: String): BlockId = id match {
     case RDD(rddId, splitIndex) =>
       RDDBlockId(rddId.toInt, splitIndex.toInt)

@@ -1018,6 +1018,7 @@ private[spark] object Utils extends Logging {
 
   /**
    * Convert a Java memory parameter passed to -Xmx (such as 300m or 1g) to a number of mebibytes.
+   * 转换成M
    */
   def memoryStringToMb(str: String): Int = {
     // Convert to bytes, rather than directly to MB, because when no units are specified the unit
@@ -2135,6 +2136,8 @@ private[spark] object Utils extends Logging {
    * host and port.
    *
    * @throws SparkException if `sparkUrl` is invalid.
+   * 参数是spark的url格式,例如spark://host:port
+   * 从这里面获取host和port
    */
   def extractHostPortFromSparkUrl(sparkUrl: String): (String, Int) = {
     try {
@@ -2169,6 +2172,7 @@ private[spark] object Utils extends Logging {
   /**
    * Split the comma delimited string of master URLs into a list.
    * For instance, "spark://abc,def" becomes [spark://abc, spark://def].
+   * 解析客户端启动时候所传的_master参数,将spark://abc,def方式转换成spark://abc, spark://def
    */
   def parseStandaloneMasterUrls(masterUrls: String): Array[String] = {
     masterUrls.stripPrefix("spark://").split(",").map("spark://" + _)

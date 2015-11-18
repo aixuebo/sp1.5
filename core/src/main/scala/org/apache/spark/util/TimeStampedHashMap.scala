@@ -25,6 +25,7 @@ import scala.collection.{JavaConversions, mutable}
 
 import org.apache.spark.Logging
 
+//存储value和存储value时候的时间戳
 private[spark] case class TimeStampedValue[V](value: V, timestamp: Long)
 
 /**

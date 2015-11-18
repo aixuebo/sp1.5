@@ -19,6 +19,7 @@ package org.apache.spark.util
 
 /**
  * An extractor object for parsing strings into integers.
+ * 整数参数,将字符串转换成int
  */
 private[spark] object IntParam {
   def unapply(str: String): Option[Int] = {

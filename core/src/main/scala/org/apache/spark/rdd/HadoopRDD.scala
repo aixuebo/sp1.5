@@ -228,8 +228,9 @@ class HadoopRDD[K, V](
     array
   }
 
+  //返回一个可中断的迭代器对象
   override def compute(theSplit: Partition, context: TaskContext): InterruptibleIterator[(K, V)] = {
-    val iter = new NextIterator[(K, V)] {
+    val iter = new NextIterator[(K, V)] {//每次迭代的返回值是一个key-value组成的元组
 
       val split = theSplit.asInstanceOf[HadoopPartition] //每一个Partition被封装成了HadoopPartition对象
       logInfo("Input split: " + split.inputSplit)
@@ -250,15 +251,20 @@ class HadoopRDD[K, V](
 
       var reader: RecordReader[K, V] = null
       val inputFormat = getInputFormat(jobConf)
+      
+      //为hadoop的Map任务设置参数
       HadoopRDD.addLocalConfiguration(new SimpleDateFormat("yyyyMMddHHmm").format(createTime),
         context.stageId, theSplit.index, context.attemptNumber, jobConf)
+      //读取该split数据块,返回reader
       reader = inputFormat.getRecordReader(split.inputSplit.value, jobConf, Reporter.NULL)
 
       // Register an on-task-completion callback to close the input stream.
+      //注册一个监听事件,当任务完成的时候调用该方法,关闭流
       context.addTaskCompletionListener{ context => closeIfNeeded() }
-      val key: K = reader.createKey()
-      val value: V = reader.createValue()
+      val key: K = reader.createKey() //key的类型
+      val value: V = reader.createValue()//value的类型
 
+      //每次迭代返回的是key-value组成的元组
       override def getNext(): (K, V) = {
         try {
           finished = !reader.next(key, value)
@@ -370,7 +376,12 @@ private[spark] object HadoopRDD extends Logging {
   private def putCachedMetadata(key: String, value: Any): Unit =
     SparkEnv.get.hadoopJobMetadata.put(key, value)
 
-  /** Add Hadoop configuration specific to a single partition and attempt. */
+  /** Add Hadoop configuration specific to a single partition and attempt. 
+   * @jobId 作业ID
+   * @splitId splitId 文件块ID
+   * @attemptId 该splitId的尝试任务次数,第几次执行该splitId
+   * 为hadoop的Map任务设置参数
+   **/
   def addLocalConfiguration(jobTrackerId: String, jobId: Int, splitId: Int, attemptId: Int,
                             conf: JobConf) {
     val jobID = new JobID(jobTrackerId, jobId)
@@ -404,6 +415,7 @@ private[spark] object HadoopRDD extends Logging {
     }
   }
 
+  //获取Split数据块的反射结构
   private[spark] class SplitInfoReflections {
     val inputSplitWithLocationInfo =
       Utils.classForName("org.apache.hadoop.mapred.InputSplitWithLocationInfo")
@@ -415,6 +427,7 @@ private[spark] object HadoopRDD extends Logging {
     val getLocation = splitLocationInfo.getMethod("getLocation")
   }
 
+  //获取Split数据块的反射结构,如果hadoop的这些类都存在则不抛异常,如果抛异常,则返回None
   private[spark] val SPLIT_INFO_REFLECTIONS: Option[SplitInfoReflections] = try {
     Some(new SplitInfoReflections)
   } catch {

@@ -23,11 +23,16 @@ import org.apache.spark.annotation.DeveloperApi
  * :: DeveloperApi ::
  * An iterator that wraps around an existing iterator to provide task killing functionality.
  * It works by checking the interrupted flag in [[TaskContext]].
+ * 可中断的迭代器
+ * 
+ * @context 任务的上下文对象
+ * @delegate 真正意义的迭代器
  */
 @DeveloperApi
 class InterruptibleIterator[+T](val context: TaskContext, val delegate: Iterator[T])
   extends Iterator[T] {
 
+  //如果上下文已经中断了,则不进行迭代了
   def hasNext: Boolean = {
     // TODO(aarondav/rxin): Check Thread.interrupted instead of context.interrupted if interrupt
     // is allowed. The assumption is that Thread.interrupted does not have a memory fence in read

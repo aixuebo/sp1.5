@@ -287,6 +287,7 @@ case class InputMetrics(readMethod: DataReadMethod.Value) {
 
   /**
    * Total bytes read.
+   * 记录任务读取的字节数
    */
   private var _bytesRead: Long = _
   def bytesRead: Long = _bytesRead
@@ -294,6 +295,7 @@ case class InputMetrics(readMethod: DataReadMethod.Value) {
 
   /**
    * Total records read.
+   * 记录任务读取的文件行数
    */
   private var _recordsRead: Long = _
   def recordsRead: Long = _recordsRead

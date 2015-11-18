@@ -832,6 +832,8 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       path: String,
       minPartitions: Int = defaultMinPartitions): RDD[String] = withScope {
     assertNotStopped()
+    //hadoopFile返回 key-value元组的RDD
+    //.map(pair => pair._2.toString) 返回value的toString方法
     hadoopFile(path, classOf[TextInputFormat], classOf[LongWritable], classOf[Text],
       minPartitions).map(pair => pair._2.toString)
   }
@@ -1011,6 +1013,8 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * operation will create many references to the same object.
    * If you plan to directly cache, sort, or aggregate Hadoop writable objects, you should first
    * copy them using a `map` function.
+   * 
+   * 返回 key-value元组的RDD
    */
   def hadoopFile[K, V](
       path: String,
@@ -2507,12 +2511,14 @@ object SparkContext extends Logging {
   /**
    * Find the JAR from which a given class was loaded, to make it easy for users to pass
    * their JARs to SparkContext.
+   * 查找参数class对应在哪个jar文件内
+   * 返回class所在的jar包全路径
    */
   def jarOfClass(cls: Class[_]): Option[String] = {
     val uri = cls.getResource("/" + cls.getName.replace('.', '/') + ".class")
     if (uri != null) {
       val uriStr = uri.toString
-      if (uriStr.startsWith("jar:file:")) {
+      if (uriStr.startsWith("jar:file:")) {//从jar包找到了该class
         // URI will be of the form "jar:file:/path/foo.jar!/package/cls.class",
         // so pull out the /path/foo.jar
         Some(uriStr.substring("jar:file:".length, uriStr.indexOf('!')))
@@ -2528,6 +2534,7 @@ object SparkContext extends Logging {
    * Find the JAR that contains the class of a particular object, to make it easy for users
    * to pass their JARs to SparkContext. In most cases you can call jarOfObject(this) in
    * your driver program.
+   * 返回参数对象对应的class所在的jar包全路径
    */
   def jarOfObject(obj: AnyRef): Option[String] = jarOfClass(obj.getClass)
 

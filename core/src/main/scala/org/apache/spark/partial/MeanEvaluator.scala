@@ -23,22 +23,25 @@ import org.apache.spark.util.StatCounter
 
 /**
  * An ApproximateEvaluator for means.
+ * 估算一个平均值
+ * @totalOutputs 表示一共有多少个统计输出
+ * @confidence 置信值
  */
 private[spark] class MeanEvaluator(totalOutputs: Int, confidence: Double)
   extends ApproximateEvaluator[StatCounter, BoundedDouble] {
 
-  var outputsMerged = 0
-  var counter = new StatCounter
+  var outputsMerged = 0 //一共合并了几个输出
+  var counter = new StatCounter //合并后的最终统计值
 
   override def merge(outputId: Int, taskResult: StatCounter) {
-    outputsMerged += 1
-    counter.merge(taskResult)
+    outputsMerged += 1 //累加合并的输出
+    counter.merge(taskResult) //合并统计值
   }
 
   override def currentResult(): BoundedDouble = {
-    if (outputsMerged == totalOutputs) {
+    if (outputsMerged == totalOutputs) {//已经全部合并完成
       new BoundedDouble(counter.mean, 1.0, counter.mean, counter.mean)
-    } else if (outputsMerged == 0) {
+    } else if (outputsMerged == 0) {//还没有输出
       new BoundedDouble(0, 0.0, Double.NegativeInfinity, Double.PositiveInfinity)
     } else {
       val mean = counter.mean

@@ -24,23 +24,26 @@ package org.apache.spark.util
  * for running variance.
  *
  * @constructor Initialize the StatCounter with the given values.
+ * 提供可遍历的double对象作为参数,来构造统计对象StatCounter
  */
 class StatCounter(values: TraversableOnce[Double]) extends Serializable {
-  private var n: Long = 0     // Running count of our values
-  private var mu: Double = 0  // Running mean of our values
-  private var m2: Double = 0  // Running variance numerator (sum of (x - mean)^2)
-  private var maxValue: Double = Double.NegativeInfinity // Running max of our values
-  private var minValue: Double = Double.PositiveInfinity // Running min of our values
+  private var n: Long = 0     // Running count of our values,value的个数
+  private var mu: Double = 0  // Running mean of our values,平均数
+  private var m2: Double = 0  // Running variance numerator (sum of (x - mean)^2) 变异 的平均数
+  private var maxValue: Double = Double.NegativeInfinity // Running max of our values 最大值
+  private var minValue: Double = Double.PositiveInfinity // Running min of our values 最小值
 
   merge(values)
 
   /** Initialize the StatCounter with no values. */
   def this() = this(Nil)
 
-  /** Add a value into this StatCounter, updating the internal statistics. */
+  /** Add a value into this StatCounter, updating the internal statistics. 
+   * 添加一个值,进行统计,更新内部的统计信息  
+   **/
   def merge(value: Double): StatCounter = {
     val delta = value - mu
-    n += 1
+    n += 1 //个数+1
     mu += delta / n
     m2 += delta * (value - mu)
     maxValue = math.max(maxValue, value)
@@ -48,7 +51,9 @@ class StatCounter(values: TraversableOnce[Double]) extends Serializable {
     this
   }
 
-  /** Add multiple values into this StatCounter, updating the internal statistics. */
+  /** Add multiple values into this StatCounter, updating the internal statistics. 
+   * 遍历数据,更新统计信息  
+   **/
   def merge(values: TraversableOnce[Double]): StatCounter = {
     values.foreach(v => merge(v))
     this
@@ -139,6 +144,7 @@ class StatCounter(values: TraversableOnce[Double]) extends Serializable {
   }
 }
 
+//提供可遍历的double对象或者double数组,来构造统计对象StatCounter
 object StatCounter {
   /** Build a StatCounter from a list of values. */
   def apply(values: TraversableOnce[Double]): StatCounter = new StatCounter(values)

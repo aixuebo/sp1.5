@@ -22,6 +22,6 @@ package org.apache.spark.partial
  * tasks. Allows partial evaluation at any point by calling currentResult().
  */
 private[spark] trait ApproximateEvaluator[U, R] {
-  def merge(outputId: Int, taskResult: U): Unit
-  def currentResult(): R
+  def merge(outputId: Int, taskResult: U): Unit //为输出合并统计结果
+  def currentResult(): R //获取当前统计结果
 }
