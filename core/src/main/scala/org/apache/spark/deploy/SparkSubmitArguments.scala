@@ -34,15 +34,19 @@ import org.apache.spark.util.Utils
 /**
  * Parses and encapsulates arguments from the spark-submit script.
  * The env argument is used for testing.
+ * 从spark-submit脚本中解析压缩的参数
+ * 
+ * @args 参数集合
+ * @env 环境变量
  */
 private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, String] = sys.env)
   extends SparkSubmitArgumentsParser {
   var master: String = null
-  var deployMode: String = null
+  var deployMode: String = null//cluster或者client两者之一
   var executorMemory: String = null
   var executorCores: String = null
   var totalExecutorCores: String = null
-  var propertiesFile: String = null
+  var propertiesFile: String = null //参数设置的属性配置文件路径
   var driverMemory: String = null
   var driverExtraClassPath: String = null
   var driverExtraLibraryPath: String = null
@@ -54,17 +58,19 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
   var mainClass: String = null
   var primaryResource: String = null
   var name: String = null
-  var childArgs: ArrayBuffer[String] = new ArrayBuffer[String]()
-  var jars: String = null
+  var childArgs: ArrayBuffer[String] = new ArrayBuffer[String]() //额外没有解析的参数集合
+  var jars: String = null //返回值是path的url形式用逗号分割的字符串,可以是HDFS格式的
   var packages: String = null
-  var repositories: String = null
+  var repositories: String = null //maven资源集合
   var ivyRepoPath: String = null
   var packagesExclusions: String = null
-  var verbose: Boolean = false
+  var verbose: Boolean = false //true表示要打印详细信息
   var isPython: Boolean = false
   var pyFiles: String = null
   var isR: Boolean = false
-  var action: SparkSubmitAction = null
+  var action: SparkSubmitAction = null //SUBMIT, KILL, REQUEST_STATUS,命令的行为,三者之一
+  //--conf PROP=VALUE   .配置任意的spark配置信息,一次仅能设置一个键值对
+  //存储spark的属性信息
   val sparkProperties: HashMap[String, String] = new HashMap[String, String]()
   var proxyUser: String = null
   var principal: String = null
@@ -77,13 +83,16 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
   var submissionToRequestStatusFor: String = null
   var useRest: Boolean = true // used internally
 
-  /** Default properties present in the currently defined defaults file. */
+  /** Default properties present in the currently defined defaults file. 
+   *  读取配置文件配置的信息
+   **/
   lazy val defaultSparkProperties: HashMap[String, String] = {
     val defaultProperties = new HashMap[String, String]()
     // scalastyle:off println
     if (verbose) SparkSubmit.printStream.println(s"Using properties file: $propertiesFile")
+    //读取配置文件
     Option(propertiesFile).foreach { filename =>
-      Utils.getPropertiesFromFile(filename).foreach { case (k, v) =>
+    Utils.getPropertiesFromFile(filename).foreach { case (k, v) =>
         defaultProperties(k) = v
         if (verbose) SparkSubmit.printStream.println(s"Adding default property: $k=$v")
       }
@@ -99,18 +108,19 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
     case e: IllegalArgumentException =>
       SparkSubmit.printErrorAndExit(e.getMessage())
   }
-  // Populate `sparkProperties` map from properties file
+  // Populate `sparkProperties` map from properties file 合并配置信息
   mergeDefaultSparkProperties()
-  // Remove keys that don't start with "spark." from `sparkProperties`.
+  // Remove keys that don't start with "spark." from `sparkProperties`.过滤非spark.开头的属性
   ignoreNonSparkProperties()
-  // Use `sparkProperties` map along with env vars to fill in any missing parameters
+  // Use `sparkProperties` map along with env vars to fill in any missing parameters 设置默认属性信息,即在脚本参数中没有加载到的话,则要加载默认值
   loadEnvironmentArguments()
 
-  validateArguments()
+  validateArguments() //校验参数
 
   /**
    * Merge values from the default properties file with those specified through --conf.
    * When this is called, `sparkProperties` is already filled with configs from the latter.
+   * 读取配置文件,将配置文件中信息添加到全局sparkProperties中,即--conf的优先级更大,配置文件中的属性不能覆盖--conf
    */
   private def mergeDefaultSparkProperties(): Unit = {
     // Use common defaults file, if not specified by user
@@ -125,6 +135,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
 
   /**
    * Remove keys that don't start with "spark." from `sparkProperties`.
+   * 删除不是以spark.开头的属性信息
    */
   private def ignoreNonSparkProperties(): Unit = {
     sparkProperties.foreach { case (k, v) =>
@@ -137,6 +148,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
 
   /**
    * Load arguments from environment variables, Spark properties etc.
+   * 设置默认属性信息,即在脚本参数中没有加载到的话,则要加载默认值
    */
   private def loadEnvironmentArguments(): Unit = {
     master = Option(master)
@@ -313,7 +325,9 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
     """.stripMargin
   }
 
-  /** Fill in values by parsing user options. */
+  /** Fill in values by parsing user options.
+   * 处理解析出来的key和value参数 
+   **/
   override protected def handle(opt: String, value: String): Boolean = {
     opt match {
       case NAME =>
@@ -403,7 +417,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
         repositories = value
 
       case CONF =>
-        value.split("=", 2).toSeq match {
+        value.split("=", 2).toSeq match {//--conf PROP=VALUE   .配置任意的spark配置信息,一次仅能设置一个键值对
           case Seq(k, v) => sparkProperties(k) = v
           case _ => SparkSubmit.printErrorAndExit(s"Spark config without '=': $value")
         }
@@ -423,11 +437,11 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
       case VERBOSE =>
         verbose = true
 
-      case VERSION =>
+      case VERSION => //打印spark版本信息,并且退出程序
         SparkSubmit.printVersionAndExit()
 
       case USAGE_ERROR =>
-        printUsageAndExit(1)
+        printUsageAndExit(1)//退出程序
 
       case _ =>
         throw new IllegalArgumentException(s"Unexpected argument '$opt'.")
@@ -440,12 +454,14 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
    *
    * The first unrecognized option is treated as the "primary resource". Everything else is
    * treated as application arguments.
+   * 当发现没有定义的key时候执行该方法,传入key
    */
   override protected def handleUnknown(opt: String): Boolean = {
-    if (opt.startsWith("-")) {
+    if (opt.startsWith("-")) {//以-开头的未定义的key,则退出程序,打印信息
       SparkSubmit.printErrorAndExit(s"Unrecognized option '$opt'.")
     }
 
+    //说明参数不是以-开头的
     primaryResource =
       if (!SparkSubmit.isShell(opt) && !SparkSubmit.isInternal(opt)) {
         Utils.resolveURI(opt).toString
@@ -457,6 +473,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
     false
   }
 
+  //添加额外的未解析的参数集合
   override protected def handleExtraArgs(extra: JList[String]): Unit = {
     childArgs ++= extra
   }
@@ -481,64 +498,64 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
         |  --deploy-mode DEPLOY_MODE   Whether to launch the driver program locally ("client") or
         |                              on one of the worker machines inside the cluster ("cluster")
         |                              (Default: client).
-        |  --class CLASS_NAME          Your application's main class (for Java / Scala apps).
-        |  --name NAME                 A name of your application.
+        |  --class CLASS_NAME          Your application's main class (for Java / Scala apps).主类
+        |  --name NAME                 A name of your application.应用名称
         |  --jars JARS                 Comma-separated list of local jars to include on the driver
-        |                              and executor classpaths.
+        |                              and executor classpaths.逗号拆分的本地jar包
         |  --packages                  Comma-separated list of maven coordinates of jars to include
         |                              on the driver and executor classpaths. Will search the local
         |                              maven repo, then maven central and any additional remote
         |                              repositories given by --repositories. The format for the
-        |                              coordinates should be groupId:artifactId:version.
+        |                              coordinates should be groupId:artifactId:version.逗号拆分的maven的坐标格式groupId:artifactId:version,可以从maven上加载jar包
         |  --exclude-packages          Comma-separated list of groupId:artifactId, to exclude while
         |                              resolving the dependencies provided in --packages to avoid
-        |                              dependency conflicts.
+        |                              dependency conflicts.用逗号拆分的,排除的jar包,避免依赖冲突,格式groupId:artifactId即可
         |  --repositories              Comma-separated list of additional remote repositories to
-        |                              search for the maven coordinates given with --packages.
+        |                              search for the maven coordinates given with --packages.逗号拆分的maven加载--packages时候的maven资源,maven会从这些资源上查找对应的jar文件
         |  --py-files PY_FILES         Comma-separated list of .zip, .egg, or .py files to place
-        |                              on the PYTHONPATH for Python apps.
+        |                              on the PYTHONPATH for Python apps.逗号拆分,包含.zip, .egg, or .py 文件集合,用于python程序执行
         |  --files FILES               Comma-separated list of files to be placed in the working
-        |                              directory of each executor.
+        |                              directory of each executor.用逗号拆分的文件集合,这些文件被存放在工作目录中,被用于执行任务时候使用
         |
-        |  --conf PROP=VALUE           Arbitrary Spark configuration property.
+        |  --conf PROP=VALUE           Arbitrary Spark configuration property.配置任意的spark配置信息,一次仅能设置一个键值对
         |  --properties-file FILE      Path to a file from which to load extra properties. If not
-        |                              specified, this will look for conf/spark-defaults.conf.
+        |                              specified, this will look for conf/spark-defaults.conf.配置一个配置文件路径,可以加载额外的属性,该属性不是一定要有的,默认会去寻找conf/spark-defaults.conf配置文件
         |
-        |  --driver-memory MEM         Memory for driver (e.g. 1000M, 2G) (Default: ${mem_mb}M).
-        |  --driver-java-options       Extra Java options to pass to the driver.
-        |  --driver-library-path       Extra library path entries to pass to the driver.
+        |  --driver-memory MEM         Memory for driver (e.g. 1000M, 2G) (Default: ${mem_mb}M).driver需要的内存设置,默认是${mem_mb}M,支持单位M G K等形式 
+        |  --driver-java-options       Extra Java options to pass to the driver.传递到driver中额外的JVM属性
+        |  --driver-library-path       Extra library path entries to pass to the driver.额外的jar包路径,传递到driver中
         |  --driver-class-path         Extra class path entries to pass to the driver. Note that
         |                              jars added with --jars are automatically included in the
-        |                              classpath.
+        |                              classpath.额外的class主类传递到driver中,注意该class对应的jar已经被自动添加到--jars属性中了
         |
-        |  --executor-memory MEM       Memory per executor (e.g. 1000M, 2G) (Default: 1G).
+        |  --executor-memory MEM       Memory per executor (e.g. 1000M, 2G) (Default: 1G).executor任务执行的时候所需要的内存
         |
-        |  --proxy-user NAME           User to impersonate when submitting the application.
+        |  --proxy-user NAME           User to impersonate when submitting the application.提交一个应用的时候,提交者
         |
         |  --help, -h                  Show this help message and exit
-        |  --verbose, -v               Print additional debug output
-        |  --version,                  Print the version of current Spark
+        |  --verbose, -v               Print additional debug output 打印更加详细的信息
+        |  --version,                  Print the version of current Spark 打印当前spark的version
         |
         | Spark standalone with cluster deploy mode only:
         |  --driver-cores NUM          Cores for driver (Default: 1).
         |
         | Spark standalone or Mesos with cluster deploy mode only:
-        |  --supervise                 If given, restarts the driver on failure.
-        |  --kill SUBMISSION_ID        If given, kills the driver specified.
-        |  --status SUBMISSION_ID      If given, requests the status of the driver specified.
+        |  --supervise                 If given, restarts the driver on failure.true表示当driver失败了.可以重新开启
+        |  --kill SUBMISSION_ID        If given, kills the driver specified.可以去kill指定的driver
+        |  --status SUBMISSION_ID      If given, requests the status of the driver specified.可以请求指定driver的状态信息
         |
         | Spark standalone and Mesos only:
-        |  --total-executor-cores NUM  Total cores for all executors.
+        |  --total-executor-cores NUM  Total cores for all executors.设置所有的执行任务所需要的总CPU数量
         |
         | Spark standalone and YARN only:
         |  --executor-cores NUM        Number of cores per executor. (Default: 1 in YARN mode,
-        |                              or all available cores on the worker in standalone mode)
+        |                              or all available cores on the worker in standalone mode) 每一个任务需要多少个CPU
         |
         | YARN-only:
         |  --driver-cores NUM          Number of cores used by the driver, only in cluster mode
-        |                              (Default: 1).
-        |  --queue QUEUE_NAME          The YARN queue to submit to (Default: "default").
-        |  --num-executors NUM         Number of executors to launch (Default: 2).
+        |                              (Default: 1).driver使用多少CPU
+        |  --queue QUEUE_NAME          The YARN queue to submit to (Default: "default"). 该任务提交到yarn上哪个队列
+        |  --num-executors NUM         Number of executors to launch (Default: 2).需要启动多少个任务
         |  --archives ARCHIVES         Comma separated list of archives to be extracted into the
         |                              working directory of each executor.
         |  --principal PRINCIPAL       Principal to be used to login to KDC, while running on

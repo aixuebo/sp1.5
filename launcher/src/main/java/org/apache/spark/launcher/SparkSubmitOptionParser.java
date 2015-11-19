@@ -27,6 +27,10 @@ import java.util.regex.Pattern;
  * This class encapsulates the parsing code for spark-submit command line options, so that there
  * is a single list of options that needs to be maintained (well, sort of, but it makes it harder
  * to break things).
+ * 
+ * 该类解析指定的参数信息,以及提取除了指定参数列表外的额外参数信息集合
+ * 
+ * 参见SparkSubmitArguments类
  */
 class SparkSubmitOptionParser {
 
@@ -37,7 +41,7 @@ class SparkSubmitOptionParser {
   // SparkSubmitArguments.scala. That is also why this class is not abstract - to allow code to
   // easily use these constants without having to create dummy implementations of this class.
   protected final String CLASS = "--class";
-  protected final String CONF = "--conf";
+  protected final String CONF = "--conf"; //--conf PROP=VALUE   .配置任意的spark配置信息,一次仅能设置一个键值对
   protected final String DEPLOY_MODE = "--deploy-mode";
   protected final String DRIVER_CLASS_PATH = "--driver-class-path";
   protected final String DRIVER_CORES = "--driver-cores";
@@ -55,16 +59,16 @@ class SparkSubmitOptionParser {
   protected final String PROPERTIES_FILE = "--properties-file";
   protected final String PROXY_USER = "--proxy-user";
   protected final String PY_FILES = "--py-files";
-  protected final String REPOSITORIES = "--repositories";
+  protected final String REPOSITORIES = "--repositories";//maven资源集合
   protected final String STATUS = "--status";
   protected final String TOTAL_EXECUTOR_CORES = "--total-executor-cores";
 
   // Options that do not take arguments.
   protected final String HELP = "--help";
   protected final String SUPERVISE = "--supervise";
-  protected final String USAGE_ERROR = "--usage-error";
-  protected final String VERBOSE = "--verbose";
-  protected final String VERSION = "--version";
+  protected final String USAGE_ERROR = "--usage-error";//参数使用错误
+  protected final String VERBOSE = "--verbose"; //打印更详细日志
+  protected final String VERSION = "--version"; //打印spark版本信息,并且退出程序
 
   // Standalone-only options.
 
@@ -85,6 +89,7 @@ class SparkSubmitOptionParser {
    * {@link $#handleUnknown(String)}.
    * <p>
    * These two arrays are visible for tests.
+   * 可以包含参数的选项
    */
   final String[][] opts = {
     { ARCHIVES },
@@ -119,6 +124,7 @@ class SparkSubmitOptionParser {
 
   /**
    * List of switches (command line options that do not take parameters) recognized by spark-submit.
+   * 不允许包含参数的选项
    */
   final String[][] switches = {
     { HELP, "-h" },
@@ -134,25 +140,29 @@ class SparkSubmitOptionParser {
    * See SparkSubmitArguments.scala for a more formal description of available options.
    *
    * @throws IllegalArgumentException If an error is found during parsing.
+   * 
+   * 每一个args中元素是--class=xxx方式
+   * 或者也支持支持--class xxx方式
    */
   protected final void parse(List<String> args) {
     Pattern eqSeparatedOpt = Pattern.compile("(--[^=]+)=(.+)");
 
     int idx = 0;
     for (idx = 0; idx < args.size(); idx++) {
-      String arg = args.get(idx);
+      String arg = args.get(idx);//每一个args中元素是--class=xxx方式,解析后arg就是key
       String value = null;
 
+      //解析后arg就是key,value就是=号后面的值
       Matcher m = eqSeparatedOpt.matcher(arg);
       if (m.matches()) {
         arg = m.group(1);
         value = m.group(2);
       }
 
-      // Look for options with a value.
+      // Look for options with a value.查看该key是否允许有value
       String name = findCliOption(arg, opts);
-      if (name != null) {
-        if (value == null) {
+      if (name != null) {//说明该key可以有value
+        if (value == null) {//如果value没有被解析出来,则寻找最后面的数据,即支持-c xxx格式
           if (idx == args.size() - 1) {
             throw new IllegalArgumentException(
                 String.format("Missing argument for option '%s'.", arg));
@@ -166,7 +176,7 @@ class SparkSubmitOptionParser {
         continue;
       }
 
-      // Look for a switch.
+      // Look for a switch.说明该key不能有value
       name = findCliOption(arg, switches);
       if (name != null) {
         if (!handle(name, null)) {
@@ -175,11 +185,13 @@ class SparkSubmitOptionParser {
         continue;
       }
 
+      //说明该key不是spark预先设计的key,因此要异常处理
       if (!handleUnknown(arg)) {
         break;
       }
     }
 
+    //一旦遇到没有预先设置的key时,认为后面的所有参数都是额外参数集合
     if (idx < args.size()) {
       idx++;
     }
@@ -202,6 +214,8 @@ class SparkSubmitOptionParser {
    *
    * @param opt Unrecognized option from the command line.
    * @return Whether to continue parsing the argument list.
+   * 说明该key不是spark预先设计的key,因此要异常处理
+   * 参数是不支持的key
    */
   protected boolean handleUnknown(String opt) {
     throw new UnsupportedOperationException();
@@ -213,11 +227,15 @@ class SparkSubmitOptionParser {
    * when there are no remaining arguments.
    *
    * @param extra List of remaining arguments.
+   * 额外的参数值
    */
   protected void handleExtraArgs(List<String> extra) {
     throw new UnsupportedOperationException();
   }
 
+  //在available中找到key为name的参数名
+  //如果找到了,则返回匹配的第一个key的名称,如果没找到则返回null
+  //例如 --conf 和-c表达同一个意思,则如果找到匹配的则返回--conf
   private String findCliOption(String name, String[][] available) {
     for (String[] candidates : available) {
       for (String candidate : candidates) {

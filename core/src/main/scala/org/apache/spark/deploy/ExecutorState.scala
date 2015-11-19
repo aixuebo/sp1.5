@@ -17,11 +17,20 @@
 
 package org.apache.spark.deploy
 
+//执行状态
 private[deploy] object ExecutorState extends Enumeration {
 
-  val LAUNCHING, LOADING, RUNNING, KILLED, FAILED, LOST, EXITED = Value
+  //枚举从下标0开始计算
+  val LAUNCHING,//启动中 
+  LOADING,//装载中 
+  RUNNING,//运行中 
+  KILLED,//已经杀死 
+  FAILED,//已经失败
+  LOST, //丢失
+  EXITED = Value //退出
 
   type ExecutorState = Value
 
+  //true表示参数是完成状态
   def isFinished(state: ExecutorState): Boolean = Seq(KILLED, FAILED, LOST, EXITED).contains(state)
 }

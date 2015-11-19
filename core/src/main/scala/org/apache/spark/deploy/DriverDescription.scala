@@ -17,6 +17,7 @@
 
 package org.apache.spark.deploy
 
+//对driver的一个简单描述信息
 private[deploy] class DriverDescription(
     val jarUrl: String,
     val mem: Int,
@@ -33,5 +34,6 @@ private[deploy] class DriverDescription(
       command: Command = command): DriverDescription =
     new DriverDescription(jarUrl, mem, cores, supervise, command)
 
+  //打印driver的执行主类
   override def toString: String = s"DriverDescription (${command.mainClass})"
 }

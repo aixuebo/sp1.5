@@ -47,7 +47,9 @@ import org.apache.spark.util.{ChildFirstURLClassLoader, MutableURLClassLoader, U
 
 /**
  * Whether to submit, kill, or request the status of an application.
+ * 对应于有三种操作,杀死,提交,请求任务的状态
  * The latter two operations are currently supported only for standalone cluster mode.
+ * 最后两个状态,仅仅在standalone cluster mode下才被支持
  */
 private[deploy] object SparkSubmitAction extends Enumeration {
   type SparkSubmitAction = Value
@@ -56,7 +58,7 @@ private[deploy] object SparkSubmitAction extends Enumeration {
 
 /**
  * Main gateway of launching a Spark application.
- *
+ * 启动一个spark应于的主要入口
  * This program handles setting up the classpath with relevant Spark dependencies and provides
  * a layer over the different cluster managers and deploy modes that Spark supports.
  */
@@ -67,12 +69,12 @@ object SparkSubmit {
   private val STANDALONE = 2
   private val MESOS = 4
   private val LOCAL = 8
-  private val ALL_CLUSTER_MGRS = YARN | STANDALONE | MESOS | LOCAL
+  private val ALL_CLUSTER_MGRS = YARN | STANDALONE | MESOS | LOCAL //值是15
 
   // Deploy modes
   private val CLIENT = 1
   private val CLUSTER = 2
-  private val ALL_DEPLOY_MODES = CLIENT | CLUSTER
+  private val ALL_DEPLOY_MODES = CLIENT | CLUSTER //值是3
 
   // A special jar name that indicates the class being run is inside of Spark itself, and therefore
   // no user jar is needed.
@@ -80,22 +82,28 @@ object SparkSubmit {
 
   // Special primary resource names that represent shells rather than application jars.
   private val SPARK_SHELL = "spark-shell"
-  private val PYSPARK_SHELL = "pyspark-shell"
-  private val SPARKR_SHELL = "sparkr-shell"
+  private val PYSPARK_SHELL = "pyspark-shell" //python的shell
+  private val SPARKR_SHELL = "sparkr-shell" //R语言的shell
   private val SPARKR_PACKAGE_ARCHIVE = "sparkr.zip"
 
   private val CLASS_NOT_FOUND_EXIT_STATUS = 101
 
   // scalastyle:off println
-  // Exposed for testing
+  // Exposed for testing退出程序函数,传入退出状态码
   private[spark] var exitFn: Int => Unit = (exitCode: Int) => System.exit(exitCode)
+  
+  //警告信息输出流
   private[spark] var printStream: PrintStream = System.err
   private[spark] def printWarning(str: String): Unit = printStream.println("Warning: " + str)
+  
+  //打印错误信息,并且退出程序
   private[spark] def printErrorAndExit(str: String): Unit = {
     printStream.println("Error: " + str)
     printStream.println("Run with --help for usage help or --verbose for debug output")
     exitFn(1)
   }
+  
+  //打印spark版本信息,并且退出程序
   private[spark] def printVersionAndExit(): Unit = {
     printStream.println("""Welcome to
       ____              __
@@ -109,13 +117,16 @@ object SparkSubmit {
   }
   // scalastyle:on println
 
+  
   def main(args: Array[String]): Unit = {
-    val appArgs = new SparkSubmitArguments(args)
-    if (appArgs.verbose) {
+    val appArgs = new SparkSubmitArguments(args) //解析命令行参数信息
+    if (appArgs.verbose) {//打印详细信息
       // scalastyle:off println
       printStream.println(appArgs)
       // scalastyle:on println
     }
+    
+    //根据命令的行为进行具体操作
     appArgs.action match {
       case SparkSubmitAction.SUBMIT => submit(appArgs)
       case SparkSubmitAction.KILL => kill(appArgs)
@@ -217,7 +228,7 @@ object SparkSubmit {
    */
   private[deploy] def prepareSubmitEnvironment(args: SparkSubmitArguments)
       : (Seq[String], Seq[String], Map[String, String], String) = {
-    // Return values
+    // Return values 四个返回值
     val childArgs = new ArrayBuffer[String]()
     val childClasspath = new ArrayBuffer[String]()
     val sysProps = new HashMap[String, String]()
@@ -684,6 +695,7 @@ object SparkSubmit {
     }
   }
 
+  //加载本地的jar文件到classpath中
   private def addJarToClasspath(localJar: String, loader: MutableURLClassLoader) {
     val uri = Utils.resolveURI(localJar)
     uri.getScheme match {
@@ -701,6 +713,7 @@ object SparkSubmit {
 
   /**
    * Return whether the given primary resource represents a user jar.
+   * true表示用户自定义资源
    */
   private[deploy] def isUserJar(res: String): Boolean = {
     !isShell(res) && !isPython(res) && !isInternal(res) && !isR(res)
@@ -708,6 +721,7 @@ object SparkSubmit {
 
   /**
    * Return whether the given primary resource represents a shell.
+   * 资源是否是shell
    */
   private[deploy] def isShell(res: String): Boolean = {
     (res == SPARK_SHELL || res == PYSPARK_SHELL || res == SPARKR_SHELL)
@@ -722,6 +736,7 @@ object SparkSubmit {
 
   /**
    * Return whether the given main class represents a thrift server.
+   * 主类是否是thrift服务
    */
   private def isThriftServer(mainClass: String): Boolean = {
     mainClass == "org.apache.spark.sql.hive.thriftserver.HiveThriftServer2"
@@ -729,6 +744,7 @@ object SparkSubmit {
 
   /**
    * Return whether the given primary resource requires running python.
+   * 传入的资源是否是python资源
    */
   private[deploy] def isPython(res: String): Boolean = {
     res != null && res.endsWith(".py") || res == PYSPARK_SHELL
@@ -736,11 +752,13 @@ object SparkSubmit {
 
   /**
    * Return whether the given primary resource requires running R.
+   * 传入的资源是否是R资源
    */
   private[deploy] def isR(res: String): Boolean = {
     res != null && res.endsWith(".R") || res == SPARKR_SHELL
   }
 
+  //传入的资源是否是spark-internal,即spark内部资源
   private[deploy] def isInternal(res: String): Boolean = {
     res == SPARK_INTERNAL
   }
@@ -748,6 +766,10 @@ object SparkSubmit {
   /**
    * Merge a sequence of comma-separated file lists, some of which may be null to indicate
    * no files, into a single comma-separated string.
+   * 参数是一个集合,集合的每一个元素都可以用逗号拆分的字符串
+   * 返回:
+   * 1.null表示没有任何文件
+   * 2.非null,表示每一个元素按照逗号拆分后,然后合并,然后最终形成一个总的按照逗号拆分的字符串
    */
   private def mergeFileLists(lists: String*): String = {
     val merged = lists.filterNot(StringUtils.isBlank)
@@ -764,7 +786,7 @@ private[spark] object SparkSubmitUtils {
   var printStream = SparkSubmit.printStream
 
   /**
-   * Represents a Maven Coordinate
+   * Represents a Maven Coordinate 定义一个maven坐标
    * @param groupId the groupId of the coordinate
    * @param artifactId the artifactId of the coordinate
    * @param version the version of the coordinate
@@ -778,12 +800,16 @@ private[spark] object SparkSubmitUtils {
  * in the format `groupId:artifactId:version` or `groupId/artifactId:version`.
  * @param coordinates Comma-delimited string of maven coordinates
  * @return Sequence of Maven coordinates
+ * 从参数中提取maven坐标集合
+ * 1.按照逗号拆分
+ * 2.将坐标中/转换成:
+ * 3.按照:拆分成3部分
  */
   def extractMavenCoordinates(coordinates: String): Seq[MavenCoordinate] = {
     coordinates.split(",").map { p =>
       val splits = p.replace("/", ":").split(":")
       require(splits.length == 3, s"Provided Maven Coordinates must be in the form " +
-        s"'groupId:artifactId:version'. The coordinate provided is: $p")
+        s"'groupId:artifactId:version'. The coordinate provided is: $p")//必须是3部分
       require(splits(0) != null && splits(0).trim.nonEmpty, s"The groupId cannot be null or " +
         s"be whitespace. The groupId provided is: ${splits(0)}")
       require(splits(1) != null && splits(1).trim.nonEmpty, s"The artifactId cannot be null or " +
@@ -794,7 +820,7 @@ private[spark] object SparkSubmitUtils {
     }
   }
 
-  /** Path of the local Maven cache. */
+  /** Path of the local Maven cache. 获取本地maven位置*/
   private[spark] def m2Path: File = {
     if (Utils.isTesting) {
       // test builds delete the maven cache, and this can cause flakiness

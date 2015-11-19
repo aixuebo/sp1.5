@@ -1459,8 +1459,8 @@ private[spark] object Utils extends Logging {
   def splitCommandString(s: String): Seq[String] = {
     val buf = new ArrayBuffer[String]
     var inWord = false
-    var inSingleQuote = false
-    var inDoubleQuote = false
+    var inSingleQuote = false//true表示发现单引号开始
+    var inDoubleQuote = false //true表示发现双引号开始
     val curWord = new StringBuilder
     def endWord() {
       buf += curWord.toString
@@ -1578,6 +1578,7 @@ private[spark] object Utils extends Logging {
   /**
    * Method executed for repeating a task for side effects.
    * Unlike a for comprehension, it permits JVM JIT optimization
+   * 多次循环执行f函数,f函数没有参数,没有返回值
    */
   def times(numIters: Int)(f: => Unit): Unit = {
     var i = 0
@@ -1589,11 +1590,13 @@ private[spark] object Utils extends Logging {
 
   /**
    * Timing method based on iterations that permit JVM JIT optimization.
-   * @param numIters number of iterations
+   * 定时任务,基于JVM允许的优化的方案
+   * @param numIters number of iterations 循环次数
    * @param f function to be executed. If prepare is not None, the running time of each call to f
-   *          must be an order of magnitude longer than one millisecond for accurate timing.
-   * @param prepare function to be executed before each call to f. Its running time doesn't count.
-   * @return the total time across all iterations (not couting preparation time)
+   *          must be an order of magnitude longer than one millisecond for accurate timing. 真正执行的函数f,f函数没有参数,没有返回值
+   * @param prepare function to be executed before each call to f. Its running time doesn't count. 一个函数,没有参数,没有返回值,作用是每次调用的时候,都先执行该函数
+   * @return the total time across all iterations (not couting preparation time) 返回总花费时间,单位是毫秒
+   * 多次循环执行f函数
    */
   def timeIt(numIters: Int)(f: => Unit, prepare: Option[() => Unit] = None): Long = {
     if (prepare.isEmpty) {
@@ -1601,10 +1604,10 @@ private[spark] object Utils extends Logging {
       times(numIters)(f)
       System.currentTimeMillis - start
     } else {
-      var i = 0
-      var sum = 0L
+      var i = 0 //循环次数
+      var sum = 0L //总花费时间
       while (i < numIters) {
-        prepare.get.apply()
+        prepare.get.apply()//每次调用先执行该函数
         val start = System.currentTimeMillis
         f
         sum += System.currentTimeMillis - start
@@ -1618,6 +1621,7 @@ private[spark] object Utils extends Logging {
    * Counts the number of elements of an iterator using a while loop rather than calling
    * [[scala.collection.Iterator#size]] because it uses a for loop, which is slightly slower
    * in the current version of Scala.
+   * 计算Iterator中元素个数
    */
   def getIteratorSize[T](iterator: Iterator[T]): Long = {
     var count = 0L
@@ -1688,6 +1692,7 @@ private[spark] object Utils extends Logging {
 
   /**
    * Return the absolute path of a file in the given directory.
+   * 将file路径转换成Path对象
    */
   def getFilePath(dir: File, fileName: String): Path = {
     assert(dir.isDirectory)
@@ -1697,6 +1702,7 @@ private[spark] object Utils extends Logging {
 
   /**
    * Whether the underlying operating system is Windows.
+   * true表示windows系统
    */
   val isWindows = SystemUtils.IS_OS_WINDOWS
 
@@ -1707,6 +1713,7 @@ private[spark] object Utils extends Logging {
 
   /**
    * Pattern for matching a Windows drive, which contains only a single alphabet character.
+   * 仅仅包含26个字母的,则返回true
    */
   val windowsDrive = "([a-zA-Z])".r
 
@@ -1836,7 +1843,10 @@ private[spark] object Utils extends Logging {
     new File(path).getAbsoluteFile().toURI()
   }
 
-  /** Resolve a comma-separated list of paths. */
+  /** Resolve a comma-separated list of paths. 
+   * 参数path使用逗号分割 
+   * 返回值是path的url形式用逗号分割的字符串
+   **/
   def resolveURIs(paths: String): String = {
     if (paths == null || paths.trim.isEmpty) {
       ""
@@ -1845,7 +1855,11 @@ private[spark] object Utils extends Logging {
     }
   }
 
-  /** Return all non-local paths from a comma-separated list of paths. */
+  /** Return all non-local paths from a comma-separated list of paths.
+   * 返回所有非本地文件路径的集合
+   * 参数path使用逗号分割
+   * 返回值是非local或者file开头的scheme路径集合  
+   **/
   def nonLocalPaths(paths: String, testWindows: Boolean = false): Array[String] = {
     val windows = isWindows || testWindows
     if (paths == null || paths.trim.isEmpty) {
@@ -1867,6 +1881,11 @@ private[spark] object Utils extends Logging {
    * use the common defaults file. This mutates state in the given SparkConf and
    * in this JVM's system properties if the config specified in the file is not
    * already set. Return the path of the properties file used.
+   * 加载filePath配置文件,默认加载寻找$SPARK_CONF_DIR/spark-defaults.conf文件 或者$SPARK_HOME/conf/spark-defaults.conf的路径
+   * 1.加载配置文件,并且仅仅要key是spark.开头的
+   * 2.如果key不在conf中,则添加
+   * 
+   * 返回加载配置文件的路径
    */
   def loadDefaultSparkProperties(conf: SparkConf, filePath: String = null): String = {
     val path = Option(filePath).getOrElse(getDefaultPropertiesFile())
@@ -1881,9 +1900,12 @@ private[spark] object Utils extends Logging {
     path
   }
 
-  /** Load properties present in the given file. */
+  /** Load properties present in the given file.
+   *  加载给定的配置文件,返回该配置文件对应的属性信息  Map[String, String]
+   **/
   def getPropertiesFromFile(filename: String): Map[String, String] = {
     val file = new File(filename)
+    //校验该文件必须是文件,并且存在
     require(file.exists(), s"Properties file $file does not exist")
     require(file.isFile(), s"Properties file $file is not a normal file")
 
@@ -1900,11 +1922,13 @@ private[spark] object Utils extends Logging {
     }
   }
 
-  /** Return the path of the default Spark properties file. */
+  /** Return the path of the default Spark properties file. 
+   *  寻找$SPARK_CONF_DIR/spark-defaults.conf文件 或者$SPARK_HOME/conf/spark-defaults.conf的路径
+   **/
   def getDefaultPropertiesFile(env: Map[String, String] = sys.env): String = {
-    env.get("SPARK_CONF_DIR")
-      .orElse(env.get("SPARK_HOME").map { t => s"$t${File.separator}conf" })
-      .map { t => new File(s"$t${File.separator}spark-defaults.conf")}
+    env.get("SPARK_CONF_DIR") //对应的配置文件所在文件夹
+      .orElse(env.get("SPARK_HOME").map { t => s"$t${File.separator}conf" }) //表示加载$SPARK_HOME/conf文件夹
+      .map { t => new File(s"$t${File.separator}spark-defaults.conf")}//加载path/spark-defaults.conf文件
       .filter(_.isFile)
       .map(_.getAbsolutePath)
       .orNull
@@ -1913,6 +1937,7 @@ private[spark] object Utils extends Logging {
   /**
    * Return a nice string representation of the exception. It will call "printStackTrace" to
    * recursively generate the stack trace including the exception and its causes.
+   * 打印异常的字符串形式的信息
    */
   def exceptionString(e: Throwable): String = {
     if (e == null) {
@@ -1939,11 +1964,14 @@ private[spark] object Utils extends Logging {
 
   /**
    * Convert all spark properties set in the given SparkConf to a sequence of java options.
+   * 
+   * @filterKey 是一个函数,参数String,转换成boolean,默认是任何参数都转换成true
+   * 过滤配置信息,返回函数为true的信息,并且将key=value转换成-Dkey=value形式
    */
   def sparkJavaOpts(conf: SparkConf, filterKey: (String => Boolean) = _ => true): Seq[String] = {
     conf.getAll
-      .filter { case (k, _) => filterKey(k) }
-      .map { case (k, v) => s"-D$k=$v" }
+      .filter { case (k, _) => filterKey(k) } //对key进行过滤,仅要返回true的数据
+      .map { case (k, v) => s"-D$k=$v" } //将key=value转换成-Dkey=value形式
   }
 
   /**
@@ -2083,6 +2111,7 @@ private[spark] object Utils extends Logging {
 
   /**
    * Return the current system LD_LIBRARY_PATH name
+   * 获取操作系统的环境变量默认key
    */
   def libraryPathEnvName: String = {
     if (isWindows) {
@@ -2098,8 +2127,12 @@ private[spark] object Utils extends Logging {
    * Return the prefix of a command that appends the given library paths to the
    * system-specific library path environment variable. On Unix, for instance,
    * this returns the string LD_LIBRARY_PATH="path1:path2:$LD_LIBRARY_PATH".
+   * 
+   * 例如:参数 var libraryPaths =  Seq(1, 1, 2)
+   * 返回内容PATH="1;1;2;%PATH%" & 
    */
   def libraryPathEnvPrefix(libraryPaths: Seq[String]): String = {
+    //获取操作系统已经存在的path信息
     val libraryPathScriptVar = if (isWindows) {
       s"%${libraryPathEnvName}%"
     } else {
@@ -2163,6 +2196,7 @@ private[spark] object Utils extends Logging {
   /**
    * Returns the current user name. This is the currently logged in user, unless that's been
    * overridden by the `SPARK_USER` environment variable.
+   * 获取当前用户
    */
   def getCurrentUserName(): String = {
     Option(System.getenv("SPARK_USER"))
@@ -2206,6 +2240,7 @@ private[spark] object Utils extends Logging {
 
   /**
    * Return whether the specified file is a parent directory of the child file.
+   * true表示parent是目录,并且是child的父目录,或者祖父目录
    */
   def isInDirectory(parent: File, child: File): Boolean = {
     if (child == null || parent == null) {
@@ -2235,6 +2270,8 @@ private[spark] object Utils extends Logging {
 
 /**
  * A utility class to redirect the child process's stdout or stderr.
+ * 重定向线程,将in输入流copy到out中,
+ * @propagateEof true表示在finnaly里面要对out输出流进行close方法关闭
  */
 private[spark] class RedirectThread(
     in: InputStream,
@@ -2246,7 +2283,7 @@ private[spark] class RedirectThread(
   setDaemon(true)
   override def run() {
     scala.util.control.Exception.ignoring(classOf[IOException]) {
-      // FIXME: We copy the stream on the level of bytes to avoid encoding problems.
+      // FIXME: We copy the stream on the level of bytes to avoid encoding problems.我们仅仅在这个级别传递字节流,避免编码问题
       Utils.tryWithSafeFinally {
         val buf = new Array[Byte](1024)
         var len = in.read(buf)
@@ -2268,25 +2305,31 @@ private[spark] class RedirectThread(
  * An [[OutputStream]] that will store the last 10 kilobytes (by default) written to it
  * in a circular buffer. The current contents of the buffer can be accessed using
  * the toString method.
+ * 循环的buffer缓冲区
  */
 private[spark] class CircularBuffer(sizeInBytes: Int = 10240) extends java.io.OutputStream {
-  var pos: Int = 0
+  var pos: Int = 0 //下一次写入数据在数组中的位置
   var buffer = new Array[Int](sizeInBytes)
 
+  //环形写入数据
   def write(i: Int): Unit = {
     buffer(pos) = i
     pos = (pos + 1) % buffer.length
   }
 
+  
+  //每次读取一行信息,打印环形数组中存储的数据信息
   override def toString: String = {
-    val (end, start) = buffer.splitAt(pos)
+    val (end, start) = buffer.splitAt(pos) //在pos位置拆分数组成两个数组,end数组是最后pos个元素组成的数组,例如pos=5,buffer=100,则end=5个元素,start=95个元素
     val input = new java.io.InputStream {
-      val iterator = (start ++ end).iterator
+      val iterator = (start ++ end).iterator //先读取后面的,在读取前面的,因为是环形缓冲区
 
+      //每次读取一个字节
       def read(): Int = if (iterator.hasNext) iterator.next() else -1
     }
     val reader = new BufferedReader(new InputStreamReader(input))
     val stringBuilder = new StringBuilder
+    //每次读取一行信息,打印环形数组中存储的数据信息
     var line = reader.readLine()
     while (line != null) {
       stringBuilder.append(line)
