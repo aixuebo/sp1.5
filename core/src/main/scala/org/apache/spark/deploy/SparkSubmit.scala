@@ -253,6 +253,7 @@ object SparkSubmit {
     // Because "yarn-cluster" and "yarn-client" encapsulate both the master
     // and deploy mode, we have some logic to infer the master and deploy mode
     // from each other if only one is specified, or exit early if they are at odds.
+    //yarn的时候,args.master一定是yarn-cluster或者yarn-client
     if (clusterManager == YARN) {
       if (args.master == "yarn-standalone") {
         printWarning("\"yarn-standalone\" is deprecated. Use \"yarn-cluster\" instead.")
@@ -288,6 +289,7 @@ object SparkSubmit {
 
     // Resolve maven dependencies if there are any and add classpath to jars. Add them to py-files
     // too for packages that include Python code
+    //不需要的jar包
     val exclusions: Seq[String] =
       if (!StringUtils.isBlank(args.packagesExclusions)) {
         args.packagesExclusions.split(",")
