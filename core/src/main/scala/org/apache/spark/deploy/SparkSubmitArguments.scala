@@ -62,7 +62,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
   var jars: String = null //返回值是path的url形式用逗号分割的字符串,可以是HDFS格式的
   var packages: String = null
   var repositories: String = null //maven资源集合
-  var ivyRepoPath: String = null
+  var ivyRepoPath: String = null //本地的maven仓库位置
   var packagesExclusions: String = null
   var verbose: Boolean = false //true表示要打印详细信息
   var isPython: Boolean = false
@@ -184,7 +184,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
       .orNull
     name = Option(name).orElse(sparkProperties.get("spark.app.name")).orNull
     jars = Option(jars).orElse(sparkProperties.get("spark.jars")).orNull
-    ivyRepoPath = sparkProperties.get("spark.jars.ivy").orNull
+    ivyRepoPath = sparkProperties.get("spark.jars.ivy").orNull //本地的maven仓库位置
     packages = Option(packages).orElse(sparkProperties.get("spark.jars.packages")).orNull
     packagesExclusions = Option(packagesExclusions)
       .orElse(sparkProperties.get("spark.jars.excludes")).orNull

@@ -33,9 +33,9 @@ import org.apache.spark.util.Utils
  */
 private[spark]
 class LocalSparkCluster(
-    numWorkers: Int,
-    coresPerWorker: Int,
-    memoryPerWorker: Int,
+    numWorkers: Int,//开启多少个work工作线程
+    coresPerWorker: Int,//每一个工作线程多少CPU
+    memoryPerWorker: Int,//每一个工作线程多少内存
     conf: SparkConf)
   extends Logging {
 

@@ -19,6 +19,7 @@ package org.apache.spark.deploy
 
 import java.net.URI
 
+//任务描述
 private[spark] class ApplicationDescription(
     val name: String,
     val maxCores: Option[Int],

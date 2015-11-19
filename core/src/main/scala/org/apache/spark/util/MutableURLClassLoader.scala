@@ -25,6 +25,7 @@ import scala.collection.JavaConversions._
 
 /**
  * URL class loader that exposes the `addURL` and `getURLs` methods in URLClassLoader.
+ * 可变的ClassLoader,暴露了添加url和获取url方法
  */
 private[spark] class MutableURLClassLoader(urls: Array[URL], parent: ClassLoader)
   extends URLClassLoader(urls, parent) {
@@ -42,6 +43,8 @@ private[spark] class MutableURLClassLoader(urls: Array[URL], parent: ClassLoader
 /**
  * A mutable class loader that gives preference to its own URLs over the parent class loader
  * when loading classes and resources.
+ * 子类先加载类,加载不到的再交给父类加载
+ * executor在加载类的时候是否优先使用用户自定义的JAR包，而不是Spark带有的JAR包。此功能可以用于解决Spark依赖包和用户依赖包之间的冲突。目前，该属性只是一项试验功能。
  */
 private[spark] class ChildFirstURLClassLoader(urls: Array[URL], parent: ClassLoader)
   extends MutableURLClassLoader(urls, null) {

@@ -27,19 +27,19 @@ import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.util.Utils
 
 private[spark] class ApplicationInfo(
-    val startTime: Long,
-    val id: String,
-    val desc: ApplicationDescription,
-    val submitDate: Date,
+    val startTime: Long,//任务开启时间
+    val id: String,//任务ID
+    val desc: ApplicationDescription,//任务描述
+    val submitDate: Date,//任务提交时间
     val driver: RpcEndpointRef,
-    defaultCores: Int)
+    defaultCores: Int)//默认CPU
   extends Serializable {
 
-  @transient var state: ApplicationState.Value = _
+  @transient var state: ApplicationState.Value = _//任务状态
   @transient var executors: mutable.HashMap[Int, ExecutorDesc] = _
   @transient var removedExecutors: ArrayBuffer[ExecutorDesc] = _
   @transient var coresGranted: Int = _
-  @transient var endTime: Long = _
+  @transient var endTime: Long = _//任务最重时间
   @transient var appSource: ApplicationSource = _
 
   // A cap on the number of executors this application can have at any given time.
@@ -101,22 +101,22 @@ private[spark] class ApplicationInfo(
 
   private[master] def coresLeft: Int = requestedCores - coresGranted
 
+  //尝试次数
   private var _retryCount = 0
-
   private[master] def retryCount = _retryCount
-
-  private[master] def incrementRetryCount() = {
+  private[master] def incrementRetryCount() = {//增加尝试次数
     _retryCount += 1
     _retryCount
   }
+  private[master] def resetRetryCount() = _retryCount = 0 //重置尝试次数
 
-  private[master] def resetRetryCount() = _retryCount = 0
-
+  //标记完成状态以及完成时间
   private[master] def markFinished(endState: ApplicationState.Value) {
     state = endState
     endTime = System.currentTimeMillis()
   }
 
+  //true表示已经完成
   private[master] def isFinished: Boolean = {
     state != ApplicationState.WAITING && state != ApplicationState.RUNNING
   }
@@ -127,6 +127,7 @@ private[spark] class ApplicationInfo(
    */
   private[deploy] def getExecutorLimit: Int = executorLimit
 
+  //任务花费时间
   def duration: Long = {
     if (endTime != -1) {
       endTime - startTime

@@ -220,10 +220,10 @@ object SparkSubmit {
   /**
    * Prepare the environment for submitting an application.
    * This returns a 4-tuple:
-   *   (1) the arguments for the child process,
-   *   (2) a list of classpath entries for the child,
-   *   (3) a map of system properties, and
-   *   (4) the main class for the child
+   *   (1) the arguments for the child process执行主类需要的参数
+   *   (2) a list of classpath entries for the child,需要的jar包集合,需要加入到classpath中
+   *   (3) a map of system properties, and 需要的系统参数
+   *   (4) the main class for the child 需要执行的主类,该类包含main方法
    * Exposed for testing.
    */
   private[deploy] def prepareSubmitEnvironment(args: SparkSubmitArguments)
@@ -296,9 +296,11 @@ object SparkSubmit {
       } else {
         Nil
       }
+    
+    //返回用逗号拆分的最终需要的maven坐标集合,包括的依赖的jar包       
     val resolvedMavenCoordinates = SparkSubmitUtils.resolveMavenCoordinates(args.packages,
       Option(args.repositories), Option(args.ivyRepoPath), exclusions = exclusions)
-    if (!StringUtils.isBlank(resolvedMavenCoordinates)) {
+    if (!StringUtils.isBlank(resolvedMavenCoordinates)) {//存在需要的jar包集合,该jar包都在maven里面
       args.jars = mergeFileLists(args.jars, resolvedMavenCoordinates)
       if (args.isPython) {
         args.pyFiles = mergeFileLists(args.pyFiles, resolvedMavenCoordinates)
@@ -613,15 +615,16 @@ object SparkSubmit {
    *
    * Note that this main class will not be the one provided by the user if we're
    * running cluster deploy mode or python applications.
+   * 运行主函数
    */
   private def runMain(
-      childArgs: Seq[String],
-      childClasspath: Seq[String],
-      sysProps: Map[String, String],
-      childMainClass: String,
+      childArgs: Seq[String],//主类需要的参数集合
+      childClasspath: Seq[String],//需要的jar文件集合
+      sysProps: Map[String, String],//需要的环境变量
+      childMainClass: String,//执行的主类
       verbose: Boolean): Unit = {
     // scalastyle:off println
-    if (verbose) {
+    if (verbose) {//详细打印日志
       printStream.println(s"Main class:\n$childMainClass")
       printStream.println(s"Arguments:\n${childArgs.mkString("\n")}")
       printStream.println(s"System properties:\n${sysProps.mkString("\n")}")
@@ -630,6 +633,7 @@ object SparkSubmit {
     }
     // scalastyle:on println
 
+    //executor在加载类的时候是否优先使用用户自定义的JAR包，而不是Spark带有的JAR包。此功能可以用于解决Spark依赖包和用户依赖包之间的冲突。目前，该属性只是一项试验功能。
     val loader =
       if (sysProps.getOrElse("spark.driver.userClassPathFirst", "false").toBoolean) {
         new ChildFirstURLClassLoader(new Array[URL](0),
@@ -640,10 +644,12 @@ object SparkSubmit {
       }
     Thread.currentThread.setContextClassLoader(loader)
 
+    //加载本地的jar文件到classpath中
     for (jar <- childClasspath) {
       addJarToClasspath(jar, loader)
     }
 
+    //将属性添加到系统环境中
     for ((key, value) <- sysProps) {
       System.setProperty(key, value)
     }
@@ -668,7 +674,8 @@ object SparkSubmit {
     if (classOf[scala.App].isAssignableFrom(mainClass)) {
       printWarning("Subclasses of scala.App may not work correctly. Use a main() method instead.")
     }
-
+    
+    //调用class的main方法,参数是字符串Array类型的class,并且main方法不允许是静态的方法
     val mainMethod = mainClass.getMethod("main", new Array[String](0).getClass)
     if (!Modifier.isStatic(mainMethod.getModifiers)) {
       throw new IllegalStateException("The main method in the given main class must be static")
@@ -683,6 +690,7 @@ object SparkSubmit {
         e
     }
 
+    //执行main方法,传递参数集合
     try {
       mainMethod.invoke(null, childArgs.toArray)
     } catch {
@@ -802,7 +810,7 @@ private[spark] object SparkSubmitUtils {
  * in the format `groupId:artifactId:version` or `groupId/artifactId:version`.
  * @param coordinates Comma-delimited string of maven coordinates
  * @return Sequence of Maven coordinates
- * 从参数中提取maven坐标集合
+ * 从参数中提取maven坐标集合Seq[MavenCoordinate]
  * 1.按照逗号拆分
  * 2.将坐标中/转换成:
  * 3.按照:拆分成3部分
@@ -834,9 +842,10 @@ private[spark] object SparkSubmitUtils {
 
   /**
    * Extracts maven coordinates from a comma-delimited string
-   * @param remoteRepos Comma-delimited string of remote repositories
+   * @param remoteRepos Comma-delimited string of remote repositories,maven资源库集合,用逗号拆分
    * @param ivySettings The Ivy settings for this session
    * @return A ChainResolver used by Ivy to search for and resolve dependencies.
+   * 连接资源库资源
    */
   def createRepoResolvers(remoteRepos: Option[String], ivySettings: IvySettings): ChainResolver = {
     // We need a chain resolver if we want to check multiple repositories
@@ -925,12 +934,14 @@ private[spark] object SparkSubmitUtils {
     }
   }
 
-  /** Add exclusion rules for dependencies already included in the spark-assembly */
+  /** Add exclusion rules for dependencies already included in the spark-assembly 
+   * 添加一个过滤规则,将spark本身装在的jar文件以及依赖文件过滤掉,因为spark环境里面已经存在了,不需要额外的jar包加载了
+   **/
   def addExclusionRules(
       ivySettings: IvySettings,
       ivyConfName: String,
       md: DefaultModuleDescriptor): Unit = {
-    // Add scala exclusion rule
+    // Add scala exclusion rule 过滤scala相关的类库
     md.addExcludeRule(createExclusion("*:scala-library:*", ivySettings, ivyConfName))
 
     // We need to specify each component explicitly, otherwise we miss spark-streaming-kafka and
@@ -939,6 +950,7 @@ private[spark] object SparkSubmitUtils {
     val components = Seq("bagel_", "catalyst_", "core_", "graphx_", "hive_", "mllib_", "repl_",
       "sql_", "streaming_", "yarn_", "network-common_", "network-shuffle_", "network-yarn_")
 
+      //过滤spark自身的jar以及相关依赖
     components.foreach { comp =>
       md.addExcludeRule(createExclusion(s"org.apache.spark:spark-$comp*:*", ivySettings,
         ivyConfName))
@@ -951,12 +963,14 @@ private[spark] object SparkSubmitUtils {
 
   /**
    * Resolves any dependencies that were supplied through maven coordinates
-   * @param coordinates Comma-delimited string of maven coordinates
-   * @param remoteRepos Comma-delimited string of remote repositories other than maven central
-   * @param ivyPath The path to the local ivy repository
-   * @param exclusions Exclusions to apply when resolving transitive dependencies
+   * 分解任何maven的依赖
+   * @param coordinates Comma-delimited string of maven coordinates用逗号分隔需要的maven坐标集合
+   * @param remoteRepos Comma-delimited string of remote repositories other than maven central 用逗号分隔的maven资源中心
+   * @param ivyPath The path to the local ivy repository 本地的maven仓库位置
+   * @param exclusions Exclusions to apply when resolving transitive dependencies 当解析依赖关系的时候,要过滤的maven坐标集合
    * @return The comma-delimited path to the jars of the given maven artifacts including their
    *         transitive dependencies
+   *  返回用逗号拆分的最终需要的maven坐标集合,包括的依赖的jar包
    */
   def resolveMavenCoordinates(
       coordinates: String,
@@ -964,21 +978,21 @@ private[spark] object SparkSubmitUtils {
       ivyPath: Option[String],
       exclusions: Seq[String] = Nil,
       isTest: Boolean = false): String = {
-    if (coordinates == null || coordinates.trim.isEmpty) {
+    if (coordinates == null || coordinates.trim.isEmpty) {//不需要任何maven依赖的jar包,因此返回空
       ""
     } else {
       val sysOut = System.out
       try {
         // To prevent ivy from logging to system out
         System.setOut(printStream)
-        val artifacts = extractMavenCoordinates(coordinates)
+        val artifacts = extractMavenCoordinates(coordinates) //从参数中提取maven坐标集合Seq[MavenCoordinate],该集合是所需要的jar包集合
         // Default configuration name for ivy
         val ivyConfName = "default"
         // set ivy settings for location of cache
         val ivySettings: IvySettings = new IvySettings
         // Directories for caching downloads through ivy and storing the jars when maven coordinates
         // are supplied to spark-submit
-        val alternateIvyCache = ivyPath.getOrElse("")
+        val alternateIvyCache = ivyPath.getOrElse("")//本地maven资源库
         val packagesDirectory: File =
           if (alternateIvyCache == null || alternateIvyCache.trim.isEmpty) {
             new File(ivySettings.getDefaultIvyUserDir, "jars")
@@ -994,7 +1008,7 @@ private[spark] object SparkSubmitUtils {
         // scalastyle:on println
         // create a pattern matcher
         ivySettings.addMatcher(new GlobPatternMatcher)
-        // create the dependency resolvers
+        // create the dependency resolvers 加载资源
         val repoResolver = createRepoResolvers(remoteRepos, ivySettings)
         ivySettings.addResolver(repoResolver)
         ivySettings.setDefaultResolver(repoResolver.getName)
@@ -1050,6 +1064,7 @@ private[spark] object SparkSubmitUtils {
     }
   }
 
+  //创建一个maven的依赖相关jar路径,该路径会被过滤掉
   private[deploy] def createExclusion(
       coords: String,
       ivySettings: IvySettings,

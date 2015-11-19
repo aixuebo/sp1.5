@@ -25,6 +25,7 @@ import org.apache.zookeeper.KeeperException
 
 import org.apache.spark.{Logging, SparkConf}
 
+//spark的zookeeper工具类
 private[spark] object SparkCuratorUtil extends Logging {
 
   private val ZK_CONNECTION_TIMEOUT_MILLIS = 15000
@@ -32,6 +33,7 @@ private[spark] object SparkCuratorUtil extends Logging {
   private val RETRY_WAIT_MILLIS = 5000
   private val MAX_RECONNECT_ATTEMPTS = 3
 
+  //创建zookeeper
   def newClient(
       conf: SparkConf,
       zkUrlConf: String = "spark.deploy.zookeeper.url"): CuratorFramework = {
@@ -43,6 +45,7 @@ private[spark] object SparkCuratorUtil extends Logging {
     zk
   }
 
+  //创建path目录
   def mkdir(zk: CuratorFramework, path: String) {
     if (zk.checkExists().forPath(path) == null) {
       try {
@@ -55,6 +58,7 @@ private[spark] object SparkCuratorUtil extends Logging {
     }
   }
 
+  //递归删除path以及path子目录
   def deleteRecursive(zk: CuratorFramework, path: String) {
     if (zk.checkExists().forPath(path) != null) {
       for (child <- zk.getChildren.forPath(path)) {

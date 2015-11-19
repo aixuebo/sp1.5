@@ -36,6 +36,7 @@ import org.apache.spark.util.Utils
  * off or killed.
  *
  * Optionally requires SASL authentication in order to read. See [[SecurityManager]].
+ * 外部的shuffle服务
  */
 private[deploy]
 class ExternalShuffleService(sparkConf: SparkConf, securityManager: SecurityManager)
