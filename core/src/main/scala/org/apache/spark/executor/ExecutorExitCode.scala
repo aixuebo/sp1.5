@@ -30,7 +30,7 @@ import org.apache.spark.util.SparkExitCode._
 private[spark]
 object ExecutorExitCode {
 
-  /** DiskStore failed to create a local temporary directory after many attempts. */
+  /** DiskStore failed to create a local temporary directory after many attempts. 创建目录失败*/
   val DISK_STORE_FAILED_TO_CREATE_DIR = 53
 
   /** ExternalBlockStore failed to initialize after many attempts. */

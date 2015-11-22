@@ -27,19 +27,25 @@ import org.apache.spark.TaskContext
 import org.apache.spark.util.{SizeEstimator, Utils}
 import org.apache.spark.util.collection.SizeTrackingVector
 
+//每一个数据块对应一个内存实体
+//存储的内容包括:具体对象,内容大小,是否使用反序列化
 private case class MemoryEntry(value: Any, size: Long, deserialized: Boolean)
 
 /**
  * Stores blocks in memory, either as Arrays of deserialized Java objects or as
  * serialized ByteBuffers.
+ * 将数据块信息存储到内存里
+ * 
+ * @maxMemory 表示内存的最大使用量
  */
 private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
   extends BlockStore(blockManager) {
 
   private val conf = blockManager.conf
+  //每一个数据块对应一个内存实体
   private val entries = new LinkedHashMap[BlockId, MemoryEntry](32, 0.75f, true)
 
-  @volatile private var currentMemory = 0L
+  @volatile private var currentMemory = 0L //当前已经使用的内存量
 
   // Ensure only one thread is putting, and if necessary, dropping blocks at any given time
   private val accountingLock = new Object
@@ -78,8 +84,9 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
   logInfo("MemoryStore started with capacity %s".format(Utils.bytesToString(maxMemory)))
 
   /** Free memory not occupied by existing blocks. Note that this does not include unroll memory. */
-  def freeMemory: Long = maxMemory - currentMemory
+  def freeMemory: Long = maxMemory - currentMemory //剩余内存量
 
+  //获取数据块对应的字节大小
   override def getSize(blockId: BlockId): Long = {
     entries.synchronized {
       entries.get(blockId).size
@@ -194,6 +201,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
     }
   }
 
+  //获取给定数据块的内容
   override def getValues(blockId: BlockId): Option[Iterator[Any]] = {
     val entry = entries.synchronized {
       entries.get(blockId)
@@ -208,6 +216,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
     }
   }
 
+  //删除一个数据块,并且同步删除内存
   override def remove(blockId: BlockId): Boolean = {
     entries.synchronized {
       val entry = entries.remove(blockId)
@@ -221,6 +230,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
     }
   }
 
+  //清除所有内存数据
   override def clear() {
     entries.synchronized {
       entries.clear()
@@ -231,7 +241,8 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
 
   /**
    * Unroll the given block in memory safely.
-   *
+   * 在内存里面展开给定的数据块
+   * 因为数据块存储的时候,有可能存储的是序列化的内容,因此需要反序列化在内存里面,因此需要占用一定内存空间
    * The safety of this operation refers to avoiding potential OOM exceptions caused by
    * unrolling the entirety of the block in memory at once. This is achieved by periodically
    * checking whether the memory restrictions for unrolling blocks are still satisfied,
@@ -328,6 +339,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
 
   /**
    * Return the RDD ID that a given block ID is from, or None if it is not an RDD block.
+   * 获取数据块的rddId
    */
   private def getRddId(blockId: BlockId): Option[Int] = {
     blockId.asRDDId.map(_.rddId)
@@ -413,6 +425,9 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
    * blocks. Otherwise, the freed space may fill up before the caller puts in their new value.
    *
    * Return whether there is enough free space, along with the blocks dropped in the process.
+   * 确保有足够空间
+   * @space 表示要添加的数据块所需要的字节大小
+   * @blockIdToAdd 表示要添加的数据块
    */
   private def ensureFreeSpace(
       blockIdToAdd: BlockId,
@@ -421,6 +436,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
 
     val droppedBlocks = new ArrayBuffer[(BlockId, BlockStatus)]
 
+    //大过了内存限制,要抛异常
     if (space > maxMemory) {
       logInfo(s"Will not store $blockIdToAdd as it is larger than our memory limit")
       return ResultWithDroppedBlocks(success = false, droppedBlocks)
@@ -479,6 +495,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
     ResultWithDroppedBlocks(success = true, droppedBlocks)
   }
 
+  //是否包含该数据块
   override def contains(blockId: BlockId): Boolean = {
     entries.synchronized { entries.containsKey(blockId) }
   }
@@ -593,6 +610,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
   }
 }
 
+//结果
 private[spark] case class ResultWithDroppedBlocks(
-    success: Boolean,
-    droppedBlocks: Seq[(BlockId, BlockStatus)])
+    success: Boolean,//是否成功
+    droppedBlocks: Seq[(BlockId, BlockStatus)])//丢弃了哪些数据块

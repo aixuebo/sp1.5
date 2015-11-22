@@ -37,11 +37,13 @@ private[spark] class DiskBlockManager(blockManager: BlockManager, conf: SparkCon
   extends Logging {
 
   private[spark]
-  val subDirsPerLocalDir = blockManager.conf.getInt("spark.diskStore.subDirectories", 64)
+  val subDirsPerLocalDir = blockManager.conf.getInt("spark.diskStore.subDirectories", 64) //每一个目录可以存储多少个子目录
 
   /* Create one local directory for each path mentioned in spark.local.dir; then, inside this
    * directory, create multiple subdirectories that we will hash files into, in order to avoid
-   * having really large inodes at the top level. */
+   * having really large inodes at the top level. 
+   *path/blockmgr目录数组 
+   **/
   private[spark] val localDirs: Array[File] = createLocalDirs(conf)
   if (localDirs.isEmpty) {
     logError("Failed to create any local dir.")
@@ -49,26 +51,29 @@ private[spark] class DiskBlockManager(blockManager: BlockManager, conf: SparkCon
   }
   // The content of subDirs is immutable but the content of subDirs(i) is mutable. And the content
   // of subDirs(i) is protected by the lock of subDirs(i)
+  //每一个root目录下有64个子目录,Array[Array[File]] 第一级数组表示根磁盘,第二级目录是真正存储目录
   private val subDirs = Array.fill(localDirs.length)(new Array[File](subDirsPerLocalDir))
 
+  //添加钩子
   private val shutdownHook = addShutdownHook()
 
   /** Looks up a file by hashing it into one of our local subdirectories. */
   // This method should be kept in sync with
   // org.apache.spark.network.shuffle.ExternalShuffleBlockResolver#getFile().
+  //获取文件name应该在哪个磁盘上存储,返回path/filename
   def getFile(filename: String): File = {
     // Figure out which local directory it hashes to, and which subdirectory in that
-    val hash = Utils.nonNegativeHash(filename)
-    val dirId = hash % localDirs.length
-    val subDirId = (hash / localDirs.length) % subDirsPerLocalDir
+    val hash = Utils.nonNegativeHash(filename) //根据name获取hash
+    val dirId = hash % localDirs.length //根据hash可以获取该name存储在哪个磁盘上
+    val subDirId = (hash / localDirs.length) % subDirsPerLocalDir //存储在哪个目录下
 
-    // Create the subdirectory if it doesn't already exist
+    // Create the subdirectory if it doesn't already exist 获取或者创建子目录
     val subDir = subDirs(dirId).synchronized {
       val old = subDirs(dirId)(subDirId)
       if (old != null) {
         old
       } else {
-        val newDir = new File(localDirs(dirId), "%02x".format(subDirId))
+        val newDir = new File(localDirs(dirId), "%02x".format(subDirId)) //%02x 表示将整数转换成16进制数
         if (!newDir.exists() && !newDir.mkdir()) {
           throw new IOException(s"Failed to create local dir in $newDir.")
         }
@@ -82,7 +87,7 @@ private[spark] class DiskBlockManager(blockManager: BlockManager, conf: SparkCon
 
   def getFile(blockId: BlockId): File = getFile(blockId.name)
 
-  /** Check if disk block manager has a block. */
+  /** Check if disk block manager has a block.判断文件是否真的存在*/
   def containsBlock(blockId: BlockId): Boolean = {
     getFile(blockId.name).exists()
   }
@@ -106,7 +111,9 @@ private[spark] class DiskBlockManager(blockManager: BlockManager, conf: SparkCon
     getAllFiles().map(f => BlockId(f.getName))
   }
 
-  /** Produces a unique block id and File suitable for storing local intermediate results. */
+  /** Produces a unique block id and File suitable for storing local intermediate results.
+   *  创建临时数据块
+   *   */
   def createTempLocalBlock(): (TempLocalBlockId, File) = {
     var blockId = new TempLocalBlockId(UUID.randomUUID())
     while (getFile(blockId).exists()) {
@@ -115,7 +122,9 @@ private[spark] class DiskBlockManager(blockManager: BlockManager, conf: SparkCon
     (blockId, getFile(blockId))
   }
 
-  /** Produces a unique block id and File suitable for storing shuffled intermediate results. */
+  /** Produces a unique block id and File suitable for storing shuffled intermediate results.
+   *  创建临时数据块
+   *   */
   def createTempShuffleBlock(): (TempShuffleBlockId, File) = {
     var blockId = new TempShuffleBlockId(UUID.randomUUID())
     while (getFile(blockId).exists()) {
@@ -128,6 +137,7 @@ private[spark] class DiskBlockManager(blockManager: BlockManager, conf: SparkCon
    * Create local directories for storing block data. These directories are
    * located inside configured local directories and won't
    * be deleted on JVM exit when using the external shuffle service.
+   * 创建path/blockmgr目录数组,可以多个磁盘下创建该目录
    */
   private def createLocalDirs(conf: SparkConf): Array[File] = {
     Utils.getConfiguredLocalDirs(conf).flatMap { rootDir =>
@@ -143,6 +153,7 @@ private[spark] class DiskBlockManager(blockManager: BlockManager, conf: SparkCon
     }
   }
 
+  //设置钩子
   private def addShutdownHook(): AnyRef = {
     ShutdownHookManager.addShutdownHook(ShutdownHookManager.TEMP_DIR_SHUTDOWN_PRIORITY + 1) { () =>
       logInfo("Shutdown hook called")

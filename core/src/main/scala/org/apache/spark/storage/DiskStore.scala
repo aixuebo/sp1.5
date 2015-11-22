@@ -27,16 +27,20 @@ import org.apache.spark.util.Utils
 
 /**
  * Stores BlockManager blocks on disk.
+ * 将数据块信息存储到磁盘上
  */
 private[spark] class DiskStore(blockManager: BlockManager, diskManager: DiskBlockManager)
   extends BlockStore(blockManager) with Logging {
 
+  //小文件则直接读取到内存中
   val minMemoryMapBytes = blockManager.conf.getSizeAsBytes("spark.storage.memoryMapThreshold", "2m")
 
+  //获取文件大小
   override def getSize(blockId: BlockId): Long = {
     diskManager.getFile(blockId.name).length
   }
 
+  //将_bytes内容写入BlockId对应的文件中
   override def putBytes(blockId: BlockId, _bytes: ByteBuffer, level: StorageLevel): PutResult = {
     // So that we do not modify the input offsets !
     // duplicate does not copy buffer, so inexpensive
@@ -66,6 +70,7 @@ private[spark] class DiskStore(blockManager: BlockManager, diskManager: DiskBloc
     putIterator(blockId, values.toIterator, level, returnValues)
   }
 
+  //将一组数据写入到BlockId对应的文件中
   override def putIterator(
       blockId: BlockId,
       values: Iterator[Any],
@@ -106,10 +111,11 @@ private[spark] class DiskStore(blockManager: BlockManager, diskManager: DiskBloc
     }
   }
 
+  //返回file中指定的一段内容
   private def getBytes(file: File, offset: Long, length: Long): Option[ByteBuffer] = {
     val channel = new RandomAccessFile(file, "r").getChannel
     Utils.tryWithSafeFinally {
-      // For small files, directly read rather than memory map
+      // For small files, directly read rather than memory map 如果是小文件,直接读取到内存中
       if (length < minMemoryMapBytes) {
         val buf = ByteBuffer.allocate(length.toInt)
         channel.position(offset)
@@ -121,7 +127,7 @@ private[spark] class DiskStore(blockManager: BlockManager, diskManager: DiskBloc
         }
         buf.flip()
         Some(buf)
-      } else {
+      } else {//readOnly的方式内存映射该文件的一段内容
         Some(channel.map(MapMode.READ_ONLY, offset, length))
       }
     } {
@@ -129,15 +135,18 @@ private[spark] class DiskStore(blockManager: BlockManager, diskManager: DiskBloc
     }
   }
 
+  //读取blockId对应的整个文件
   override def getBytes(blockId: BlockId): Option[ByteBuffer] = {
     val file = diskManager.getFile(blockId.name)
     getBytes(file, 0, file.length)
   }
 
+  //读取文件的一个小片段
   def getBytes(segment: FileSegment): Option[ByteBuffer] = {
     getBytes(segment.file, segment.offset, segment.length)
   }
 
+  //将blockId对应的文件内容bytes,进行反序列化成一组数据
   override def getValues(blockId: BlockId): Option[Iterator[Any]] = {
     getBytes(blockId).map(buffer => blockManager.dataDeserialize(blockId, buffer))
   }
@@ -145,6 +154,7 @@ private[spark] class DiskStore(blockManager: BlockManager, diskManager: DiskBloc
   /**
    * A version of getValues that allows a custom serializer. This is used as part of the
    * shuffle short-circuit code.
+   * 将blockId对应的文件内容bytes,进行反序列化成一组数据,使用自定义的序列化工具
    */
   def getValues(blockId: BlockId, serializer: Serializer): Option[Iterator[Any]] = {
     // TODO: Should bypass getBytes and use a stream based implementation, so that
@@ -152,6 +162,7 @@ private[spark] class DiskStore(blockManager: BlockManager, diskManager: DiskBloc
     getBytes(blockId).map(bytes => blockManager.dataDeserialize(blockId, bytes, serializer))
   }
 
+  //删除BlockId文件
   override def remove(blockId: BlockId): Boolean = {
     val file = diskManager.getFile(blockId.name)
     // If consolidation mode is used With HashShuffleMananger, the physical filename for the block
@@ -164,6 +175,7 @@ private[spark] class DiskStore(blockManager: BlockManager, diskManager: DiskBloc
     }
   }
 
+  //判断BlockId数据块是否存在
   override def contains(blockId: BlockId): Boolean = {
     val file = diskManager.getFile(blockId.name)
     file.exists()

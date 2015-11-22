@@ -1180,7 +1180,9 @@ private[spark] class BlockManager(
     if (shouldCompress(blockId)) compressionCodec.compressedInputStream(s) else s
   }
 
-  /** Serializes into a stream. */
+  /** Serializes into a stream.
+   *  序列化数据到输出流中,该输出流是blockId的输出流
+   *   */
   def dataSerializeStream(
       blockId: BlockId,
       outputStream: OutputStream,
@@ -1204,6 +1206,7 @@ private[spark] class BlockManager(
   /**
    * Deserializes a ByteBuffer into an iterator of values and disposes of it when the end of
    * the iterator is reached.
+   * 将blockId对应的文件内容bytes,进行反序列化成一组数据
    */
   def dataDeserialize(
       blockId: BlockId,
@@ -1216,6 +1219,7 @@ private[spark] class BlockManager(
   /**
    * Deserializes a InputStream into an iterator of values and disposes of it when the end of
    * the iterator is reached.
+   * 将blockId对应的文件内容bytes,进行反序列化成一组数据
    */
   def dataDeserializeStream(
       blockId: BlockId,

@@ -27,6 +27,6 @@ import java.nio.ByteBuffer
  *   (3) A list of blocks dropped as a result of this put. This is always empty for DiskStore.
  */
 private[spark] case class PutResult(
-    size: Long,
-    data: Either[Iterator[_], ByteBuffer],
+    size: Long,//文件大小
+    data: Either[Iterator[_], ByteBuffer],//文件的具体内容
     droppedBlocks: Seq[(BlockId, BlockStatus)] = Seq.empty)
