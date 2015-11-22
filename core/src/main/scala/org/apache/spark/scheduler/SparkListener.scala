@@ -46,6 +46,7 @@ case class SparkListenerTaskStart(stageId: Int, stageAttemptId: Int, taskInfo: T
 @DeveloperApi
 case class SparkListenerTaskGettingResult(taskInfo: TaskInfo) extends SparkListenerEvent
 
+//每一个任务完成后的信息
 @DeveloperApi
 case class SparkListenerTaskEnd(
     stageId: Int,
@@ -56,6 +57,7 @@ case class SparkListenerTaskEnd(
     taskMetrics: TaskMetrics)
   extends SparkListenerEvent
 
+  //每一个job开始的信息,这个时候已经为该job分配了阶段
 @DeveloperApi
 case class SparkListenerJobStart(
     jobId: Int,
@@ -68,6 +70,7 @@ case class SparkListenerJobStart(
   val stageIds: Seq[Int] = stageInfos.map(_.stageId)
 }
 
+//job任务完成时候调用
 @DeveloperApi
 case class SparkListenerJobEnd(
     jobId: Int,

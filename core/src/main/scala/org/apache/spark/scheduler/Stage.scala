@@ -47,10 +47,10 @@ import org.apache.spark.util.CallSite
  *
  */
 private[spark] abstract class Stage(
-    val id: Int,
+    val id: Int,//阶段ID
     val rdd: RDD[_],
-    val numTasks: Int,
-    val parents: List[Stage],
+    val numTasks: Int,//该阶段的任务数量
+    val parents: List[Stage],//该阶段的父阶段集合
     val firstJobId: Int,
     val callSite: CallSite)
   extends Logging {

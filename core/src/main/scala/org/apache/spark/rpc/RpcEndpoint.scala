@@ -22,6 +22,7 @@ import org.apache.spark.SparkException
 /**
  * A factory class to create the [[RpcEnv]]. It must have an empty constructor so that it can be
  * created using Reflection.
+ * 可以创建RPC环境的工场,工场必须是有一个空的构造函数,因为他要被用于反射机制
  */
 private[spark] trait RpcEnvFactory {
 
@@ -56,6 +57,7 @@ private[spark] trait ThreadSafeRpcEndpoint extends RpcEndpoint
  *
  * If any error is thrown from one of [[RpcEndpoint]] methods except `onError`, `onError` will be
  * invoked with the cause. If `onError` throws an error, [[RpcEnv]] will ignore it.
+ * 代表一个客户端
  */
 private[spark] trait RpcEndpoint {
 

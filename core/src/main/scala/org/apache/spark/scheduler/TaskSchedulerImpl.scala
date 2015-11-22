@@ -50,6 +50,7 @@ import org.apache.spark.storage.BlockManagerId
  * SchedulerBackends synchronize on themselves when they want to send events here, and then
  * acquire a lock on us, so we need to make sure that we don't try to lock the backend while
  * we are holding a lock on ourselves.
+ * 每一个应用Applitcation对应一个该对象,该对象存储了该应用在不同阶段的任务调度情况
  */
 private[spark] class TaskSchedulerImpl(
     val sc: SparkContext,
@@ -75,27 +76,28 @@ private[spark] class TaskSchedulerImpl(
 
   // TaskSetManagers are not thread safe, so any access to one should be synchronized
   // on this class.
+  //ket是阶段ID,StageId value的key是该阶段的Attempt尝试次数,value是该尝试次数对应的任务集合
   private val taskSetsByStageIdAndAttempt = new HashMap[Int, HashMap[Int, TaskSetManager]]
 
   private[scheduler] val taskIdToTaskSetManager = new HashMap[Long, TaskSetManager]
   val taskIdToExecutorId = new HashMap[Long, String]
 
-  @volatile private var hasReceivedTask = false
-  @volatile private var hasLaunchedTask = false
+  @volatile private var hasReceivedTask = false //true表示已经接收了任务
+  @volatile private var hasLaunchedTask = false //true表示已经启动了任务
   private val starvationTimer = new Timer(true)
 
-  // Incrementing task IDs
+  // Incrementing task IDs 自增长的taskId
   val nextTaskId = new AtomicLong(0)
 
-  // Which executor IDs we have executors on
+  // Which executor IDs we have executors on 已经执行的所有executorId集合
   val activeExecutorIds = new HashSet[String]
-
   // The set of executors we have on each host; this is used to compute hostsAlive, which
   // in turn is used to decide when we can attain data locality on a given host
+  //key是host,value是该host上运行的哪些executorId集合
   protected val executorsByHost = new HashMap[String, HashSet[String]]
 
   protected val hostsByRack = new HashMap[String, HashSet[String]]
-
+//每一个executorId对应在哪台节点上运行,key是executorId,value是host节点
   protected val executorIdToHost = new HashMap[String, String]
 
   // Listener object to pass upcalls into
@@ -104,10 +106,11 @@ private[spark] class TaskSchedulerImpl(
   var backend: SchedulerBackend = null
 
   val mapOutputTracker = SparkEnv.get.mapOutputTracker
-
-  var schedulableBuilder: SchedulableBuilder = null
-  var rootPool: Pool = null
-  // default scheduler is FIFO
+  
+  var schedulableBuilder: SchedulableBuilder = null //调度器
+  var rootPool: Pool = null //rootPool调度池
+  
+  // default scheduler is FIFO 调度模式
   private val schedulingModeConf = conf.get("spark.scheduler.mode", "FIFO")
   val schedulingMode: SchedulingMode = try {
     SchedulingMode.withName(schedulingModeConf.toUpperCase)
@@ -157,15 +160,21 @@ private[spark] class TaskSchedulerImpl(
     waitBackendReady()
   }
 
+  //某个尝试阶段提交了一个任务集合
   override def submitTasks(taskSet: TaskSet) {
-    val tasks = taskSet.tasks
+    val tasks = taskSet.tasks //真正的任务集合
+    //打印日志,说明哪个尝试阶段提交了多少个任务
     logInfo("Adding task set " + taskSet.id + " with " + tasks.length + " tasks")
     this.synchronized {
       val manager = createTaskSetManager(taskSet, maxTaskFailures)
+      
+      //设置该尝试的阶段与对应的任务集合映射
       val stage = taskSet.stageId
       val stageTaskSets =
         taskSetsByStageIdAndAttempt.getOrElseUpdate(stage, new HashMap[Int, TaskSetManager])
       stageTaskSets(taskSet.stageAttemptId) = manager
+      
+      //true表示任务集合有冲突
       val conflictingTaskSet = stageTaskSets.exists { case (_, ts) =>
         ts.taskSet != taskSet && !ts.isZombie
       }
@@ -173,8 +182,11 @@ private[spark] class TaskSchedulerImpl(
         throw new IllegalStateException(s"more than one active taskSet for stage $stage:" +
           s" ${stageTaskSets.toSeq.map{_._2.taskSet.id}.mkString(",")}")
       }
+      
+      //调度任务添加该taskSet任务集合
       schedulableBuilder.addTaskSetManager(manager, manager.taskSet.properties)
 
+      //定时任务,汇报没有资源,资源不满足,直到资源满足为止
       if (!isLocal && !hasReceivedTask) {
         starvationTimer.scheduleAtFixedRate(new TimerTask() {
           override def run() {
@@ -200,16 +212,20 @@ private[spark] class TaskSchedulerImpl(
     new TaskSetManager(this, taskSet, maxTaskFailures)
   }
 
+  //取消一个阶段的所有尝试阶段的所有任务
   override def cancelTasks(stageId: Int, interruptThread: Boolean): Unit = synchronized {
     logInfo("Cancelling stage " + stageId)
+    //获取一个阶段的所有尝试阶段,然后循环每一个TaskSetManager,进行取消任务操作
     taskSetsByStageIdAndAttempt.get(stageId).foreach { attempts =>
       attempts.foreach { case (_, tsm) =>
         // There are two possible cases here:
         // 1. The task set manager has been created and some tasks have been scheduled.
         //    In this case, send a kill signal to the executors to kill the task and then abort
         //    the stage.
+        //如果该任务集合已经被创建,并且一些任务已经被调度了,则发送kill信号给executor,然后再使该尝试阶段流产
         // 2. The task set manager has been created but no tasks has been scheduled. In this case,
         //    simply abort the stage.
+        //如果该任务集合已经被创建,但是还没有任务被调度.则仅仅使该尝试阶段流产即可
         tsm.runningTasksSet.foreach { tid =>
           val execId = taskIdToExecutorId(tid)
           backend.killTask(tid, execId, interruptThread)
@@ -224,6 +240,7 @@ private[spark] class TaskSchedulerImpl(
    * Called to indicate that all task attempts (including speculated tasks) associated with the
    * given TaskSetManager have completed, so state associated with the TaskSetManager should be
    * cleaned up.
+   * 该阶段的某一个尝试阶段完成了,则移除内存映射,以及移除调度
    */
   def taskSetFinished(manager: TaskSetManager): Unit = synchronized {
     taskSetsByStageIdAndAttempt.get(manager.taskSet.stageId).foreach { taskSetsForStage =>
@@ -481,7 +498,9 @@ private[spark] class TaskSchedulerImpl(
     }
   }
 
-  /** Remove an executor from all our data structures and mark it as lost */
+  /** Remove an executor from all our data structures and mark it as lost 
+   * 删除一个执行的进程映射 
+   **/
   private def removeExecutor(executorId: String) {
     activeExecutorIds -= executorId
     val host = executorIdToHost(executorId)
@@ -523,6 +542,7 @@ private[spark] class TaskSchedulerImpl(
   // By default, rack is unknown
   def getRackForHost(value: String): Option[String] = None
 
+  //等候,直到后台准备就绪
   private def waitBackendReady(): Unit = {
     if (backend.isReady) {
       return
@@ -534,10 +554,12 @@ private[spark] class TaskSchedulerImpl(
     }
   }
 
+  //获取该调度器对应的应用ID
   override def applicationId(): String = backend.applicationId()
-
+//获取该调度器对应的应用尝试次数
   override def applicationAttemptId(): Option[String] = backend.applicationAttemptId()
 
+  //获取第stageAttemptId次尝试阶段对应的TaskSetManager对象
   private[scheduler] def taskSetManagerForAttempt(
       stageId: Int,
       stageAttemptId: Int): Option[TaskSetManager] = {
@@ -563,32 +585,34 @@ private[spark] object TaskSchedulerImpl {
    *
    * For example, given <h1, [o1, o2, o3]>, <h2, [o4]>, <h1, [o5, o6]>, returns
    * [o1, o5, o4, 02, o6, o3]
+   * 该函数的意义是打乱顺序,从每一个key中获取一个元素,进行排序
    */
   def prioritizeContainers[K, T] (map: HashMap[K, ArrayBuffer[T]]): List[T] = {
-    val _keyList = new ArrayBuffer[K](map.size)
+    val _keyList = new ArrayBuffer[K](map.size) //获取所有的key集合
     _keyList ++= map.keys
 
-    // order keyList based on population of value in map
+    // order keyList based on population of value in map 对key集合进行排序,排序规则按照每一个key的内容数量从大到小排序
     val keyList = _keyList.sortWith(
       (left, right) => map(left).size > map(right).size
     )
 
-    val retval = new ArrayBuffer[T](keyList.size * 2)
+    val retval = new ArrayBuffer[T](keyList.size * 2) //最终存储的集合
     var index = 0
     var found = true
 
     while (found) {
       found = false
+      //按照顺序从每一个key中获取一个元素,每次都获取每一个key对应的集合中最小元素,添加到最终集合中
       for (key <- keyList) {
         val containerList: ArrayBuffer[T] = map.get(key).getOrElse(null)
         assert(containerList != null)
         // Get the index'th entry for this host - if present
-        if (index < containerList.size){
+        if (index < containerList.size){//如果key中的元素不足,则不需要在添加该key对应的值了
           retval += containerList.apply(index)
-          found = true
+          found = true //设置true,说明本次循环所有的key时,发现有index下标的元素
         }
       }
-      index += 1
+      index += 1//下标+1
     }
 
     retval.toList

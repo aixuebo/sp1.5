@@ -36,18 +36,19 @@ import org.apache.spark.util.{ActorLogReceive, AkkaUtils, ThreadUtils}
 
 /**
  * A RpcEnv implementation based on Akka.
- *
+ * 基于Akka方式实现PRC环境工场
  * TODO Once we remove all usages of Akka in other place, we can move this file to a new project and
  * remove Akka from the dependencies.
  *
- * @param actorSystem
+ * @param actorSystem 服务器真实绑定的host以及提供的服务
  * @param conf
- * @param boundPort
+ * @param boundPort 服务器真实绑定的port
  */
 private[spark] class AkkaRpcEnv private[akka] (
     val actorSystem: ActorSystem, conf: SparkConf, boundPort: Int)
   extends RpcEnv(conf) with Logging {
 
+  //创建默认的PRC服务器地址
   private val defaultAddress: RpcAddress = {
     val address = actorSystem.asInstanceOf[ExtendedActorSystem].provider.getDefaultAddress
     // In some test case, ActorSystem doesn't bind to any address.
@@ -55,24 +56,29 @@ private[spark] class AkkaRpcEnv private[akka] (
     RpcAddress(address.host.getOrElse("localhost"), address.port.getOrElse(boundPort))
   }
 
+  //创建默认的PRC服务器地址
   override val address: RpcAddress = defaultAddress
 
   /**
    * A lookup table to search a [[RpcEndpointRef]] for a [[RpcEndpoint]]. We need it to make
    * [[RpcEndpoint.self]] work.
+   * 连接该服务器的客户端映射关系,每一个客户端对应RpcEndpoint和RpcEndpointRef两个属性
    */
   private val endpointToRef = new ConcurrentHashMap[RpcEndpoint, RpcEndpointRef]()
 
   /**
    * Need this map to remove `RpcEndpoint` from `endpointToRef` via a `RpcEndpointRef`
+   * 连接该服务器的客户端映射关系,每一个客户端对应RpcEndpoint和RpcEndpointRef两个属性
    */
   private val refToEndpoint = new ConcurrentHashMap[RpcEndpointRef, RpcEndpoint]()
 
+  //添加一个客户端连接该服务器
   private def registerEndpoint(endpoint: RpcEndpoint, endpointRef: RpcEndpointRef): Unit = {
     endpointToRef.put(endpoint, endpointRef)
     refToEndpoint.put(endpointRef, endpoint)
   }
 
+  //解除一个客户端与该服务器的连接
   private def unregisterEndpoint(endpointRef: RpcEndpointRef): Unit = {
     val endpoint = refToEndpoint.remove(endpointRef)
     if (endpoint != null) {
@@ -82,6 +88,7 @@ private[spark] class AkkaRpcEnv private[akka] (
 
   /**
    * Retrieve the [[RpcEndpointRef]] of `endpoint`.
+   * 查找客户端
    */
   override def endpointRef(endpoint: RpcEndpoint): RpcEndpointRef = endpointToRef.get(endpoint)
 
@@ -225,6 +232,7 @@ private[spark] class AkkaRpcEnv private[akka] (
       AkkaUtils.protocol(actorSystem), systemName, address.host, address.port, endpointName)
   }
 
+  //关闭服务器服务
   override def shutdown(): Unit = {
     actorSystem.shutdown()
   }
@@ -247,9 +255,11 @@ private[spark] class AkkaRpcEnv private[akka] (
   }
 }
 
+//RPC环境工场,采用Akka框架实现
 private[spark] class AkkaRpcEnvFactory extends RpcEnvFactory {
 
   def create(config: RpcEnvConfig): RpcEnv = {
+    //创建Actor对象以及真实的host
     val (actorSystem, boundPort) = AkkaUtils.createActorSystem(
       config.name, config.host, config.port, config.conf, config.securityManager)
     actorSystem.actorOf(Props(classOf[ErrorMonitor]), "ErrorMonitor")
@@ -271,6 +281,7 @@ private[akka] class ErrorMonitor extends Actor with ActorLogReceive with Logging
   }
 }
 
+//代表一个客户端实现类
 private[akka] class AkkaRpcEndpointRef(
     @transient defaultAddress: RpcAddress,
     @transient _actorRef: => ActorRef,

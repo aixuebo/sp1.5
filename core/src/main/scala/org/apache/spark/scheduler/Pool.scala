@@ -37,11 +37,13 @@ private[spark] class Pool(
   extends Schedulable
   with Logging {
 
+  //调度的队列
   val schedulableQueue = new ConcurrentLinkedQueue[Schedulable]
+  //调度的name与调度的映射关系
   val schedulableNameToSchedulable = new ConcurrentHashMap[String, Schedulable]
   var weight = initWeight
   var minShare = initMinShare
-  var runningTasks = 0
+  var runningTasks = 0 //该队列中正在运行的任务数量
   var priority = 0
 
   // A pool's stage id is used to break the tie in scheduling.
@@ -49,6 +51,7 @@ private[spark] class Pool(
   var name = poolName
   var parent: Pool = null
 
+  //调度的算法
   var taskSetSchedulingAlgorithm: SchedulingAlgorithm = {
     schedulingMode match {
       case SchedulingMode.FAIR =>

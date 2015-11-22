@@ -96,13 +96,14 @@ private[deploy] class Master(
   // After onStart, webUi will be set
   private var webUi: MasterWebUI = null
 
+  //master的host
   private val masterPublicAddress = {
     val envVar = conf.getenv("SPARK_PUBLIC_DNS")
     if (envVar != null) envVar else address.host
   }
 
-  private val masterUrl = address.toSparkURL
-  private var masterWebUiUrl: String = _
+  private val masterUrl = address.toSparkURL //master的host,spark://host:port
+  private var masterWebUiUrl: String = _ //http://masterhost:webPort web页面
 
   private var state = RecoveryState.STANDBY
 
@@ -131,11 +132,15 @@ private[deploy] class Master(
   private var restServerBoundPort: Option[Int] = None
 
   override def onStart(): Unit = {
-    logInfo("Starting Spark master at " + masterUrl)
-    logInfo(s"Running Spark version ${org.apache.spark.SPARK_VERSION}")
+    logInfo("Starting Spark master at " + masterUrl) //打印日志在host+port上开启了master
+    logInfo(s"Running Spark version ${org.apache.spark.SPARK_VERSION}") //正在运行的spark的版本
+    
+    //master上的web页面
     webUi = new MasterWebUI(this, webUiPort)
     webUi.bind()
     masterWebUiUrl = "http://" + masterPublicAddress + ":" + webUi.boundPort
+    
+    
     checkForWorkerTimeOutTask = forwardMessageThread.scheduleAtFixedRate(new Runnable {
       override def run(): Unit = Utils.tryLogNonFatalError {
         self.send(CheckForWorkerTimeOut)
@@ -462,7 +467,7 @@ private[deploy] class Master(
       context.reply(MasterStateResponse(
         address.host, address.port, restServerBoundPort,
         workers.toArray, apps.toArray, completedApps.toArray,
-        drivers.toArray, completedDrivers.toArray, state))
+        drivers.toArray, completedDrivers.toArray,state))
     }
 
     case BoundPortsRequest => {
@@ -741,8 +746,7 @@ private[deploy] class Master(
     addressToWorker -= worker.endpoint.address
     for (exec <- worker.executors.values) {
       logInfo("Telling app of lost executor: " + exec.id)
-      exec.application.driver.send(ExecutorUpdated(
-        exec.id, ExecutorState.LOST, Some("worker lost"), None))
+      exec.application.driver.send(ExecutorUpdated(exec.id, ExecutorState.LOST, Some("worker lost"), None))
       exec.application.removeExecutor(exec)
     }
     for (driver <- worker.drivers.values) {
@@ -1052,18 +1056,25 @@ private[deploy] object Master extends Logging {
   val ENDPOINT_NAME = "Master"
 
   def main(argStrings: Array[String]) {
+    //当指定信号发生的时候,会向log中打印日志
     SignalLogger.register(log)
     val conf = new SparkConf
+    //加载配置文件,以及创建master的host port等信息
     val args = new MasterArguments(argStrings, conf)
+    //返回RPC环境变量
     val (rpcEnv, _, _) = startRpcEnvAndEndpoint(args.host, args.port, args.webUiPort, conf)
     rpcEnv.awaitTermination()
   }
 
   /**
    * Start the Master and return a three tuple of:
-   *   (1) The Master RpcEnv
-   *   (2) The web UI bound port
+   *   (1) The Master RpcEnv 返回RPC环境变量
+   *   (2) The web UI bound port 
    *   (3) The REST server bound port, if any
+   *   
+   *   参数是开启master的host、port、以及web port、配置文件
+   *   
+   *   返回RPC环境变量
    */
   def startRpcEnvAndEndpoint(
       host: String,

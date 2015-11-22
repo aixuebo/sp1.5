@@ -56,6 +56,7 @@ private[spark] class TaskSetManager(
     clock: Clock = new SystemClock())
   extends Schedulable with Logging {
 
+  //调度器的conf对象
   val conf = sched.sc.conf
 
   /*
@@ -451,8 +452,9 @@ private[spark] class TaskSetManager(
           // Do various bookkeeping
           copiesRunning(index) += 1
           val attemptNum = taskAttempts(index).size
-          val info = new TaskInfo(taskId, index, attemptNum, curTime,
-            execId, host, taskLocality, speculative)
+          val info = new TaskInfo(taskId, index, attemptNum, curTime,execId,
+              host, taskLocality, speculative)
+            
           taskInfos(taskId) = info
           taskAttempts(index) = info :: taskAttempts(index)
           // Update our locality level for delay scheduling
@@ -739,6 +741,7 @@ private[spark] class TaskSetManager(
     maybeFinishTaskSet()
   }
 
+  //使该尝试阶段的TaskSetManager流产
   def abort(message: String, exception: Option[Throwable] = None): Unit = sched.synchronized {
     // TODO: Kill running tasks if we were not terminated due to a Mesos error
     sched.dagScheduler.taskSetFailed(taskSet, message, exception)
@@ -904,6 +907,7 @@ private[spark] class TaskSetManager(
   def recomputeLocality() {
     val previousLocalityLevel = myLocalityLevels(currentLocalityIndex)
     myLocalityLevels = computeValidLocalityLevels()
+    
     localityWaits = myLocalityLevels.map(getLocalityWait)
     currentLocalityIndex = getLocalityIndex(previousLocalityLevel)
   }
@@ -915,6 +919,6 @@ private[spark] class TaskSetManager(
 
 private[spark] object TaskSetManager {
   // The user will be warned if any stages contain a task that has a serialized size greater than
-  // this.
+  // this.如果任何阶段包含一个序列化后大小超过100K的任务,则需要发出警告
   val TASK_SIZE_TO_WARN_KB = 100
 }

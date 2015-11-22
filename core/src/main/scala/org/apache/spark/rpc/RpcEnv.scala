@@ -31,26 +31,33 @@ import org.apache.spark.util.{RpcUtils, Utils}
 /**
  * A RpcEnv implementation must have a [[RpcEnvFactory]] implementation with an empty constructor
  * so that it can be created via Reflection.
+ * 一个RPC的环境 是采用工场模式创建的,工场必须是有一个空的构造函数,因为他要被用于反射机制
  */
 private[spark] object RpcEnv {
 
+  //通过配置返回RPC环境工场实例
   private def getRpcEnvFactory(conf: SparkConf): RpcEnvFactory = {
     // Add more RpcEnv implementations here
+    //RPC环境工场,采用Akka框架实现
+    //该Map设置了全部的RCP工场实现类关联关系
     val rpcEnvNames = Map("akka" -> "org.apache.spark.rpc.akka.AkkaRpcEnvFactory")
+    //该配置获取要选择哪种实现方式,默认是akka工场实现
     val rpcEnvName = conf.get("spark.rpc", "akka")
+    //获取RCP环境工场类实现,默认获取org.apache.spark.rpc.akka.AkkaRpcEnvFactory
     val rpcEnvFactoryClassName = rpcEnvNames.getOrElse(rpcEnvName.toLowerCase, rpcEnvName)
+    //对RPC工场创建实例
     Utils.classForName(rpcEnvFactoryClassName).newInstance().asInstanceOf[RpcEnvFactory]
   }
 
   def create(
-      name: String,
-      host: String,
-      port: Int,
+      name: String,//名称
+      host: String,//RPC服务器所在host
+      port: Int,//RPC服务器所在port
       conf: SparkConf,
       securityManager: SecurityManager): RpcEnv = {
     // Using Reflection to create the RpcEnv to avoid to depend on Akka directly
-    val config = RpcEnvConfig(conf, name, host, port, securityManager)
-    getRpcEnvFactory(conf).create(config)
+    val config = RpcEnvConfig(conf, name, host, port, securityManager) //生成服务器端的配置对象
+    getRpcEnvFactory(conf).create(config) //通过RCO工场实例,创建一个RPC环境对象
   }
 
 }
@@ -64,6 +71,7 @@ private[spark] object RpcEnv {
  * sender, or logging them if no such sender or `NotSerializableException`.
  *
  * [[RpcEnv]] also provides some methods to retrieve [[RpcEndpointRef]]s given name or uri.
+ * 详细参见AkkaRpcEnv实现类
  */
 private[spark] abstract class RpcEnv(conf: SparkConf) {
 
@@ -77,6 +85,7 @@ private[spark] abstract class RpcEnv(conf: SparkConf) {
 
   /**
    * Return the address that [[RpcEnv]] is listening to.
+   * 创建默认的PRC服务器地址
    */
   def address: RpcAddress
 
@@ -147,17 +156,18 @@ private[spark] abstract class RpcEnv(conf: SparkConf) {
   def deserialize[T](deserializationAction: () => T): T
 }
 
-
+//表示一个RPC服务器配置
 private[spark] case class RpcEnvConfig(
     conf: SparkConf,
-    name: String,
-    host: String,
-    port: Int,
+    name: String,//名称
+    host: String,//RPC服务器所在host
+    port: Int,//RPC服务器所在port
     securityManager: SecurityManager)
 
 
 /**
  * Represents a host and port.
+ * 表示一个PRC服务器的地址
  */
 private[spark] case class RpcAddress(host: String, port: Int) {
   // TODO do we need to add the type of RpcEnv in the address?
@@ -170,6 +180,7 @@ private[spark] case class RpcAddress(host: String, port: Int) {
 }
 
 
+//表示一个PRC服务器的地址
 private[spark] object RpcAddress {
 
   /**

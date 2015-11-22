@@ -36,31 +36,43 @@ object RpcUtils {
     rpcEnv.setupEndpointRef(driverActorSystemName, RpcAddress(driverHost, driverPort), name)
   }
 
-  /** Returns the configured number of times to retry connecting */
+  /** Returns the configured number of times to retry connecting 设置尝试次数*/
   def numRetries(conf: SparkConf): Int = {
     conf.getInt("spark.rpc.numRetries", 3)
   }
 
-  /** Returns the configured number of milliseconds to wait on each retry */
+  /** Returns the configured number of milliseconds to wait on each retry 每次尝试后,需要等候的时间间隔*/
   def retryWaitMs(conf: SparkConf): Long = {
     conf.getTimeAsMs("spark.rpc.retry.wait", "3s")
   }
 
-  /** Returns the default Spark timeout to use for RPC ask operations. */
+  /** Returns the default Spark timeout to use for RPC ask operations
+   * 返回连接服务器的超时时间 
+   **/
   private[spark] def askRpcTimeout(conf: SparkConf): RpcTimeout = {
     RpcTimeout(conf, Seq("spark.rpc.askTimeout", "spark.network.timeout"), "120s")
   }
 
+  /**
+   * 已经过期
+   * 返回连接服务器的超时时间 
+   */
   @deprecated("use askRpcTimeout instead, this method was not intended to be public", "1.5.0")
   def askTimeout(conf: SparkConf): FiniteDuration = {
     askRpcTimeout(conf).duration
   }
 
-  /** Returns the default Spark timeout to use for RPC remote endpoint lookup. */
+  /** Returns the default Spark timeout to use for RPC remote endpoint lookup. 
+   *  返回创建一个RPC服务器的超时时间
+   **/
   private[spark] def lookupRpcTimeout(conf: SparkConf): RpcTimeout = {
     RpcTimeout(conf, Seq("spark.rpc.lookupTimeout", "spark.network.timeout"), "120s")
   }
 
+  /**
+   * 已经过期
+   * 返回创建一个RPC服务器的超时时间
+   */
   @deprecated("use lookupRpcTimeout instead, this method was not intended to be public", "1.5.0")
   def lookupTimeout(conf: SparkConf): FiniteDuration = {
     lookupRpcTimeout(conf).duration

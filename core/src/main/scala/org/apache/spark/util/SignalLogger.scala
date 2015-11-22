@@ -23,19 +23,24 @@ import sun.misc.{Signal, SignalHandler}
 
 /**
  * Used to log signals received. This can be very useful in debugging crashes or kills.
+ * 被使用记录信号的接受,当debug时候崩溃或者kill的时候,这个日志是非常有用的
  *
  * Inspired by Colin Patrick McCabe's similar class from Hadoop.
+ * 灵感来自于hadoop
+ * 
+ * 当指定信号发生的时候,会向log中打印日志
  */
 private[spark] object SignalLogger {
 
-  private var registered = false
+  private var registered = false //true表示已经注册过了
 
   /** Register a signal handler to log signals on UNIX-like systems. */
   def register(log: Logger): Unit = synchronized {
     if (SystemUtils.IS_OS_UNIX) {
-      require(!registered, "Can't re-install the signal handlers")
+      require(!registered, "Can't re-install the signal handlers") //不能重新注册,因此registered一定是false
       registered = true
 
+      //为以下三种信号设捕获日志,当发生kill等信号的时候,会进行日志处理,当然该程序仅在Sun的jvm上有效
       val signals = Seq("TERM", "HUP", "INT")
       for (signal <- signals) {
         try {
@@ -49,6 +54,7 @@ private[spark] object SignalLogger {
   }
 }
 
+//当指定信号发生的时候,会向log中打印日志
 private sealed class SignalLoggerHandler(name: String, log: Logger) extends SignalHandler {
 
   val prevHandler = Signal.handle(new Signal(name), this)

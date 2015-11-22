@@ -38,14 +38,19 @@ import org.apache.spark.executor.TaskMetrics
  * refactor of the SparkListener interface. In its place, the EventLoggingListener is introduced
  * to log application information as SparkListenerEvents. To enable this functionality, set
  * spark.eventLog.enabled to true.
+ * 
+ * 每一个jobId对应一个日志文件
+ * 所有的日志文件都存储在logDir/logDirName目录下
  */
 @DeveloperApi
 @deprecated("Log application information by setting spark.eventLog.enabled.", "1.0.0")
 class JobLogger(val user: String, val logDirName: String) extends SparkListener with Logging {
 
+  //默认第二个参数logDirName.文件夹名字是时间戳
   def this() = this(System.getProperty("user.name", "<unknown>"),
     String.valueOf(System.currentTimeMillis()))
 
+    //获取base文件夹
   private val logDir =
     if (System.getenv("SPARK_LOG_DIR") != null) {
       System.getenv("SPARK_LOG_DIR")
@@ -53,16 +58,24 @@ class JobLogger(val user: String, val logDirName: String) extends SparkListener 
       "/tmp/spark-%s".format(user)
     }
 
+  //每一个jobId对应一个日志文件PrintWriter
   private val jobIdToPrintWriter = new HashMap[Int, PrintWriter]
+  //每一个阶段ID,一定对应一个JobId,但是一个jobId是对应多个阶段ID的
   private val stageIdToJobId = new HashMap[Int, Int]
+  //key是JobId,value是该Job对应的阶段ID集合
   private val jobIdToStageIds = new HashMap[Int, Seq[Int]]
+  
+  //获取格式化时间对象
   private val dateFormat = new ThreadLocal[SimpleDateFormat]() {
     override def initialValue(): SimpleDateFormat = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss")
   }
 
+  //初始化目录
   createLogDir()
 
-  /** Create a folder for log files, the folder's name is the creation time of jobLogger */
+  /** Create a folder for log files, the folder's name is the creation time of jobLogger 
+   *  创建一个目录,目录的名字是创建jobLogger的时间戳
+   **/
   protected def createLogDir() {
     val dir = new File(logDir + "/" + logDirName + "/")
     if (dir.exists()) {
@@ -78,6 +91,7 @@ class JobLogger(val user: String, val logDirName: String) extends SparkListener 
    * Create a log file for one job
    * @param jobId ID of the job
    * @throws FileNotFoundException Fail to create log file
+   * 为jobId创建一个日志文件
    */
   protected def createLogWriter(jobId: Int) {
     try {
@@ -91,6 +105,7 @@ class JobLogger(val user: String, val logDirName: String) extends SparkListener 
   /**
    * Close log file, and clean the stage relationship in stageIdToJobId
    * @param jobId ID of the job
+   * 关闭一个jobId,并且清理内存关系
    */
   protected def closeLogWriter(jobId: Int) {
     jobIdToPrintWriter.get(jobId).foreach { fileWriter =>
@@ -107,6 +122,7 @@ class JobLogger(val user: String, val logDirName: String) extends SparkListener 
    * Build up the maps that represent stage-job relationships
    * @param jobId ID of the job
    * @param stageIds IDs of the associated stages
+   * 关联JobId与他对应的阶段ID集合关系
    */
   protected def buildJobStageDependencies(jobId: Int, stageIds: Seq[Int]) = {
     jobIdToStageIds(jobId) = stageIds
@@ -118,6 +134,7 @@ class JobLogger(val user: String, val logDirName: String) extends SparkListener 
    * @param jobId ID of the job
    * @param info Info to be recorded
    * @param withTime Controls whether to record time stamp before the info, default is true
+   * 将info信息写入jobId对应的日志文件中,如果withTime=true,则要先写入当前时间
    */
   protected def jobLogInfo(jobId: Int, info: String, withTime: Boolean = true) {
     var writeInfo = info
@@ -135,6 +152,8 @@ class JobLogger(val user: String, val logDirName: String) extends SparkListener 
    * @param stageId ID of the stage
    * @param info Info to be recorded
    * @param withTime Controls whether to record time stamp before the info, default is true
+   * 将info信息写入jobId对应的日志文件中,如果withTime=true,则要先写入当前时间
+   * 只不过该info信息是在某一个阶段产生的日志而已
    */
   protected def stageLogInfo(stageId: Int, info: String, withTime: Boolean = true) {
     stageIdToJobId.get(stageId).foreach(jobId => jobLogInfo(jobId, info, withTime))
@@ -188,6 +207,7 @@ class JobLogger(val user: String, val logDirName: String) extends SparkListener 
   /**
    * When stage is submitted, record stage submit info
    * @param stageSubmitted Stage submitted event
+   * 记录该阶段被提交了,同时该阶段有多少个任务
    */
   override def onStageSubmitted(stageSubmitted: SparkListenerStageSubmitted) {
     val stageInfo = stageSubmitted.stageInfo
@@ -198,6 +218,7 @@ class JobLogger(val user: String, val logDirName: String) extends SparkListener 
   /**
    * When stage is completed, record stage completion status
    * @param stageCompleted Stage completed event
+   * 记录该阶段成功完成了,还是失败完成了
    */
   override def onStageCompleted(stageCompleted: SparkListenerStageCompleted) {
     val stageId = stageCompleted.stageInfo.stageId
@@ -211,6 +232,7 @@ class JobLogger(val user: String, val logDirName: String) extends SparkListener 
   /**
    * When task ends, record task completion status and metrics
    * @param taskEnd Task end event
+   * 每一个任务完成后记录的日志
    */
   override def onTaskEnd(taskEnd: SparkListenerTaskEnd) {
     val taskInfo = taskEnd.taskInfo
@@ -235,6 +257,7 @@ class JobLogger(val user: String, val logDirName: String) extends SparkListener 
   /**
    * When job ends, recording job completion status and close log file
    * @param jobEnd Job end event
+   * job完成,写入成功完成日志,以及失败信息日志
    */
   override def onJobEnd(jobEnd: SparkListenerJobEnd) {
     val jobId = jobEnd.jobId
@@ -247,13 +270,14 @@ class JobLogger(val user: String, val logDirName: String) extends SparkListener 
       case _ =>
     }
     jobLogInfo(jobId, info.substring(0, info.length - 1).toUpperCase)
-    closeLogWriter(jobId)
+    closeLogWriter(jobId) //关闭该close的输出流
   }
 
   /**
    * Record job properties into job log file
    * @param jobId ID of the job
    * @param properties Properties of the job
+   * 写入该job的描述信息
    */
   protected def recordJobProperties(jobId: Int, properties: Properties) {
     if (properties != null) {
@@ -265,13 +289,18 @@ class JobLogger(val user: String, val logDirName: String) extends SparkListener 
   /**
    * When job starts, record job property and stage graph
    * @param jobStart Job start event
+   * job启动
    */
   override def onJobStart(jobStart: SparkListenerJobStart) {
     val jobId = jobStart.jobId
     val properties = jobStart.properties
+    //为该job创建日志文件
     createLogWriter(jobId)
+    //将该job的描述写入到日志中
     recordJobProperties(jobId, properties)
+    //为该job以及对应的阶段集合写入日志中
     buildJobStageDependencies(jobId, jobStart.stageIds)
+    //记录该job开始日志
     jobLogInfo(jobId, "JOB_ID=" + jobId + " STATUS=STARTED")
   }
 }

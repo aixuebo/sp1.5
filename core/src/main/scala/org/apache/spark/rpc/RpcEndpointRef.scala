@@ -25,6 +25,9 @@ import org.apache.spark.{SparkException, Logging, SparkConf}
 
 /**
  * A reference for a remote [[RpcEndpoint]]. [[RpcEndpointRef]] is thread-safe.
+ * 代表一个客户端
+ * 
+ * 实现类AkkaRpcEnv的AkkaRpcEndpointRef类
  */
 private[spark] abstract class RpcEndpointRef(@transient conf: SparkConf)
   extends Serializable with Logging {

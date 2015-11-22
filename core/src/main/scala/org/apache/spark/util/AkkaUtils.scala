@@ -30,31 +30,38 @@ import org.apache.spark.rpc.RpcTimeout
 
 /**
  * Various utility classes for working with Akka.
+ * Akka工作的各种有效工具类
  */
 private[spark] object AkkaUtils extends Logging {
 
   /**
    * Creates an ActorSystem ready for remoting, with various Spark features. Returns both the
    * ActorSystem itself and its port (which is hard to get from Akka).
-   *
+   * 创建Actor系统,以及系统所在port
    * Note: the `name` parameter is important, as even if a client sends a message to right
    * host + port, if the system name is incorrect, Akka will drop the message.
-   *
+   * 注意,name参数非常重要,如果一个客户端发送一个信息给正确的host+port,但是给定的name无法找到,即错误的name,则Akka服务器会丢掉该信息
+   * 原因是actor是基于内部的收件箱操作的
    * If indestructible is set to true, the Actor System will continue running in the event
    * of a fatal exception. This is used by [[org.apache.spark.executor.Executor]].
    */
   def createActorSystem(
-      name: String,
-      host: String,
-      port: Int,
+      name: String,//接收收件箱的名称
+      host: String,//服务器所在host
+      port: Int,//服务器所在port
       conf: SparkConf,
       securityManager: SecurityManager): (ActorSystem, Int) = {
+    //定义一个函数,传入参数int实际的port,返回值是ActorSystem, Int
     val startService: Int => (ActorSystem, Int) = { actualPort =>
       doCreateActorSystem(name, host, actualPort, conf, securityManager)
     }
+    //真正创建一个server,以及真实的端口
     Utils.startServiceOnPort(port, startService, conf, name)
   }
 
+  /**
+   * 创建一个Actor系统,返回该系统以及系统所在port
+   */
   private def doCreateActorSystem(
       name: String,
       host: String,
@@ -66,7 +73,7 @@ private[spark] object AkkaUtils extends Logging {
     val akkaBatchSize = conf.getInt("spark.akka.batchSize", 15)
     val akkaTimeoutS = conf.getTimeAsSeconds("spark.akka.timeout",
       conf.get("spark.network.timeout", "120s"))
-    val akkaFrameSize = maxFrameSizeBytes(conf)
+    val akkaFrameSize = maxFrameSizeBytes(conf) //设置传递一个message允许的字节上限,参数单位是M,将其转换成字节  
     val akkaLogLifecycleEvents = conf.getBoolean("spark.akka.logLifecycleEvents", false)
     val lifecycleEvents = if (akkaLogLifecycleEvents) "on" else "off"
     if (!akkaLogLifecycleEvents) {
@@ -92,6 +99,7 @@ private[spark] object AkkaUtils extends Logging {
     val akkaSslConfig = securityManager.akkaSSLOptions.createAkkaConfig
         .getOrElse(ConfigFactory.empty())
 
+    //conf.getAkkaConf.toMap[String, String],表示以akka.开头的key,就是akka的配置文件信息,因此获取以 akka.开头的key组成的配置信息元组集合
     val akkaConf = ConfigFactory.parseMap(conf.getAkkaConf.toMap[String, String])
       .withFallback(akkaSslConfig).withFallback(ConfigFactory.parseString(
       s"""
@@ -124,16 +132,19 @@ private[spark] object AkkaUtils extends Logging {
     (actorSystem, boundPort)
   }
 
+  //传递一个message允许的字节上限
   private val AKKA_MAX_FRAME_SIZE_IN_MB = Int.MaxValue / 1024 / 1024
 
-  /** Returns the configured max frame size for Akka messages in bytes. */
+  /** Returns the configured max frame size for Akka messages in bytes. 
+   * 设置传递一个message允许的字节上限,参数单位是M,将其转换成字节  
+   **/
   def maxFrameSizeBytes(conf: SparkConf): Int = {
     val frameSizeInMB = conf.getInt("spark.akka.frameSize", 128)
     if (frameSizeInMB > AKKA_MAX_FRAME_SIZE_IN_MB) {
       throw new IllegalArgumentException(
         s"spark.akka.frameSize should not be greater than $AKKA_MAX_FRAME_SIZE_IN_MB MB")
     }
-    frameSizeInMB * 1024 * 1024
+    frameSizeInMB * 1024 * 1024 //参数单位是M,将其转换成字节  
   }
 
   /** Space reserved for extra data in an Akka message besides serialized task or task result. */
@@ -142,6 +153,8 @@ private[spark] object AkkaUtils extends Logging {
   /**
    * Send a message to the given actor and get its result within a default timeout, or
    * throw a SparkException if this fails.
+   * 向给定的actor发送message,在单位时间内采用future模式获取返回值,
+   * 在尝试N次后依然失败.则抛异常
    */
   def askWithReply[T](
       message: Any,
@@ -153,6 +166,8 @@ private[spark] object AkkaUtils extends Logging {
   /**
    * Send a message to the given actor and get its result within a default timeout, or
    * throw a SparkException if this fails even after the specified number of retries.
+   * 向给定的actor发送message,在单位时间内采用future模式获取返回值,
+   * 在尝试N次后依然失败.则抛异常
    */
   def askWithReply[T](
       message: Any,
@@ -161,7 +176,7 @@ private[spark] object AkkaUtils extends Logging {
       retryInterval: Long,
       timeout: RpcTimeout): T = {
     // TODO: Consider removing multiple attempts
-    if (actor == null) {
+    if (actor == null) {//不知道发向哪个actor服务器,因此抛异常
       throw new SparkException(s"Error sending message [message = $message]" +
         " as actor is null ")
     }
@@ -187,6 +202,7 @@ private[spark] object AkkaUtils extends Logging {
       }
     }
 
+    //尝试N次后依然失败,则发送最后一个接受到的异常信息
     throw new SparkException(
       s"Error sending message [message = $message]", lastException)
   }
@@ -202,6 +218,7 @@ private[spark] object AkkaUtils extends Logging {
     timeout.awaitResult(actorSystem.actorSelection(url).resolveOne(timeout.duration))
   }
 
+  //生成一个服务器地址对象ActorRef,该对象是客户端需要持有的,向该对象发送信息
   def makeExecutorRef(
       name: String,
       conf: SparkConf,
@@ -209,19 +226,25 @@ private[spark] object AkkaUtils extends Logging {
       port: Int,
       actorSystem: ActorSystem): ActorRef = {
     val executorActorSystemName = SparkEnv.executorActorSystemName
+    //校验参数一定是host,不能有port
     Utils.checkHost(host, "Expected hostname")
+    //生成真实交流的地址,即actor的收件箱
     val url = address(protocol(actorSystem), executorActorSystemName, host, port, name)
+    //返回连接服务器的超时时间
     val timeout = RpcUtils.lookupRpcTimeout(conf)
     logInfo(s"Connecting to $name: $url")
+    //创建服务器对象
     timeout.awaitResult(actorSystem.actorSelection(url).resolveOne(timeout.duration))
   }
 
+  //获取协议名称akka.ssl.tcp或者akka.tcp
   def protocol(actorSystem: ActorSystem): String = {
     val akkaConf = actorSystem.settings.config
     val sslProp = "akka.remote.netty.tcp.enable-ssl"
     protocol(akkaConf.hasPath(sslProp) && akkaConf.getBoolean(sslProp))
   }
 
+  //获取协议名称akka.ssl.tcp或者akka.tcp
   def protocol(ssl: Boolean = false): String = {
     if (ssl) {
       "akka.ssl.tcp"
@@ -230,6 +253,7 @@ private[spark] object AkkaUtils extends Logging {
     }
   }
 
+  //生成真实交流的地址,即actor的收件箱
   def address(
       protocol: String,
       systemName: String,

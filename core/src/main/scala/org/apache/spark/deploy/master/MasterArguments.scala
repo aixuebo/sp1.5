@@ -22,6 +22,9 @@ import org.apache.spark.util.{IntParam, Utils}
 
 /**
  * Command-line parser for the master.
+ * 创建master的host和port以及web页面的port
+ * 
+ * 当然还有加载附加的配置文件
  */
 private[master] class MasterArguments(args: Array[String], conf: SparkConf) {
   var host = Utils.localHostName()
@@ -49,7 +52,9 @@ private[master] class MasterArguments(args: Array[String], conf: SparkConf) {
     webUiPort = conf.get("spark.master.ui.port").toInt
   }
 
+  //参数放肆例如 --ip 192。168.10.11
   private def parse(args: List[String]): Unit = args match {
+    //ip不再支持了,建议使用--host
     case ("--ip" | "-i") :: value :: tail =>
       Utils.checkHost(value, "ip no longer supported, please use hostname " + value)
       host = value

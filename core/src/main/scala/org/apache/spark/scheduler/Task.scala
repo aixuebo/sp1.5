@@ -167,10 +167,11 @@ private[spark] abstract class Task[T](
 private[spark] object Task {
   /**
    * Serialize a task and the current app dependencies (files and JARs added to the SparkContext)
+   * 将该依赖的file和jar都序列化起来
    */
   def serializeWithDependencies(
       task: Task[_],
-      currentFiles: HashMap[String, Long],
+      currentFiles: HashMap[String, Long],//key是依赖的file,value是该file的最后修改时间
       currentJars: HashMap[String, Long],
       serializer: SerializerInstance)
     : ByteBuffer = {
@@ -205,6 +206,7 @@ private[spark] object Task {
    * ClassLoaders and deserialize the task.
    *
    * @return (taskFiles, taskJars, taskBytes)
+   * 反序列化,详细参见上面的序列化方法
    */
   def deserializeWithDependencies(serializedTask: ByteBuffer)
     : (HashMap[String, Long], HashMap[String, Long], ByteBuffer) = {

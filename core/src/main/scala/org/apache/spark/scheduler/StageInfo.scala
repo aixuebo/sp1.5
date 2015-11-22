@@ -25,13 +25,14 @@ import org.apache.spark.storage.RDDInfo
 /**
  * :: DeveloperApi ::
  * Stores information about a stage to pass from the scheduler to SparkListeners.
+ * 关于记录调度任务的一个阶段信息
  */
 @DeveloperApi
 class StageInfo(
-    val stageId: Int,
-    val attemptId: Int,
+    val stageId: Int,//阶段ID
+    val attemptId: Int,//第几次尝试执行该阶段
     val name: String,
-    val numTasks: Int,
+    val numTasks: Int,//该阶段的任务数量
     val rddInfos: Seq[RDDInfo],
     val parentIds: Seq[Int],
     val details: String,

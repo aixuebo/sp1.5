@@ -31,11 +31,11 @@ import org.apache.spark.util.Utils
  * addTaskSetManager: build the leaf nodes(TaskSetManagers)
  */
 private[spark] trait SchedulableBuilder {
-  def rootPool: Pool
+  def rootPool: Pool //获取Root的Pool
 
-  def buildPools()
+  def buildPools() //创建Pool
 
-  def addTaskSetManager(manager: Schedulable, properties: Properties)
+  def addTaskSetManager(manager: Schedulable, properties: Properties) //将Schedulable添加到某个Pool上
 }
 
 private[spark] class FIFOSchedulableBuilder(val rootPool: Pool)
@@ -50,23 +50,44 @@ private[spark] class FIFOSchedulableBuilder(val rootPool: Pool)
   }
 }
 
+/**
+ * <root>
+ *  <pool @name="">
+ *    <schedulingMode>FIFO</schedulingMode>
+ *    <minShare>5</minShare>
+ *    <weight>6</weight>
+ *  </pool>
+ *  <pool @name="">
+ *    <schedulingMode>FIFO</schedulingMode>
+ *    <minShare>5</minShare>
+ *    <weight>6</weight>
+ *  </pool>
+ * </root>
+ */
 private[spark] class FairSchedulableBuilder(val rootPool: Pool, conf: SparkConf)
   extends SchedulableBuilder with Logging {
 
-  val schedulerAllocFile = conf.getOption("spark.scheduler.allocation.file")
-  val DEFAULT_SCHEDULER_FILE = "fairscheduler.xml"
+  val schedulerAllocFile = conf.getOption("spark.scheduler.allocation.file") //调度配置文件
+  val DEFAULT_SCHEDULER_FILE = "fairscheduler.xml" //默认的调度配置文件
+    
   val FAIR_SCHEDULER_PROPERTIES = "spark.scheduler.pool"
-  val DEFAULT_POOL_NAME = "default"
-  val MINIMUM_SHARES_PROPERTY = "minShare"
-  val SCHEDULING_MODE_PROPERTY = "schedulingMode"
-  val WEIGHT_PROPERTY = "weight"
-  val POOL_NAME_PROPERTY = "@name"
-  val POOLS_PROPERTY = "pool"
+  val DEFAULT_POOL_NAME = "default"//必须要有name为default的Pool
+  
+  val POOLS_PROPERTY = "pool" //配置文件的pool节点
+  val MINIMUM_SHARES_PROPERTY = "minShare"//pool节点需要的minShare
+  val SCHEDULING_MODE_PROPERTY = "schedulingMode"//pool节点需要的模式
+  val WEIGHT_PROPERTY = "weight"//pool节点需要的weight
+  val POOL_NAME_PROPERTY = "@name"//pool节点的名称
+    
+  //默认值
   val DEFAULT_SCHEDULING_MODE = SchedulingMode.FIFO
   val DEFAULT_MINIMUM_SHARE = 0
   val DEFAULT_WEIGHT = 1
 
+  //创建Pool集合,包括子Pool
   override def buildPools() {
+    
+    //读取调度配置文件,返回流
     var is: Option[InputStream] = None
     try {
       is = Option {
@@ -83,9 +104,10 @@ private[spark] class FairSchedulableBuilder(val rootPool: Pool, conf: SparkConf)
     }
 
     // finally create "default" pool
-    buildDefaultPool()
+    buildDefaultPool() //必须要有name为default的Pool
   }
 
+  //必须要有name为default的Pool,如果xml文件中不存在,则该函数创建一个默认的Pool
   private def buildDefaultPool() {
     if (rootPool.getSchedulableByName(DEFAULT_POOL_NAME) == null) {
       val pool = new Pool(DEFAULT_POOL_NAME, DEFAULT_SCHEDULING_MODE,
@@ -96,6 +118,7 @@ private[spark] class FairSchedulableBuilder(val rootPool: Pool, conf: SparkConf)
     }
   }
 
+  //参数是配置文件流,对该流进行解析
   private def buildFairSchedulerPool(is: InputStream) {
     val xml = XML.load(is)
     for (poolNode <- (xml \\ POOLS_PROPERTY)) {
@@ -125,6 +148,7 @@ private[spark] class FairSchedulableBuilder(val rootPool: Pool, conf: SparkConf)
         weight = xmlWeight.toInt
       }
 
+      //根据配置文件,生成Pool对象
       val pool = new Pool(poolName, schedulingMode, minShare, weight)
       rootPool.addSchedulable(pool)
       logInfo("Created pool %s, schedulingMode: %s, minShare: %d, weight: %d".format(
@@ -132,9 +156,13 @@ private[spark] class FairSchedulableBuilder(val rootPool: Pool, conf: SparkConf)
     }
   }
 
+  //在默认的某个名称的Pool上添加manager
   override def addTaskSetManager(manager: Schedulable, properties: Properties) {
+    
+    //获取默认的default名称的Pool
     var poolName = DEFAULT_POOL_NAME
     var parentPool = rootPool.getSchedulableByName(poolName)
+    
     if (properties != null) {
       poolName = properties.getProperty(FAIR_SCHEDULER_PROPERTIES, DEFAULT_POOL_NAME)
       parentPool = rootPool.getSchedulableByName(poolName)
@@ -148,6 +176,7 @@ private[spark] class FairSchedulableBuilder(val rootPool: Pool, conf: SparkConf)
           poolName, DEFAULT_SCHEDULING_MODE, DEFAULT_MINIMUM_SHARE, DEFAULT_WEIGHT))
       }
     }
+    
     parentPool.addSchedulable(manager)
     logInfo("Added task set " + manager.name + " tasks to pool " + poolName)
   }

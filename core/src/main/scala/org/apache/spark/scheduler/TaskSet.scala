@@ -22,6 +22,8 @@ import java.util.Properties
 /**
  * A set of tasks submitted together to the low-level TaskScheduler, usually representing
  * missing partitions of a particular stage.
+ * 表示某一个阶段的某个尝试阶段,提交一个任务集合
+ * 
  */
 private[spark] class TaskSet(
     val tasks: Array[Task[_]],

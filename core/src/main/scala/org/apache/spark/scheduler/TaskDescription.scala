@@ -26,12 +26,12 @@ import org.apache.spark.util.SerializableBuffer
  * [[TaskSetManager.resourceOffer]].
  */
 private[spark] class TaskDescription(
-    val taskId: Long,
-    val attemptNumber: Int,
+    val taskId: Long,//该任务的ID
+    val attemptNumber: Int,//该任务的尝试次数
     val executorId: String,
     val name: String,
-    val index: Int,    // Index within this task's TaskSet
-    _serializedTask: ByteBuffer)
+    val index: Int,    // Index within this task's TaskSet 该任务是TaskSet的第几个任务
+    _serializedTask: ByteBuffer) //该任务的序列化信息
   extends Serializable {
 
   // Because ByteBuffers are not serializable, wrap the task in a SerializableBuffer
