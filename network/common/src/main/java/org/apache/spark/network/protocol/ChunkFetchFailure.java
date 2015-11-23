@@ -22,10 +22,11 @@ import io.netty.buffer.ByteBuf;
 
 /**
  * Response to {@link ChunkFetchRequest} when there is an error fetching the chunk.
+ * 抓取某个数据块失败
  */
 public final class ChunkFetchFailure implements ResponseMessage {
-  public final StreamChunkId streamChunkId;
-  public final String errorString;
+  public final StreamChunkId streamChunkId;//失败的流ID
+  public final String errorString;//失败原因
 
   public ChunkFetchFailure(StreamChunkId streamChunkId, String errorString) {
     this.streamChunkId = streamChunkId;
@@ -40,12 +41,14 @@ public final class ChunkFetchFailure implements ResponseMessage {
     return streamChunkId.encodedLength() + Encoders.Strings.encodedLength(errorString);
   }
 
+  //编码
   @Override
   public void encode(ByteBuf buf) {
     streamChunkId.encode(buf);
     Encoders.Strings.encode(buf, errorString);
   }
 
+  //解码
   public static ChunkFetchFailure decode(ByteBuf buf) {
     StreamChunkId streamChunkId = StreamChunkId.decode(buf);
     String errorString = Encoders.Strings.decode(buf);

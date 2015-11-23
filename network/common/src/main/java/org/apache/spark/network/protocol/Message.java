@@ -38,13 +38,16 @@ public interface Message extends Encodable {
 
     public byte id() { return id; }
 
+    //类型所占用的字节长度
     @Override public int encodedLength() { return 1; }
 
+    //序列化,将类型id写入到参数buf中
     @Override public void encode(ByteBuf buf) { buf.writeByte(id); }
 
+    //反序列化,从buff中获取类型
     public static Type decode(ByteBuf buf) {
-      byte id = buf.readByte();
-      switch (id) {
+      byte id = buf.readByte();//获取第一个字节
+      switch (id) {//根据id获取类型
         case 0: return ChunkFetchRequest;
         case 1: return ChunkFetchSuccess;
         case 2: return ChunkFetchFailure;

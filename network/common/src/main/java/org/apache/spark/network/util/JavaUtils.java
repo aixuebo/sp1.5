@@ -35,6 +35,7 @@ import org.slf4j.LoggerFactory;
 /**
  * General utilities available in the network package. Many of these are sourced from Spark's
  * own Utils, just accessible within this package.
+ * 用在网络包里面的工具类
  */
 public class JavaUtils {
   private static final Logger logger = LoggerFactory.getLogger(JavaUtils.class);
@@ -56,7 +57,9 @@ public class JavaUtils {
     }
   }
 
-  /** Returns a hash consistent with Spark's Utils.nonNegativeHash(). */
+  /** Returns a hash consistent with Spark's Utils.nonNegativeHash(). 
+   * 返回一个非负的hash值
+   **/
   public static int nonNegativeHash(Object obj) {
     if (obj == null) { return 0; }
     int hash = obj.hashCode();
@@ -66,6 +69,7 @@ public class JavaUtils {
   /**
    * Convert the given string to a byte buffer. The resulting buffer can be
    * converted back to the same string through {@link #bytesToString(ByteBuffer)}.
+   * 将字符串转换成ByteBuffer,该方法也会被反序列化,即ByteBuffer转换成String,通过bytesToString(ByteBuffer)方法
    */
   public static ByteBuffer stringToBytes(String s) {
     return Unpooled.wrappedBuffer(s.getBytes(Charsets.UTF_8)).nioBuffer();
@@ -74,6 +78,7 @@ public class JavaUtils {
   /**
    * Convert the given byte buffer to a string. The resulting string can be
    * converted back to the same byte buffer through {@link #stringToBytes(String)}.
+   * 将ByteBuffer转换成String,该方法也会被反序列化,即将字符串转换成ByteBuffer,通过stringToBytes(String)方法
    */
   public static String bytesToString(ByteBuffer b) {
     return Unpooled.wrappedBuffer(b).toString(Charsets.UTF_8);
@@ -83,6 +88,7 @@ public class JavaUtils {
    * Delete a file or directory and its contents recursively.
    * Don't follow directories if they are symlinks.
    * Throws an exception if deletion is unsuccessful.
+   * 递归删除File文件夹或者文件
    */
   public static void deleteRecursively(File file) throws IOException {
     if (file == null) { return; }
@@ -109,6 +115,7 @@ public class JavaUtils {
     }
   }
 
+  //返回file的子目录集合
   private static File[] listFilesSafely(File file) throws IOException {
     if (file.exists()) {
       File[] files = file.listFiles();
@@ -121,6 +128,7 @@ public class JavaUtils {
     }
   }
 
+  //true表示file是软连接
   private static boolean isSymlink(File file) throws IOException {
     Preconditions.checkNotNull(file);
     File fileInCanonicalDir = null;
@@ -132,6 +140,7 @@ public class JavaUtils {
     return !fileInCanonicalDir.getCanonicalFile().equals(fileInCanonicalDir.getAbsoluteFile());
   }
 
+  //映射时间单位
   private static final ImmutableMap<String, TimeUnit> timeSuffixes = 
     ImmutableMap.<String, TimeUnit>builder()
       .put("us", TimeUnit.MICROSECONDS)
@@ -143,6 +152,7 @@ public class JavaUtils {
       .put("d", TimeUnit.DAYS)
       .build();
 
+  //映射字节单位
   private static final ImmutableMap<String, ByteUnit> byteSuffixes =
     ImmutableMap.<String, ByteUnit>builder()
       .put("b", ByteUnit.BYTE)
@@ -161,6 +171,8 @@ public class JavaUtils {
   /**
    * Convert a passed time string (e.g. 50s, 100ms, or 250us) to a time count for
    * internal use. If no suffix is provided a direct conversion is attempted.
+   * 参数str可以表示100ms,即由时间值+时间单位组成
+   * 将str组成的时间转换成参数unit对应的时间
    */
   private static long parseTimeString(String str, TimeUnit unit) {
     String lower = str.toLowerCase().trim();
@@ -171,10 +183,10 @@ public class JavaUtils {
         throw new NumberFormatException("Failed to parse time string: " + str);
       }
       
-      long val = Long.parseLong(m.group(1));
-      String suffix = m.group(2);
+      long val = Long.parseLong(m.group(1));//时间值
+      String suffix = m.group(2);//时间单位
       
-      // Check for invalid suffixes
+      // Check for invalid suffixes 说明单位不存在,则抛异常
       if (suffix != null && !timeSuffixes.containsKey(suffix)) {
         throw new NumberFormatException("Invalid suffix: \"" + suffix + "\"");
       }
@@ -193,6 +205,7 @@ public class JavaUtils {
   /**
    * Convert a time parameter such as (50s, 100ms, or 250us) to milliseconds for internal use. If
    * no suffix is provided, the passed number is assumed to be in ms.
+   * 将参数str转换成毫秒单位
    */
   public static long timeStringAsMs(String str) {
     return parseTimeString(str, TimeUnit.MILLISECONDS);
@@ -201,6 +214,7 @@ public class JavaUtils {
   /**
    * Convert a time parameter such as (50s, 100ms, or 250us) to seconds for internal use. If
    * no suffix is provided, the passed number is assumed to be in seconds.
+   * 将参数str转换成秒单位
    */
   public static long timeStringAsSec(String str) {
     return parseTimeString(str, TimeUnit.SECONDS);
@@ -210,26 +224,29 @@ public class JavaUtils {
    * Convert a passed byte string (e.g. 50b, 100kb, or 250mb) to a ByteUnit for
    * internal use. If no suffix is provided a direct conversion of the provided default is 
    * attempted.
+   * 将参数str转换成参数unit为单位的字节数
+   * 例如str可以是100kb,即由字节值+字节单位组成
    */
   private static long parseByteString(String str, ByteUnit unit) {
     String lower = str.toLowerCase().trim();
 
     try {
       Matcher m = Pattern.compile("([0-9]+)([a-z]+)?").matcher(lower);
-      Matcher fractionMatcher = Pattern.compile("([0-9]+\\.[0-9]+)([a-z]+)?").matcher(lower);
+      Matcher fractionMatcher = Pattern.compile("([0-9]+\\.[0-9]+)([a-z]+)?").matcher(lower);//匹配可以有小数的内容,例如10.4M,但是暂时不支持小数部分
       
       if (m.matches()) {
-        long val = Long.parseLong(m.group(1));
-        String suffix = m.group(2);
+        long val = Long.parseLong(m.group(1));//字节值
+        String suffix = m.group(2);//字节单位
 
-        // Check for invalid suffixes
+        // Check for invalid suffixes 字节单位不再已知的单位内,则抛异常
         if (suffix != null && !byteSuffixes.containsKey(suffix)) {
           throw new NumberFormatException("Invalid suffix: \"" + suffix + "\"");
         }
 
         // If suffix is valid use that, otherwise none was provided and use the default passed
+        //将val对应的值转换成参数unit对应的值
         return unit.convertFrom(val, suffix != null ? byteSuffixes.get(suffix) : unit);  
-      } else if (fractionMatcher.matches()) {
+      } else if (fractionMatcher.matches()) {//说明匹配到有小数,但是暂时不支持
         throw new NumberFormatException("Fractional values are not supported. Input was: " 
           + fractionMatcher.group(1));
       } else {
@@ -250,6 +267,7 @@ public class JavaUtils {
    * internal use.
    * 
    * If no suffix is provided, the passed number is assumed to be in bytes.
+   * 将参数转换成字节单位
    */
   public static long byteStringAsBytes(String str) {
     return parseByteString(str, ByteUnit.BYTE);
@@ -260,6 +278,7 @@ public class JavaUtils {
    * internal use.
    *
    * If no suffix is provided, the passed number is assumed to be in kibibytes.
+   * 将参数转换成k单位
    */
   public static long byteStringAsKb(String str) {
     return parseByteString(str, ByteUnit.KiB);
@@ -270,6 +289,7 @@ public class JavaUtils {
    * internal use.
    *
    * If no suffix is provided, the passed number is assumed to be in mebibytes.
+   * 将参数转换成M单位
    */
   public static long byteStringAsMb(String str) {
     return parseByteString(str, ByteUnit.MiB);
@@ -280,6 +300,7 @@ public class JavaUtils {
    * internal use.
    *
    * If no suffix is provided, the passed number is assumed to be in gibibytes.
+   * 将参数转换成G单位
    */
   public static long byteStringAsGb(String str) {
     return parseByteString(str, ByteUnit.GiB);

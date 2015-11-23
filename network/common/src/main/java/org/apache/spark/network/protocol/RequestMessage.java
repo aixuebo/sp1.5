@@ -19,7 +19,7 @@ package org.apache.spark.network.protocol;
 
 import org.apache.spark.network.protocol.Message;
 
-/** Messages from the client to the server. */
+/** Messages from the client to the server.从客户端发送一个请求,父类包含了客户端发送什么请求类型 */
 public interface RequestMessage extends Message {
   // token interface
 }

@@ -137,13 +137,14 @@ public class TransportClient implements Closeable {
   /**
    * Sends an opaque message to the RpcHandler on the server-side. The callback will be invoked
    * with the server's response or upon any failure.
+   * 向channel对应的服务器发送信息message,完成后回调callback函数
    */
   public void sendRpc(byte[] message, final RpcResponseCallback callback) {
-    final String serverAddr = NettyUtils.getRemoteAddress(channel);
+    final String serverAddr = NettyUtils.getRemoteAddress(channel);//channel的服务器地址
     final long startTime = System.currentTimeMillis();
-    logger.trace("Sending RPC to {}", serverAddr);
+    logger.trace("Sending RPC to {}", serverAddr);//向服务器发送RPC信息
 
-    final long requestId = Math.abs(UUID.randomUUID().getLeastSignificantBits());
+    final long requestId = Math.abs(UUID.randomUUID().getLeastSignificantBits());//随机产生一个请求ID
     handler.addRpcRequest(requestId, callback);
 
     channel.writeAndFlush(new RpcRequest(requestId, message)).addListener(

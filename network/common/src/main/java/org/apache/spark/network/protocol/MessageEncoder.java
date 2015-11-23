@@ -29,6 +29,7 @@ import org.slf4j.LoggerFactory;
 /**
  * Encoder used by the server side to encode server-to-client responses.
  * This encoder is stateless so it is safe to be shared by multiple threads.
+ * 编码类
  */
 @ChannelHandler.Sharable
 public final class MessageEncoder extends MessageToMessageEncoder<Message> {
@@ -40,15 +41,16 @@ public final class MessageEncoder extends MessageToMessageEncoder<Message> {
    * ByteBuf to 'out' containing the total frame length, the message type, and the message itself.
    * In the case of a ChunkFetchSuccess, we will also add the ManagedBuffer corresponding to the
    * data to 'out', in order to enable zero-copy transfer.
+   * 输出的对象会追加到out中
    */
   @Override
   public void encode(ChannelHandlerContext ctx, Message in, List<Object> out) {
-    Object body = null;
-    long bodyLength = 0;
+    Object body = null;//body正文对象
+    long bodyLength = 0;//body字节大小
 
     // Only ChunkFetchSuccesses have data besides the header.
     // The body is used in order to enable zero-copy transfer for the payload.
-    if (in instanceof ChunkFetchSuccess) {
+    if (in instanceof ChunkFetchSuccess) {//body正文
       ChunkFetchSuccess resp = (ChunkFetchSuccess) in;
       try {
         bodyLength = resp.buffer.size();
@@ -64,14 +66,18 @@ public final class MessageEncoder extends MessageToMessageEncoder<Message> {
 
     Message.Type msgType = in.type();
     // All messages have the frame length, message type, and message itself.
-    int headerLength = 8 + msgType.encodedLength() + in.encodedLength();
-    long frameLength = headerLength + bodyLength;
+    int headerLength = 8 + msgType.encodedLength() + in.encodedLength();//头字节数,8表示frameLength传输的总字节数,即头字节+body字节总数,+信息分类标示+header头内容总和
+    long frameLength = headerLength + bodyLength;//传输的总字节数,即头字节+body字节总数
+    
+    //分配头空间,写入头信息
     ByteBuf header = ctx.alloc().heapBuffer(headerLength);
     header.writeLong(frameLength);
     msgType.encode(header);
     in.encode(header);
+    
     assert header.writableBytes() == 0;
 
+    //如果body不是空,则添加到out中
     if (body != null && bodyLength > 0) {
       out.add(new MessageWithHeader(header, body, bodyLength));
     } else {

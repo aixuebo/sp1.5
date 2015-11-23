@@ -21,21 +21,30 @@ package org.apache.spark.network.protocol;
 import com.google.common.base.Charsets;
 import io.netty.buffer.ByteBuf;
 
-/** Provides a canonical set of Encoders for simple types. */
+/** Provides a canonical set of Encoders for simple types. 
+ * 提供一个权威的编码与解码器
+ **/
 public class Encoders {
 
-  /** Strings are encoded with their length followed by UTF-8 bytes. */
+  /** Strings are encoded with their length followed by UTF-8 bytes. 
+   * 对String进行编码
+   * 格式
+   * 4个字节的int,表示String转换成UTF-8编码后字节大小
+   * UTF-8编码的字节数组
+   **/
   public static class Strings {
     public static int encodedLength(String s) {
       return 4 + s.getBytes(Charsets.UTF_8).length;
     }
 
+    //编码
     public static void encode(ByteBuf buf, String s) {
       byte[] bytes = s.getBytes(Charsets.UTF_8);
       buf.writeInt(bytes.length);
       buf.writeBytes(bytes);
     }
 
+    //解码
     public static String decode(ByteBuf buf) {
       int length = buf.readInt();
       byte[] bytes = new byte[length];
@@ -44,17 +53,24 @@ public class Encoders {
     }
   }
 
-  /** Byte arrays are encoded with their length followed by bytes. */
+  /** Byte arrays are encoded with their length followed by bytes.
+   * 对字节数组编码
+   * 格式
+   * 4个字节的int,表示字节数组大小
+   * 字节数组内容
+   **/
   public static class ByteArrays {
     public static int encodedLength(byte[] arr) {
       return 4 + arr.length;
     }
 
+    //编码
     public static void encode(ByteBuf buf, byte[] arr) {
       buf.writeInt(arr.length);
       buf.writeBytes(arr);
     }
 
+    //解码
     public static byte[] decode(ByteBuf buf) {
       int length = buf.readInt();
       byte[] bytes = new byte[length];
@@ -63,7 +79,12 @@ public class Encoders {
     }
   }
 
-  /** String arrays are encoded with the number of strings followed by per-String encoding. */
+  /** String arrays are encoded with the number of strings followed by per-String encoding. 
+   * 对String数组编码
+   * 格式:
+   * 4个字节的int,表示数组大小
+   * 每一个String,又用UTF-8的字节数组存储字节
+   **/
   public static class StringArrays {
     public static int encodedLength(String[] strings) {
       int totalLength = 4;
@@ -73,6 +94,7 @@ public class Encoders {
       return totalLength;
     }
 
+    //编码
     public static void encode(ByteBuf buf, String[] strings) {
       buf.writeInt(strings.length);
       for (String s : strings) {
@@ -80,6 +102,7 @@ public class Encoders {
       }
     }
 
+    //解码
     public static String[] decode(ByteBuf buf) {
       int numStrings = buf.readInt();
       String[] strings = new String[numStrings];

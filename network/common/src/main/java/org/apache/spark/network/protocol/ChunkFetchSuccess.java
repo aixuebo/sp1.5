@@ -29,10 +29,11 @@ import org.apache.spark.network.buffer.NettyManagedBuffer;
  * Note that the server-side encoding of this messages does NOT include the buffer itself, as this
  * may be written by Netty in a more efficient manner (i.e., zero-copy write).
  * Similarly, the client-side decoding will reuse the Netty ByteBuf as the buffer.
+ * 抓取某个数据块成功
  */
 public final class ChunkFetchSuccess implements ResponseMessage {
-  public final StreamChunkId streamChunkId;
-  public final ManagedBuffer buffer;
+  public final StreamChunkId streamChunkId;//针对哪个流的哪个数据块抓取
+  public final ManagedBuffer buffer;//数据块的正文信息
 
   public ChunkFetchSuccess(StreamChunkId streamChunkId, ManagedBuffer buffer) {
     this.streamChunkId = streamChunkId;
@@ -47,13 +48,17 @@ public final class ChunkFetchSuccess implements ResponseMessage {
     return streamChunkId.encodedLength();
   }
 
-  /** Encoding does NOT include 'buffer' itself. See {@link MessageEncoder}. */
+  /** Encoding does NOT include 'buffer' itself. See {@link MessageEncoder}.
+   * 编码
+   **/
   @Override
   public void encode(ByteBuf buf) {
     streamChunkId.encode(buf);
   }
 
-  /** Decoding uses the given ByteBuf as our data, and will retain() it. */
+  /** Decoding uses the given ByteBuf as our data, and will retain() it. 
+   * 解码 
+   **/
   public static ChunkFetchSuccess decode(ByteBuf buf) {
     StreamChunkId streamChunkId = StreamChunkId.decode(buf);
     buf.retain();

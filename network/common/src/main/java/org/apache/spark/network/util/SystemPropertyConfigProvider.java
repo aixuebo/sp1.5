@@ -21,7 +21,7 @@ import java.util.NoSuchElementException;
 
 import org.apache.spark.network.util.ConfigProvider;
 
-/** Uses System properties to obtain config values. */
+/** Uses System properties to obtain config values.从系统中获取参数 */
 public class SystemPropertyConfigProvider extends ConfigProvider {
   @Override
   public String get(String name) {

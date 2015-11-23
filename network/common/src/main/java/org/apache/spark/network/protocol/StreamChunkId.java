@@ -24,8 +24,8 @@ import io.netty.buffer.ByteBuf;
 * Encapsulates a request for a particular chunk of a stream.
 */
 public final class StreamChunkId implements Encodable {
-  public final long streamId;
-  public final int chunkIndex;
+  public final long streamId;//数据流ID
+  public final int chunkIndex;//该数据流ID对应的哪个数据块
 
   public StreamChunkId(long streamId, int chunkIndex) {
     this.streamId = streamId;
@@ -37,11 +37,13 @@ public final class StreamChunkId implements Encodable {
     return 8 + 4;
   }
 
+  //编码
   public void encode(ByteBuf buffer) {
     buffer.writeLong(streamId);
     buffer.writeInt(chunkIndex);
   }
 
+  //解码
   public static StreamChunkId decode(ByteBuf buffer) {
     assert buffer.readableBytes() >= 8 + 4;
     long streamId = buffer.readLong();

@@ -21,8 +21,11 @@ import com.google.common.primitives.Ints;
 
 /**
  * A central location that tracks all the settings we expose to users.
+ * 暴露给用户的属性信息,允许用户设置配置文件的值
  */
 public class TransportConf {
+	
+  //配置文件对象
   private final ConfigProvider conf;
 
   public TransportConf(ConfigProvider conf) {
@@ -37,7 +40,9 @@ public class TransportConf {
     return conf.getBoolean("spark.shuffle.io.preferDirectBufs", true);
   }
 
-  /** Connect timeout in milliseconds. Default 120 secs. */
+  /** Connect timeout in milliseconds. Default 120 secs.
+   * 默认120s,获取连接超时时间
+   **/
   public int connectionTimeoutMs() {
     long defaultNetworkTimeoutS = JavaUtils.timeStringAsSec(
       conf.get("spark.network.timeout", "120s"));

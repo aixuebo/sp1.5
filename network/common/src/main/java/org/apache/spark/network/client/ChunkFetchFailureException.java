@@ -19,9 +19,13 @@ package org.apache.spark.network.client;
 
 /**
  * General exception caused by a remote exception while fetching a chunk.
+ * 抓取数据块失败
  */
 public class ChunkFetchFailureException extends RuntimeException {
-  public ChunkFetchFailureException(String errorMsg, Throwable cause) {
+
+private static final long serialVersionUID = 1L;
+
+public ChunkFetchFailureException(String errorMsg, Throwable cause) {
     super(errorMsg, cause);
   }
 

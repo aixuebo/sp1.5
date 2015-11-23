@@ -20,10 +20,12 @@ package org.apache.spark.network.protocol;
 import com.google.common.base.Objects;
 import io.netty.buffer.ByteBuf;
 
-/** Response to {@link RpcRequest} for a failed RPC. */
+/** Response to {@link RpcRequest} for a failed RPC.
+ * RPC失败
+ **/
 public final class RpcFailure implements ResponseMessage {
-  public final long requestId;
-  public final String errorString;
+  public final long requestId;//针对某个请求产生的RPC失败
+  public final String errorString;//失败原因
 
   public RpcFailure(long requestId, String errorString) {
     this.requestId = requestId;
@@ -33,17 +35,20 @@ public final class RpcFailure implements ResponseMessage {
   @Override
   public Type type() { return Type.RpcFailure; }
 
+  //8表示long类型的requestId
   @Override
   public int encodedLength() {
     return 8 + Encoders.Strings.encodedLength(errorString);
   }
 
+  //编码
   @Override
   public void encode(ByteBuf buf) {
     buf.writeLong(requestId);
     Encoders.Strings.encode(buf, errorString);
   }
 
+  //解码
   public static RpcFailure decode(ByteBuf buf) {
     long requestId = buf.readLong();
     String errorString = Encoders.Strings.decode(buf);

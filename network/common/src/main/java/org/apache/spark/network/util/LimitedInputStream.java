@@ -46,27 +46,33 @@ import com.google.common.base.Preconditions;
  *
  * This code is from Guava's 14.0 source code, because there is no compatible way to
  * use this functionality in both a Guava 11 environment and a Guava &gt;14 environment.
+ * 包装一个输入流,限制该输入流读取的大小,即读取到left位置就不允许读取了
  */
 public final class LimitedInputStream extends FilterInputStream {
-  private long left;
+  private long left;//还可以读取多少个字节
   private long mark = -1;
 
+  //校验limit必须是非负数
   public LimitedInputStream(InputStream in, long limit) {
     super(in);
     Preconditions.checkNotNull(in);
     Preconditions.checkArgument(limit >= 0, "limit must be non-negative");
     left = limit;
   }
+  
+  //最多允许有left个字节可以读取
   @Override public int available() throws IOException {
     return (int) Math.min(in.available(), left);
   }
+  
   // it's okay to mark even if mark isn't supported, as reset won't work
   @Override public synchronized void mark(int readLimit) {
     in.mark(readLimit);
     mark = left;
   }
+  
   @Override public int read() throws IOException {
-    if (left == 0) {
+    if (left == 0) {//如果没有字节读取了,则返回-1
       return -1;
     }
     int result = in.read();
@@ -86,6 +92,7 @@ public final class LimitedInputStream extends FilterInputStream {
     }
     return result;
   }
+  
   @Override public synchronized void reset() throws IOException {
     if (!in.markSupported()) {
       throw new IOException("Mark not supported");
@@ -96,6 +103,7 @@ public final class LimitedInputStream extends FilterInputStream {
     in.reset();
     left = mark;
   }
+  
   @Override public long skip(long n) throws IOException {
     n = Math.min(n, left);
     long skipped = in.skip(n);

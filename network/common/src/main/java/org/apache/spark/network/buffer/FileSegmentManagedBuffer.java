@@ -35,6 +35,7 @@ import org.apache.spark.network.util.TransportConf;
 
 /**
  * A {@link ManagedBuffer} backed by a segment in a file.
+ * 文件方式存储字节数组
  */
 public final class FileSegmentManagedBuffer extends ManagedBuffer {
   private final TransportConf conf;

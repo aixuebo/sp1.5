@@ -16,6 +16,7 @@
  */
 package org.apache.spark.network.util;
 
+//字节单位
 public enum ByteUnit {
   BYTE (1),
   KiB (1024L),
@@ -24,6 +25,7 @@ public enum ByteUnit {
   TiB ((long) Math.pow(1024L, 4L)),
   PiB ((long) Math.pow(1024L, 5L));
 
+  //该字节单位存储多少个字节
   private ByteUnit(long multiplier) {
     this.multiplier = multiplier;
   }
@@ -50,6 +52,7 @@ public enum ByteUnit {
     }
   }
 
+  //将d转换成字节总数,如果该对象是MiB,d=3,表示将3M转换成字节数
   public double toBytes(long d) {
     if (d < 0) {
       throw new IllegalArgumentException("Negative size value. Size must be positive: " + d);
@@ -63,5 +66,5 @@ public enum ByteUnit {
   public long toTiB(long d) { return convertTo(d, TiB); }
   public long toPiB(long d) { return convertTo(d, PiB); }
   
-  private final long multiplier;
+  private final long multiplier;//该字节单位存储多少个字节
 }

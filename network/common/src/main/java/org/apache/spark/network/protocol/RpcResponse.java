@@ -24,8 +24,8 @@ import io.netty.buffer.ByteBuf;
 
 /** Response to {@link RpcRequest} for a successful RPC. */
 public final class RpcResponse implements ResponseMessage {
-  public final long requestId;
-  public final byte[] response;
+  public final long requestId;//针对请求requestId的Response
+  public final byte[] response;//回复的内容信息
 
   public RpcResponse(long requestId, byte[] response) {
     this.requestId = requestId;
@@ -35,15 +35,18 @@ public final class RpcResponse implements ResponseMessage {
   @Override
   public Type type() { return Type.RpcResponse; }
 
+  //8表示long类型的requestId
   @Override
   public int encodedLength() { return 8 + Encoders.ByteArrays.encodedLength(response); }
 
+  //编码
   @Override
   public void encode(ByteBuf buf) {
     buf.writeLong(requestId);
     Encoders.ByteArrays.encode(buf, response);
   }
 
+  //解码
   public static RpcResponse decode(ByteBuf buf) {
     long requestId = buf.readLong();
     byte[] response = Encoders.ByteArrays.decode(buf);

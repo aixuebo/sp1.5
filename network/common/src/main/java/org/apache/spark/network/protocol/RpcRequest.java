@@ -42,17 +42,20 @@ public final class RpcRequest implements RequestMessage {
   @Override
   public Type type() { return Type.RpcRequest; }
 
+  //8个字节表示long类型的requestId
   @Override
   public int encodedLength() {
     return 8 + Encoders.ByteArrays.encodedLength(message);
   }
 
+  //将requestId和字节内容都编码到buf中
   @Override
   public void encode(ByteBuf buf) {
     buf.writeLong(requestId);
     Encoders.ByteArrays.encode(buf, message);
   }
 
+  //从buf中解码请求类型和信息
   public static RpcRequest decode(ByteBuf buf) {
     long requestId = buf.readLong();
     byte[] message = Encoders.ByteArrays.decode(buf);

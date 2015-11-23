@@ -131,7 +131,9 @@ public class NettyUtils {
     );
   }
 
-  /** Used to get defaults from Netty's private static fields. */
+  /** Used to get defaults from Netty's private static fields.
+   *  获取Netty's的私有属性的值
+   **/
   private static int getPrivateStaticField(String name) {
     try {
       Field f = PooledByteBufAllocator.DEFAULT.getClass().getDeclaredField(name);

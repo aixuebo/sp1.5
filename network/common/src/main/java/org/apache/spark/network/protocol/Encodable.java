@@ -27,15 +27,17 @@ import io.netty.buffer.ByteBuf;
  * {@link MessageDecoder}. During decoding, if the object uses the ByteBuf as its data (rather than
  * just copying data from it), then you must retain() the ByteBuf.
  *
- * Additionally, when adding a new Encodable Message, add it to {@link Message.Type}.
+ * Additionally, when adding a new Encodable Message, add it to {@link Message.Type}.、
+ * 将对象序列化,序列化到buff中,参见方法 void encode(ByteBuf buf);
  */
 public interface Encodable {
-  /** Number of bytes of the encoded form of this object. */
+  /** Number of bytes of the encoded form of this object. 编码后多少个字节*/
   int encodedLength();
 
   /**
    * Serializes this object by writing into the given ByteBuf.
    * This method must write exactly encodedLength() bytes.
+   * 将编码的信息存储到buff中
    */
   void encode(ByteBuf buf);
 }

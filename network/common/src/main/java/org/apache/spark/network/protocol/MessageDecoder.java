@@ -29,15 +29,18 @@ import org.slf4j.LoggerFactory;
 /**
  * Decoder used by the client side to encode server-to-client responses.
  * This encoder is stateless so it is safe to be shared by multiple threads.
+ * 解析类
  */
 @ChannelHandler.Sharable
 public final class MessageDecoder extends MessageToMessageDecoder<ByteBuf> {
 
   private final Logger logger = LoggerFactory.getLogger(MessageDecoder.class);
+  
+  //解析
   @Override
   public void decode(ChannelHandlerContext ctx, ByteBuf in, List<Object> out) {
-    Message.Type msgType = Message.Type.decode(in);
-    Message decoded = decode(msgType, in);
+    Message.Type msgType = Message.Type.decode(in);//获取消息类型
+    Message decoded = decode(msgType, in);//解析message信息
     assert decoded.type() == msgType;
     logger.trace("Received message " + msgType + ": " + decoded);
     out.add(decoded);

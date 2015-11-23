@@ -25,6 +25,7 @@ import org.apache.spark.network.buffer.ManagedBuffer;
  * made.
  *
  * Note that if a general stream failure occurs, all outstanding chunk requests may be failed.
+ * 该对象表示接收数据块失败
  */
 public interface ChunkReceivedCallback {
   /**
@@ -33,6 +34,9 @@ public interface ChunkReceivedCallback {
    * The given buffer will initially have a refcount of 1, but will be release()'d as soon as this
    * call returns. You must therefore either retain() the buffer or copy its contents before
    * returning.
+   * 成功接收到服务器传回来的数据块,
+   * @chunkIndex 表示第几个数据块
+   * @buffer 表示接收到的数据块信息
    */
   void onSuccess(int chunkIndex, ManagedBuffer buffer);
 
@@ -42,6 +46,9 @@ public interface ChunkReceivedCallback {
    *
    * After receiving a failure, the stream may or may not be valid. The client should not assume
    * that the server's side of the stream has been closed.
+   * 接收数据块失败
+   * @chunkIndex 表示第几个数据块失败了
+   * @e 表示失败信息
    */
   void onFailure(int chunkIndex, Throwable e);
 }
