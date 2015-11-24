@@ -88,6 +88,7 @@ public class RetryingBlockFetcher {
    * Set of all block ids which have not been fetched successfully or with a non-IO Exception.
    * A retry involves requesting every outstanding block. Note that since this is a LinkedHashSet,
    * input ordering is preserved, so we always request blocks in the same order the user provided.
+   * 尚未抓取成功的数据块集合
    */
   private final LinkedHashSet<String> outstandingBlocksIds;
 
@@ -187,8 +188,13 @@ public class RetryingBlockFetcher {
    * Our RetryListener intercepts block fetch responses and forwards them to our parent listener.
    * Note that in the event of a retry, we will immediately replace the 'currentListener' field,
    * indicating that any responses from non-current Listeners should be ignored.
+   * 抓取监听实现类,在ShuffleClient去抓取一个ip:port的数据的时候,使用该监听,及时通知ShuffleClient抓取情况
    */
   private class RetryingBlockFetchListener implements BlockFetchingListener {
+	  /**
+	   * 参数data是该blockId数据块对应的字节内容
+	   * 当数据块blockId抓取成功后调用该函数
+	   */
     @Override
     public void onBlockFetchSuccess(String blockId, ManagedBuffer data) {
       // We will only forward this success message to our parent listener if this block request is

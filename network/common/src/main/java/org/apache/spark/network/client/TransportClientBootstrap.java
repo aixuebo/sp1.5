@@ -21,14 +21,17 @@ import io.netty.channel.Channel;
 
 /**
  * A bootstrap which is executed on a TransportClient before it is returned to the user.
+ * 相当于拦截器,在一个TransportClient返回给用户前,执行一个程序引导操作
  * This enables an initial exchange of information (e.g., SASL authentication tokens) on a once-per-
  * connection basis.
- *
+ * 
  * Since connections (and TransportClients) are reused as much as possible, it is generally
  * reasonable to perform an expensive bootstrapping operation, as they often share a lifespan with
  * the JVM itself.
  */
 public interface TransportClientBootstrap {
-  /** Performs the bootstrapping operation, throwing an exception on failure. */
+  /** Performs the bootstrapping operation, throwing an exception on failure.
+   *  在返回给用户一个TransportClient使用之前,对TransportClient和交流的渠道Channel进行拦截处理程序引导
+   **/
   void doBootstrap(TransportClient client, Channel channel) throws RuntimeException;
 }

@@ -32,6 +32,7 @@ import org.apache.spark.network.shuffle.protocol.mesos.RegisterDriver;
  *     shuffle service. It returns a StreamHandle.
  *   - UploadBlock is only handled by the NettyBlockTransferService.
  *   - RegisterExecutor is only handled by the external shuffle service.
+ *   定义传输的数据块类型
  */
 public abstract class BlockTransferMessage implements Encodable {
   protected abstract Type type();
@@ -51,6 +52,7 @@ public abstract class BlockTransferMessage implements Encodable {
   }
 
   // NB: Java does not support static methods in interfaces, so we must put this in a static class.
+  //反序列化,从字节数组中获取传输的数据块类型以及具体内容
   public static class Decoder {
     /** Deserializes the 'type' byte followed by the message itself. */
     public static BlockTransferMessage fromByteArray(byte[] msg) {
@@ -67,7 +69,9 @@ public abstract class BlockTransferMessage implements Encodable {
     }
   }
 
-  /** Serializes the 'type' byte followed by the message itself. */
+  /** Serializes the 'type' byte followed by the message itself. 
+   * 将数据块类型以及数据块内容写成缓存数组 
+   */
   public byte[] toByteArray() {
     // Allow room for encoded message, plus the type byte
     ByteBuf buf = Unpooled.buffer(encodedLength() + 1);

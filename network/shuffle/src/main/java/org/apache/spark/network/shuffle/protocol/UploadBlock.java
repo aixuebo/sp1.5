@@ -17,18 +17,19 @@
 
 package org.apache.spark.network.shuffle.protocol;
 
-import java.util.Arrays;
-
-import com.google.common.base.Objects;
 import io.netty.buffer.ByteBuf;
+
+import java.util.Arrays;
 
 import org.apache.spark.network.protocol.Encoders;
 
+import com.google.common.base.Objects;
 // Needed by ScalaDoc. See SPARK-7726
-import static org.apache.spark.network.shuffle.protocol.BlockTransferMessage.Type;
 
 
-/** Request to upload a block with a certain StorageLevel. Returns nothing (empty byte array). */
+/** Request to upload a block with a certain StorageLevel. Returns nothing (empty byte array). 
+ * 上传一个数据块的信息 
+ **/
 public class UploadBlock extends BlockTransferMessage {
   public final String appId;
   public final String execId;

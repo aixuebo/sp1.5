@@ -17,17 +17,17 @@
 
 package org.apache.spark.network.shuffle.protocol;
 
-import com.google.common.base.Objects;
 import io.netty.buffer.ByteBuf;
 
 import org.apache.spark.network.protocol.Encoders;
 
+import com.google.common.base.Objects;
 // Needed by ScalaDoc. See SPARK-7726
-import static org.apache.spark.network.shuffle.protocol.BlockTransferMessage.Type;
 
 /**
  * Initial registration message between an executor and its local shuffle server.
  * Returns nothing (empty byte array).
+ * 初始化注册信息,从执行者到本地的shuffle服务器
  */
 public class RegisterExecutor extends BlockTransferMessage {
   public final String appId;

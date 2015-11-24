@@ -87,7 +87,6 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
       RegisterExecutor msg = (RegisterExecutor) msgObj;
       blockManager.registerExecutor(msg.appId, msg.execId, msg.executorInfo);
       callback.onSuccess(new byte[0]);
-
     } else {
       throw new UnsupportedOperationException("Unexpected message: " + msgObj);
     }

@@ -47,13 +47,14 @@ import org.apache.spark.network.util.NettyUtils;
  * We consider a connection timed out if there are outstanding fetch or RPC requests but no traffic
  * on the channel for at least `requestTimeoutMs`. Note that this is duplex traffic; we will not
  * timeout if the client is continuously sending but getting no responses, for simplicity.
+ * 与clientFactory绑定的入口类
  */
 public class TransportChannelHandler extends SimpleChannelInboundHandler<Message> {
   private final Logger logger = LoggerFactory.getLogger(TransportChannelHandler.class);
 
-  private final TransportClient client;
-  private final TransportResponseHandler responseHandler;
-  private final TransportRequestHandler requestHandler;
+  private final TransportClient client;//客户端对象
+  private final TransportResponseHandler responseHandler;//处理返回值
+  private final TransportRequestHandler requestHandler;//处理请求信息
   private final long requestTimeoutNs;
 
   public TransportChannelHandler(

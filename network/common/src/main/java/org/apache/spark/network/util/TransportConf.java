@@ -51,7 +51,9 @@ public class TransportConf {
     return (int) defaultTimeoutMs;
   }
 
-  /** Number of concurrent connections between two nodes for fetching data. */
+  /** Number of concurrent connections between two nodes for fetching data. 
+   *  每一个ip:port对应一个该线程池,线程池的size数量由conf.numConnectionsPerPeer()决定
+   **/
   public int numConnectionsPerPeer() {
     return conf.getInt("spark.shuffle.io.numConnectionsPerPeer", 1);
   }

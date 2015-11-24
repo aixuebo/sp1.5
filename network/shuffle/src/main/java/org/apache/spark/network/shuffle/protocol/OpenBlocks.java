@@ -17,17 +17,18 @@
 
 package org.apache.spark.network.shuffle.protocol;
 
-import java.util.Arrays;
-
-import com.google.common.base.Objects;
 import io.netty.buffer.ByteBuf;
+
+import java.util.Arrays;
 
 import org.apache.spark.network.protocol.Encoders;
 
+import com.google.common.base.Objects;
 // Needed by ScalaDoc. See SPARK-7726
-import static org.apache.spark.network.shuffle.protocol.BlockTransferMessage.Type;
 
-/** Request to read a set of blocks. Returns {@link StreamHandle}. */
+/** Request to read a set of blocks. Returns {@link StreamHandle}.
+ * 请求读取一组数据块 
+ **/
 public class OpenBlocks extends BlockTransferMessage {
   public final String appId;
   public final String execId;

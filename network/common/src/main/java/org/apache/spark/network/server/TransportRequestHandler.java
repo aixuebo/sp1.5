@@ -90,6 +90,7 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
     }
   }
 
+  //处理抓取数据块
   private void processFetchRequest(final ChunkFetchRequest req) {
     final String client = NettyUtils.getRemoteAddress(channel);
 
@@ -109,6 +110,7 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
     respond(new ChunkFetchSuccess(req.streamChunkId, buf));
   }
 
+  //处理RPC请求
   private void processRpcRequest(final RpcRequest req) {
     try {
       rpcHandler.receive(reverseClient, req.message, new RpcResponseCallback() {

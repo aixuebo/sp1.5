@@ -64,12 +64,13 @@ import org.apache.spark.network.util.NettyUtils;
  * responsible for handling responses from the server.
  *
  * Concurrency: thread safe and can be called from multiple threads.
+ * 真正的一个客户端与ip:port的链接
  */
 public class TransportClient implements Closeable {
   private final Logger logger = LoggerFactory.getLogger(TransportClient.class);
 
-  private final Channel channel;
-  private final TransportResponseHandler handler;
+  private final Channel channel;//客户端与ip:port交流的通道
+  private final TransportResponseHandler handler;//处理每次请求request和返回值response的工具类
 
   public TransportClient(Channel channel, TransportResponseHandler handler) {
     this.channel = Preconditions.checkNotNull(channel);
@@ -80,6 +81,7 @@ public class TransportClient implements Closeable {
     return channel.isOpen() || channel.isActive();
   }
 
+  //获取服务器地址
   public SocketAddress getSocketAddress() {
     return channel.remoteAddress();
   }
@@ -98,33 +100,39 @@ public class TransportClient implements Closeable {
    *                 be agreed upon by client and server beforehand.
    * @param chunkIndex 0-based index of the chunk to fetch
    * @param callback Callback invoked upon successful receipt of chunk, or upon any failure.
+   * 抓取哪个流ID的第几个数据块
    */
   public void fetchChunk(
-      long streamId,
-      final int chunkIndex,
-      final ChunkReceivedCallback callback) {
+      long streamId,//抓取哪个流ID
+      final int chunkIndex,//抓取哪个流ID的第几个数据块
+      final ChunkReceivedCallback callback) {//回调函数
+	//获取服务器地址
     final String serverAddr = NettyUtils.getRemoteAddress(channel);
     final long startTime = System.currentTimeMillis();
+    //打印日志,准备抓取哪个流ID的第几个数据块
     logger.debug("Sending fetch chunk request {} to {}", chunkIndex, serverAddr);
 
+    //创建StreamChunkId对象,并且将StreamChunkId与回调函数进行关联绑定
     final StreamChunkId streamChunkId = new StreamChunkId(streamId, chunkIndex);
     handler.addFetchRequest(streamChunkId, callback);
 
+    
     channel.writeAndFlush(new ChunkFetchRequest(streamChunkId)).addListener(
       new ChannelFutureListener() {
         @Override
         public void operationComplete(ChannelFuture future) throws Exception {
-          if (future.isSuccess()) {
+          if (future.isSuccess()) {//操作成功获取结果,则打印消耗的时间
             long timeTaken = System.currentTimeMillis() - startTime;
             logger.trace("Sending request {} to {} took {} ms", streamChunkId, serverAddr,
               timeTaken);
-          } else {
+          } else {//没有成功获取,则打印异常日志
             String errorMsg = String.format("Failed to send request %s to %s: %s", streamChunkId,
               serverAddr, future.cause());
             logger.error(errorMsg, future.cause());
             handler.removeFetchRequest(streamChunkId);
             channel.close();
             try {
+              //回调函数中记录失败原因
               callback.onFailure(chunkIndex, new IOException(errorMsg, future.cause()));
             } catch (Exception e) {
               logger.error("Uncaught exception in RPC response callback handler!", e);
@@ -152,6 +160,7 @@ public class TransportClient implements Closeable {
         @Override
         public void operationComplete(ChannelFuture future) throws Exception {
           if (future.isSuccess()) {
+        	  //成功,则打印消耗时间
             long timeTaken = System.currentTimeMillis() - startTime;
             logger.trace("Sending request {} to {} took {} ms", requestId, serverAddr, timeTaken);
           } else {
@@ -161,6 +170,7 @@ public class TransportClient implements Closeable {
             handler.removeRpcRequest(requestId);
             channel.close();
             try {
+              //失败,则打印异常日志
               callback.onFailure(new IOException(errorMsg, future.cause()));
             } catch (Exception e) {
               logger.error("Uncaught exception in RPC response callback handler!", e);

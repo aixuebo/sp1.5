@@ -71,10 +71,12 @@ public class ExternalShuffleClient extends ShuffleClient {
     this.saslEncryptionEnabled = saslEncryptionEnabled;
   }
 
+  //校验是否初始化完成,没完成,则会抛异常
   protected void checkInit() {
     assert appId != null : "Called before init()";
   }
 
+  //进行初始化
   @Override
   public void init(String appId) {
     this.appId = appId;

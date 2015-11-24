@@ -59,7 +59,10 @@ import org.apache.spark.network.util.TransportConf;
  */
 public class TransportClientFactory implements Closeable {
 
-  /** A simple data structure to track the pool of clients between two peer nodes. */
+  /** A simple data structure to track the pool of clients between two peer nodes. 
+   * 一个简单的线程池,每一个ip:port对应一个该线程池
+   * 线程池的size数量由conf.numConnectionsPerPeer()决定
+   **/
   private static class ClientPool {
     TransportClient[] clients;
     Object[] locks;
@@ -78,11 +81,14 @@ public class TransportClientFactory implements Closeable {
   private final TransportContext context;
   private final TransportConf conf;
   private final List<TransportClientBootstrap> clientBootstraps;
+  //每一个ip:port对应一个线程池,key是ip:port value是线程池ClientPool
   private final ConcurrentHashMap<SocketAddress, ClientPool> connectionPool;
 
-  /** Random number generator for picking connections between peers. */
+  /** Random number generator for picking connections between peers.
+   * 随机数,随机从 ClientPool连接池中获取一个连接,随机数从numConnectionsPerPeer中随机选择一个
+   **/
   private final Random rand;
-  private final int numConnectionsPerPeer;
+  private final int numConnectionsPerPeer;//每一个ip:port对应一个该线程池,线程池的size数量由conf.numConnectionsPerPeer()决定
 
   private final Class<? extends Channel> socketChannelClass;
   private EventLoopGroup workerGroup;
@@ -94,8 +100,9 @@ public class TransportClientFactory implements Closeable {
     this.context = Preconditions.checkNotNull(context);
     this.conf = context.getConf();
     this.clientBootstraps = Lists.newArrayList(Preconditions.checkNotNull(clientBootstraps));
-    this.connectionPool = new ConcurrentHashMap<SocketAddress, ClientPool>();
-    this.numConnectionsPerPeer = conf.numConnectionsPerPeer();
+    
+    this.connectionPool = new ConcurrentHashMap<SocketAddress, ClientPool>();//每一个ip:port对应一个该线程池
+    this.numConnectionsPerPeer = conf.numConnectionsPerPeer();//每一个ip:port对应一个该线程池,线程池的size数量由conf.numConnectionsPerPeer()决定
     this.rand = new Random();
 
     IOMode ioMode = IOMode.valueOf(conf.ioMode());
@@ -119,29 +126,34 @@ public class TransportClientFactory implements Closeable {
    * This blocks until a connection is successfully established and fully bootstrapped.
    *
    * Concurrency: This method is safe to call from multiple threads.
+   * 创建一个与ip:port的连接,可以从缓存中获取该连接
    */
   public TransportClient createClient(String remoteHost, int remotePort) throws IOException {
     // Get connection from the connection pool first.
     // If it is not found or not active, create a new one.
     final InetSocketAddress address = new InetSocketAddress(remoteHost, remotePort);
 
-    // Create the ClientPool if we don't have it yet.
+    // Create the ClientPool if we don't have it yet.获取连接该ip:port的连接池
     ClientPool clientPool = connectionPool.get(address);
     if (clientPool == null) {
       connectionPool.putIfAbsent(address, new ClientPool(numConnectionsPerPeer));
       clientPool = connectionPool.get(address);
     }
 
+    //从连接池中随机选择一个下标
     int clientIndex = rand.nextInt(numConnectionsPerPeer);
     TransportClient cachedClient = clientPool.clients[clientIndex];
 
+    //返回该缓存的客户端连接
     if (cachedClient != null && cachedClient.isActive()) {
       logger.trace("Returning cached connection to {}: {}", address, cachedClient);
       return cachedClient;
     }
 
     // If we reach here, we don't have an existing connection open. Let's create a new one.
+    //如果代码到达这里,说明没有存在的可以的一个连接,我们需要创建一个
     // Multiple threads might race here to create new connections. Keep only one of them active.
+    //可能多线程在这里竞争,因此我们需要同步锁
     synchronized (clientPool.locks[clientIndex]) {
       cachedClient = clientPool.clients[clientIndex];
 
@@ -153,12 +165,15 @@ public class TransportClientFactory implements Closeable {
           logger.info("Found inactive connection to {}, creating a new one.", address);
         }
       }
+      //真正创建一个连接,并且将其存储到内存映射中
       clientPool.clients[clientIndex] = createClient(address);
       return clientPool.clients[clientIndex];
     }
   }
 
-  /** Create a completely new {@link TransportClient} to the remote address. */
+  /** Create a completely new {@link TransportClient} to the remote address.
+   * 真正创建一个客户端连接,连接到ip:port服务器中 
+   **/
   private TransportClient createClient(InetSocketAddress address) throws IOException {
     logger.debug("Creating new connection to " + address);
 
@@ -218,7 +233,9 @@ public class TransportClientFactory implements Closeable {
     return client;
   }
 
-  /** Close all connections in the connection pool, and shutdown the worker thread pool. */
+  /** Close all connections in the connection pool, and shutdown the worker thread pool. 
+   * 关闭所有的缓存的客户端连接 
+   **/
   @Override
   public void close() {
     // Go through all clients and close them if they are active.

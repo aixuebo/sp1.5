@@ -73,16 +73,20 @@ public class TransportContext {
    * Initializes a ClientFactory which runs the given TransportClientBootstraps prior to returning
    * a new Client. Bootstraps will be executed synchronously, and must run successfully in order
    * to create a Client.
+   * 创建client工厂
    */
   public TransportClientFactory createClientFactory(List<TransportClientBootstrap> bootstraps) {
     return new TransportClientFactory(this, bootstraps);
   }
 
+  //创建client工厂
   public TransportClientFactory createClientFactory() {
     return createClientFactory(Lists.<TransportClientBootstrap>newArrayList());
   }
 
-  /** Create a server which will attempt to bind to a specific port. */
+  /** Create a server which will attempt to bind to a specific port. 
+   * 在指定port上创建一个server服务 
+   **/
   public TransportServer createServer(int port, List<TransportServerBootstrap> bootstraps) {
     return new TransportServer(this, port, rpcHandler, bootstraps);
   }
