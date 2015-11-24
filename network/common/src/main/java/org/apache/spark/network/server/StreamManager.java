@@ -42,6 +42,7 @@ public abstract class StreamManager {
    *
    * @param streamId id of a stream that has been previously registered with the StreamManager.
    * @param chunkIndex 0-indexed chunk of the stream that's requested
+   * 客户端要获取该服务器上streamId下第chunkIndex个数据块,返回该数据块内容
    */
   public abstract ManagedBuffer getChunk(long streamId, int chunkIndex);
 
@@ -52,12 +53,14 @@ public abstract class StreamManager {
    *
    * This must be called before the first getChunk() on the stream, but it may be invoked multiple
    * times with the same channel and stream id.
+   * 该客户端要与一个流ID,streamId 有关联
    */
   public void registerChannel(Channel channel, long streamId) { }
 
   /**
    * Indicates that the given channel has been terminated. After this occurs, we are guaranteed not
    * to read from the associated streams again, so any state can be cleaned up.
+   * 客户端失效该如何处理
    */
   public void connectionTerminated(Channel channel) { }
 }

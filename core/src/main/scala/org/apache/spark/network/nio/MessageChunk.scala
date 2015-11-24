@@ -21,11 +21,18 @@ import java.nio.ByteBuffer
 
 import scala.collection.mutable.ArrayBuffer
 
+/**
+ * 该类表示一个信息数据块
+ * @header 表示数据块的头信息
+ * @buffer 表示数据块内容
+ */
 private[nio]
 class MessageChunk(val header: MessageChunkHeader, val buffer: ByteBuffer) {
 
+  //数据块的内容大小
   val size: Int = if (buffer == null) 0 else buffer.remaining
 
+  //该字节数组中分别包含header的buffer和数据块正文buffer
   lazy val buffers: ArrayBuffer[ByteBuffer] = {
     val ab = new ArrayBuffer[ByteBuffer]()
     ab += header.buffer

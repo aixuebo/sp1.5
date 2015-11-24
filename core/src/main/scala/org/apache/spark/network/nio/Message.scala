@@ -26,6 +26,11 @@ import com.google.common.base.Charsets.UTF_8
 
 import org.apache.spark.util.Utils
 
+/**
+ * 定义message接口
+ * @typ message类型,BufferMessage的类型是1111111111L
+ * @id message的唯一iD
+ */
 private[nio] abstract class Message(val typ: Long, val id: Int) {
   var senderAddress: InetSocketAddress = null
   var started = false
@@ -34,7 +39,7 @@ private[nio] abstract class Message(val typ: Long, val id: Int) {
   var isSecurityNeg = false
   var hasError = false
 
-  def size: Int
+  def size: Int //信息包含的总字节大小
 
   def getChunkForSending(maxChunkSize: Int): Option[MessageChunk]
 
@@ -51,8 +56,10 @@ private[nio] abstract class Message(val typ: Long, val id: Int) {
 private[nio] object Message {
   val BUFFER_MESSAGE = 1111111111L
 
+  //信息ID,唯一标示
   var lastId = 1
 
+  //累加信息ID,该类是同步类
   def getNewId(): Int = synchronized {
     lastId += 1
     if (lastId == 0) {
@@ -65,7 +72,7 @@ private[nio] object Message {
     if (dataBuffers == null) {
       return new BufferMessage(getNewId(), new ArrayBuffer[ByteBuffer], ackId)
     }
-    if (dataBuffers.exists(_ == null)) {
+    if (dataBuffers.exists(_ == null)) {//存在为null的ByteBuffer,则抛异常
       throw new Exception("Attempting to create buffer message with null buffer")
     }
     new BufferMessage(getNewId(), new ArrayBuffer[ByteBuffer] ++= dataBuffers, ackId)

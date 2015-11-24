@@ -34,13 +34,20 @@ import org.apache.spark.util.Utils
 
 /**
  * A BlockTransferService that uses Netty to fetch a set of blocks at at time.
+ * 使用netty去抓取一组数据块的服务
+ * 
+ * @numCores 使用多少个cpu做抓取操作
  */
 class NettyBlockTransferService(conf: SparkConf, securityManager: SecurityManager, numCores: Int)
   extends BlockTransferService {
 
   // TODO: Don't use Java serialization, use a more cross-version compatible serialization format.
   private val serializer = new JavaSerializer(conf)
+  
+  //是否需要安全校验
   private val authEnabled = securityManager.isAuthenticationEnabled()
+  
+  //根据需要的cpu数量,创建配置对象
   private val transportConf = SparkTransportConf.fromSparkConf(conf, numCores)
 
   private[this] var transportContext: TransportContext = _

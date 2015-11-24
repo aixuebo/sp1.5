@@ -20,15 +20,20 @@ package org.apache.spark.network.nio
 import java.net.{InetAddress, InetSocketAddress}
 import java.nio.ByteBuffer
 
+/**
+ * 表示数据块的头信息
+ */
 private[nio] class MessageChunkHeader(
-    val typ: Long,
-    val id: Int,
-    val totalSize: Int,
-    val chunkSize: Int,
-    val other: Int,
-    val hasError: Boolean,
-    val securityNeg: Int,
-    val address: InetSocketAddress) {
+    val typ: Long,//message的分类,BufferMessage的类型是1111111111L
+    val id: Int,//messageId唯一标示
+    val totalSize: Int,//message总包含字节数
+    val chunkSize: Int,//本次Chunk的字节数
+    val other: Int,//message的ack,是否需要回复
+    val hasError: Boolean,//message的hasError
+    val securityNeg: Int,//message的securityNeg
+    val address: InetSocketAddress) {//Message的senderAddress
+  
+  //将MessageChunkHeader对象转换成buffer对象,该数组一共占用45个字节
   lazy val buffer = {
     // No need to change this, at 'use' time, we do a reverse lookup of the hostname.
     // Refer to network.Connection
@@ -59,8 +64,9 @@ private[nio] class MessageChunkHeader(
 
 
 private[nio] object MessageChunkHeader {
-  val HEADER_SIZE = 45
+  val HEADER_SIZE = 45 //头信息一共45个字节
 
+  //从buffer中创建MessageChunkHeader对象
   def create(buffer: ByteBuffer): MessageChunkHeader = {
     if (buffer.remaining != HEADER_SIZE) {
       throw new IllegalArgumentException("Cannot convert buffer data to Message")

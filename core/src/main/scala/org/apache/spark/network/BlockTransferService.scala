@@ -34,6 +34,7 @@ abstract class BlockTransferService extends ShuffleClient with Closeable with Lo
   /**
    * Initialize the transfer service by giving it the BlockDataManager that can be used to fetch
    * local blocks or put local blocks.
+   * 初始化传输数据块服务,参数BlockDataManager可以帮助我们抓取本地数据块以及存储数据块到本地
    */
   def init(blockDataManager: BlockDataManager)
 
@@ -59,6 +60,7 @@ abstract class BlockTransferService extends ShuffleClient with Closeable with Lo
    * Note that this API takes a sequence so the implementation can batch requests, and does not
    * return a future so the underlying implementation can invoke onBlockFetchSuccess as soon as
    * the data of a block is fetched, rather than waiting for all blocks to be fetched.
+   * 抓取host:port上的数据块信息
    */
   override def fetchBlocks(
       host: String,
@@ -69,6 +71,7 @@ abstract class BlockTransferService extends ShuffleClient with Closeable with Lo
 
   /**
    * Upload a single block to a remote node, available only after [[init]] is invoked.
+   * 将参数数据块BlockId与内容blockData 上传到host:port上
    */
   def uploadBlock(
       hostname: String,
@@ -80,8 +83,10 @@ abstract class BlockTransferService extends ShuffleClient with Closeable with Lo
 
   /**
    * A special case of [[fetchBlocks]], as it fetches only one block and is blocking.
-   *
+   * 阻塞的方式,仅仅抓取一个数据块
    * It is also only available after [[init]] is invoked.
+   * 去host:port上抓取数据块blockId信息
+   * 返回数据块内容
    */
   def fetchBlockSync(host: String, port: Int, execId: String, blockId: String): ManagedBuffer = {
     // A monitor for the thread to wait on.
@@ -92,10 +97,10 @@ abstract class BlockTransferService extends ShuffleClient with Closeable with Lo
           result.failure(exception)
         }
         override def onBlockFetchSuccess(blockId: String, data: ManagedBuffer): Unit = {
-          val ret = ByteBuffer.allocate(data.size.toInt)
-          ret.put(data.nioByteBuffer())
+          val ret = ByteBuffer.allocate(data.size.toInt)//由数据块大小,创建内存缓冲区
+          ret.put(data.nioByteBuffer())//将数据块内容存储到缓冲区内
           ret.flip()
-          result.success(new NioManagedBuffer(ret))
+          result.success(new NioManagedBuffer(ret))//将数据块缓冲区内容设置到结果集中
         }
       })
 
@@ -107,6 +112,7 @@ abstract class BlockTransferService extends ShuffleClient with Closeable with Lo
    *
    * This method is similar to [[uploadBlock]], except this one blocks the thread
    * until the upload finishes.
+   * 同步上传一个数据块到指定host:port上
    */
   def uploadBlockSync(
       hostname: String,

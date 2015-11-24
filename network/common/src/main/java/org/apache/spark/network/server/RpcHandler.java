@@ -35,6 +35,7 @@ public abstract class RpcHandler {
    * @param message The serialized bytes of the RPC.
    * @param callback Callback which should be invoked exactly once upon success or failure of the
    *                 RPC.
+   * 接收client客户端传来的命令,并且回调信息写入RpcResponseCallback中    
    */
   public abstract void receive(
       TransportClient client,
@@ -44,12 +45,14 @@ public abstract class RpcHandler {
   /**
    * Returns the StreamManager which contains the state about which streams are currently being
    * fetched by a TransportClient.
+   * 处理客户端请求的流管理器
    */
   public abstract StreamManager getStreamManager();
 
   /**
    * Invoked when the connection associated with the given client has been invalidated.
    * No further requests will come from this client.
+   * 与客户端失去连接该如何处理
    */
   public void connectionTerminated(TransportClient client) { }
 }

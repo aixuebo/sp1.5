@@ -28,21 +28,25 @@ import org.apache.spark.network.util.{TransportConf, ConfigProvider}
 object SparkTransportConf {
   /**
    * Specifies an upper bound on the number of Netty threads that Spark requires by default.
+   * 指定netty的最大线程数量
    * In practice, only 2-4 cores should be required to transfer roughly 10 Gb/s, and each core
    * that we use will have an initial overhead of roughly 32 MB of off-heap memory, which comes
    * at a premium.
-   *
+   * 实践中,仅仅2-4cpu被需要,就可以达到传输10G/s的速度,
    * Thus, this value should still retain maximum throughput and reduce wasted off-heap memory
    * allocation. It can be overridden by setting the number of serverThreads and clientThreads
    * manually in Spark's configuration.
+   * 最大线程数量
    */
   private val MAX_DEFAULT_NETTY_THREADS = 8
 
   /**
    * Utility for creating a [[TransportConf]] from a [[SparkConf]].
+   * 从SparkConf中创建TransportConf,添加2个属性,服务端线程数量与客户端线程数量
    * @param numUsableCores if nonzero, this will restrict the server and client threads to only
    *                       use the given number of cores, rather than all of the machine's cores.
    *                       This restriction will only occur if these properties are not already set.
+   *  参数numUsableCores,如果是非0，,则表示严格约束server和client的线程数量,这比使用机器的所有cpu要好
    */
   def fromSparkConf(_conf: SparkConf, numUsableCores: Int = 0): TransportConf = {
     val conf = _conf.clone
@@ -64,6 +68,7 @@ object SparkTransportConf {
   /**
    * Returns the default number of threads for both the Netty client and server thread pools.
    * If numUsableCores is 0, we will use Runtime get an approximate number of available cores.
+   * 设置被使用多少个cpu操作线程
    */
   private def defaultNumThreads(numUsableCores: Int): Int = {
     val availableCores =
