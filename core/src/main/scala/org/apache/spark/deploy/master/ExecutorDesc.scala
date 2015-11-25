@@ -19,20 +19,22 @@ package org.apache.spark.deploy.master
 
 import org.apache.spark.deploy.{ExecutorDescription, ExecutorState}
 
+//表示一个应用众多执行者中的一个执行者
 private[master] class ExecutorDesc(
-    val id: Int,
-    val application: ApplicationInfo,
-    val worker: WorkerInfo,
-    val cores: Int,
-    val memory: Int) {
+    val id: Int,//执行者唯一ID
+    val application: ApplicationInfo,//该执行者所属的应用
+    val worker: WorkerInfo,//该执行者在哪个节点执行
+    val cores: Int,//该执行者所需要的cpu
+    val memory: Int) {//该执行者所需要的内存
 
-  var state = ExecutorState.LAUNCHING
+  var state = ExecutorState.LAUNCHING //该执行者的状态
 
   /** Copy all state (non-val) variables from the given on-the-wire ExecutorDescription. */
   def copyState(execDesc: ExecutorDescription) {
     state = execDesc.state
   }
 
+  //该执行者的全ID,即由应用id+该执行者唯一id组成
   def fullId: String = application.id + "/" + id
 
   override def equals(other: Any): Boolean = {

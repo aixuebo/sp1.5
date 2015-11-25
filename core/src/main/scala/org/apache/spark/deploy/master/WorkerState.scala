@@ -17,8 +17,12 @@
 
 package org.apache.spark.deploy.master
 
+//master节点上缓存的woker状态
 private[master] object WorkerState extends Enumeration {
   type WorkerState = Value
 
-  val ALIVE, DEAD, DECOMMISSIONED, UNKNOWN = Value
+  val ALIVE,//活着
+  DEAD,//已经死亡 
+  DECOMMISSIONED,//正在下架
+  UNKNOWN = Value //未知
 }

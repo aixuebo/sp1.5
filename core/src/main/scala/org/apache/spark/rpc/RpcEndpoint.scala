@@ -39,6 +39,7 @@ private[spark] trait RpcEnvFactory {
  *
  * However, there is no guarantee that the same thread will be executing the same
  * [[ThreadSafeRpcEndpoint]] for different messages.
+ * 定义线程安全的PRC客户端
  */
 private[spark] trait ThreadSafeRpcEndpoint extends RpcEndpoint
 

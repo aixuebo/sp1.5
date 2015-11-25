@@ -17,7 +17,7 @@
 
 package org.apache.spark.deploy
 
-//执行状态
+//表示一个应用众多执行者中的一个执行者,表示该执行者的状态
 private[deploy] object ExecutorState extends Enumeration {
 
   //枚举从下标0开始计算
@@ -26,7 +26,7 @@ private[deploy] object ExecutorState extends Enumeration {
   RUNNING,//运行中 
   KILLED,//已经杀死 
   FAILED,//已经失败
-  LOST, //丢失
+  LOST, //丢失,比如worker被删除了,因此该worker上执行的所有进程都要被丢掉
   EXITED = Value //退出
 
   type ExecutorState = Value

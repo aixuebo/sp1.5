@@ -23,7 +23,7 @@ import java.net.URI
 private[spark] class ApplicationDescription(
     val name: String,
     val maxCores: Option[Int],
-    val memoryPerExecutorMB: Int,
+    val memoryPerExecutorMB: Int,//每一个执行者需要的内存数量
     val command: Command,
     var appUiUrl: String,
     val eventLogDir: Option[URI] = None,

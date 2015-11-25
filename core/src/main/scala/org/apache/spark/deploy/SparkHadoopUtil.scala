@@ -45,10 +45,12 @@ import org.apache.spark.{Logging, SparkConf, SparkException}
 /**
  * :: DeveloperApi ::
  * Contains util methods to interact with Hadoop from Spark.
+ * hadoop对应的配置信息工具
  */
 @DeveloperApi
 class SparkHadoopUtil extends Logging {
   private val sparkConf = new SparkConf()
+  //将SparkConf转换成hadoop的Configuration对象
   val conf: Configuration = newConfiguration(sparkConf)
   UserGroupInformation.setConfiguration(conf)
 

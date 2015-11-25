@@ -22,7 +22,7 @@ private[deploy] class DriverDescription(
     val jarUrl: String,
     val mem: Int,
     val cores: Int,
-    val supervise: Boolean,
+    val supervise: Boolean,//true表示允许重新启动该driver
     val command: Command)
   extends Serializable {
 

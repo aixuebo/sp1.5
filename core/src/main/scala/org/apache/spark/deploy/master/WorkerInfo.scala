@@ -23,14 +23,14 @@ import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.util.Utils
 
 private[spark] class WorkerInfo(
-    val id: String,
-    val host: String,
-    val port: Int,
-    val cores: Int,
-    val memory: Int,
-    val endpoint: RpcEndpointRef,
-    val webUiPort: Int,
-    val publicAddress: String)
+    val id: String,//worker唯一标示
+    val host: String,//workder所在节点host
+    val port: Int,//worker所在节点port
+    val cores: Int,//worker提供多少cpu可以被使用
+    val memory: Int,//worker提供多少内存可以被使用
+    val endpoint: RpcEndpointRef,//与该workder交互的流,即master服务器可以通过该对象与workder进行通信
+    val webUiPort: Int,//worker提供的webui所在端口
+    val publicAddress: String)//该worker对外提供的host,通过host:webUiPort可以访问该workder的webUi
   extends Serializable {
 
   Utils.checkHost(host, "Expected hostname")
@@ -38,16 +38,16 @@ private[spark] class WorkerInfo(
 
   @transient var executors: mutable.HashMap[String, ExecutorDesc] = _ // executorId => info
   @transient var drivers: mutable.HashMap[String, DriverInfo] = _ // driverId => info
-  @transient var state: WorkerState.Value = _
-  @transient var coresUsed: Int = _
-  @transient var memoryUsed: Int = _
+  @transient var state: WorkerState.Value = _ ////该worker服务器的状态
+  @transient var coresUsed: Int = _//该worker服务器已经使用了多少个cpu
+  @transient var memoryUsed: Int = _//该worker服务器已经使用了多少内存
 
-  @transient var lastHeartbeat: Long = _
+  @transient var lastHeartbeat: Long = _ //该worker最后一次心跳时间
 
   init()
 
-  def coresFree: Int = cores - coresUsed
-  def memoryFree: Int = memory - memoryUsed
+  def coresFree: Int = cores - coresUsed //该worker目前还剩余多少cpu可用
+  def memoryFree: Int = memory - memoryUsed //该worker目前还剩余多少内存可用
 
   private def readObject(in: java.io.ObjectInputStream): Unit = Utils.tryOrIOException {
     in.defaultReadObject()
@@ -63,11 +63,13 @@ private[spark] class WorkerInfo(
     lastHeartbeat = System.currentTimeMillis()
   }
 
+  //该worker对应的host:port
   def hostPort: String = {
     assert (port > 0)
     host + ":" + port
   }
 
+  
   def addExecutor(exec: ExecutorDesc) {
     executors(exec.fullId) = exec
     coresUsed += exec.cores
@@ -82,6 +84,7 @@ private[spark] class WorkerInfo(
     }
   }
 
+  //true表示该workder上执行该app
   def hasExecutor(app: ApplicationInfo): Boolean = {
     executors.values.exists(_.application == app)
   }
@@ -92,12 +95,14 @@ private[spark] class WorkerInfo(
     coresUsed += driver.desc.cores
   }
 
+  //回收该内存和cpu
   def removeDriver(driver: DriverInfo) {
     drivers -= driver.id
     memoryUsed -= driver.desc.mem
     coresUsed -= driver.desc.cores
   }
 
+  //该worker上的ui地址
   def webUiAddress : String = {
     "http://" + this.publicAddress + ":" + this.webUiPort
   }
@@ -106,5 +111,6 @@ private[spark] class WorkerInfo(
     this.state = state
   }
 
+  //true表示该workder现在是活着的
   def isAlive(): Boolean = this.state == WorkerState.ALIVE
 }

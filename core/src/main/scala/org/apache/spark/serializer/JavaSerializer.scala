@@ -27,11 +27,16 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.util.ByteBufferInputStream
 import org.apache.spark.util.Utils
 
+//java版本的序列化与反序列化
+/**
+ * @out 序列化后的对象输出到该输出流中
+ * @counterReset 序列化多少个对象后,要进行重置
+ */
 private[spark] class JavaSerializationStream(
     out: OutputStream, counterReset: Int, extraDebugInfo: Boolean)
   extends SerializationStream {
   private val objOut = new ObjectOutputStream(out)
-  private var counter = 0
+  private var counter = 0 //当前已经序列化了多少个对象
 
   /**
    * Calling reset to avoid memory leak:

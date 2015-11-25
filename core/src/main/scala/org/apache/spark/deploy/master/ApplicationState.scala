@@ -17,11 +17,17 @@
 
 package org.apache.spark.deploy.master
 
+//该对象表示一个应用,一个driver可以产生多个应用,但是一个应用会产生多个执行者执行任务
 private[master] object ApplicationState extends Enumeration {
 
   type ApplicationState = Value
 
-  val WAITING, RUNNING, FINISHED, FAILED, KILLED, UNKNOWN = Value
+  val WAITING, 
+  RUNNING, //app正在运行
+  FINISHED, 
+  FAILED, 
+  KILLED, 
+  UNKNOWN = Value //未知
 
   val MAX_NUM_RETRY = 10
 }

@@ -28,6 +28,8 @@ import org.apache.spark.{SparkException, Logging, SparkConf}
  * 代表一个客户端
  * 
  * 实现类AkkaRpcEnv的AkkaRpcEndpointRef类
+ * 
+ * 例如:在master中与每一个application都存在一个该对象,通过该对象,即master服务器可以通过该对象与application进行通信
  */
 private[spark] abstract class RpcEndpointRef(@transient conf: SparkConf)
   extends Serializable with Logging {

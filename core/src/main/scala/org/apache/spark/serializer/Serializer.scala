@@ -32,16 +32,19 @@ import org.apache.spark.util.{Utils, ByteBufferInputStream, NextIterator}
  * A serializer. Because some serialization libraries are not thread safe, this class is used to
  * create [[org.apache.spark.serializer.SerializerInstance]] objects that do the actual
  * serialization and are guaranteed to only be called from one thread at a time.
+ * 因为第三方序列化工具可能不是线程安全的,因此使用该类创建一个序列化实例,使用该实例去真正实例化数据,该类保证了仅仅一个线程调用该序列化对象
  *
  * Implementations of this trait should implement:
- *
+ * 要实现以下接口
  * 1. a zero-arg constructor or a constructor that accepts a [[org.apache.spark.SparkConf]]
  * as parameter. If both constructors are defined, the latter takes precedence.
- *
+ * 构造函数要接收一个无参数的构造函数,或者SparkConf为参数的构造函数
  * 2. Java serialization interface.
- *
+ *  要实现java的序列化接口
  * Note that serializers are not required to be wire-compatible across different versions of Spark.
+ * 注意该序列化类不要求兼容不同的spark版本
  * They are intended to be used to serialize/de-serialize data within a single Spark application.
+ * 
  */
 @DeveloperApi
 abstract class Serializer {
@@ -118,24 +121,26 @@ object Serializer {
  *
  * It is legal to create multiple serialization / deserialization streams from the same
  * SerializerInstance as long as those streams are all used within the same thread.
+ * 定义序列化与反序列化接口
  */
 @DeveloperApi
 @NotThreadSafe
 abstract class SerializerInstance {
-  def serialize[T: ClassTag](t: T): ByteBuffer
+  def serialize[T: ClassTag](t: T): ByteBuffer //序列化,将对象转换成ByteBuffer
 
-  def deserialize[T: ClassTag](bytes: ByteBuffer): T
+  def deserialize[T: ClassTag](bytes: ByteBuffer): T //反序列化,将ByteBuffer转换成对象
 
-  def deserialize[T: ClassTag](bytes: ByteBuffer, loader: ClassLoader): T
+  def deserialize[T: ClassTag](bytes: ByteBuffer, loader: ClassLoader): T //反序列化,将ByteBuffer转换成对象
 
-  def serializeStream(s: OutputStream): SerializationStream
+  def serializeStream(s: OutputStream): SerializationStream //序列化,将OutputStream转换成SerializationStream
 
-  def deserializeStream(s: InputStream): DeserializationStream
+  def deserializeStream(s: InputStream): DeserializationStream//反序列化,将SerializationStream转换成OutputStream
 }
 
 /**
  * :: DeveloperApi ::
  * A stream for writing serialized objects.
+ * 序列化对象
  */
 @DeveloperApi
 abstract class SerializationStream {
@@ -160,6 +165,7 @@ abstract class SerializationStream {
 /**
  * :: DeveloperApi ::
  * A stream for reading serialized objects.
+ * 反序列化
  */
 @DeveloperApi
 abstract class DeserializationStream {

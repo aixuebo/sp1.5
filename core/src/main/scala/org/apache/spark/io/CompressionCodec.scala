@@ -36,11 +36,17 @@ import org.apache.spark.util.Utils
  *       This is intended for use as an internal compression utility within a single
  *       Spark application.
  */
+
+/**
+ * 定义压缩接口
+ */
 @DeveloperApi
 trait CompressionCodec {
 
+  //使用压缩算法,将信息压缩后,写入到OutputStream中
   def compressedOutputStream(s: OutputStream): OutputStream
 
+  //使用压缩算法,将参数InputStream中信息读取后,进行压缩,生成新的InputStream返回
   def compressedInputStream(s: InputStream): InputStream
 }
 

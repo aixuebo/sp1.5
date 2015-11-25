@@ -74,6 +74,7 @@ private[spark] class BlockManager(
 
   val diskBlockManager = new DiskBlockManager(this, conf)
 
+  //key是BlockId,value是BlockInfo和存储该映射关系时候的时间戳
   private val blockInfo = new TimeStampedHashMap[BlockId, BlockInfo]
 
   //创建线程池
@@ -122,6 +123,7 @@ private[spark] class BlockManager(
     blockTransferService
   }
 
+  //以下配置信息,决定数据块类型是否要压缩处理
   // Whether to compress broadcast variables that are stored
   private val compressBroadcast = conf.getBoolean("spark.broadcast.compress", true)
   // Whether to compress shuffle output that are stored
@@ -131,6 +133,8 @@ private[spark] class BlockManager(
   // Whether to compress shuffle output temporarily spilled to disk
   private val compressShuffleSpill = conf.getBoolean("spark.shuffle.spill.compress", true)
 
+  
+  
   private val slaveEndpoint = rpcEnv.setupEndpoint(
     "BlockManagerEndpoint" + BlockManager.ID_GENERATOR.next,
     new BlockManagerSlaveEndpoint(rpcEnv, this, mapOutputTracker))
@@ -1155,6 +1159,7 @@ private[spark] class BlockManager(
     }
   }
 
+  //true表示该数据块要进行压缩
   private def shouldCompress(blockId: BlockId): Boolean = {
     blockId match {
       case _: ShuffleBlockId => compressShuffle
@@ -1168,6 +1173,7 @@ private[spark] class BlockManager(
 
   /**
    * Wrap an output stream for compression if block compression is enabled for its block type
+   * 如果需要压缩的话,对数据块进行压缩包装,返回压缩后的输出流
    */
   def wrapForCompression(blockId: BlockId, s: OutputStream): OutputStream = {
     if (shouldCompress(blockId)) compressionCodec.compressedOutputStream(s) else s
@@ -1175,6 +1181,7 @@ private[spark] class BlockManager(
 
   /**
    * Wrap an input stream for compression if block compression is enabled for its block type
+   *  如果需要压缩的话,对数据块进行压缩包装,返回压缩后的输入流
    */
   def wrapForCompression(blockId: BlockId, s: InputStream): InputStream = {
     if (shouldCompress(blockId)) compressionCodec.compressedInputStream(s) else s
@@ -1182,7 +1189,7 @@ private[spark] class BlockManager(
 
   /** Serializes into a stream.
    *  序列化数据到输出流中,该输出流是blockId的输出流
-   *   */
+   **/
   def dataSerializeStream(
       blockId: BlockId,
       outputStream: OutputStream,
@@ -1193,7 +1200,7 @@ private[spark] class BlockManager(
     ser.serializeStream(wrapForCompression(blockId, byteStream)).writeAll(values).close()
   }
 
-  /** Serializes into a byte buffer. */
+  /** Serializes into a byte buffer.序列化到ByteBuffer中 */
   def dataSerialize(
       blockId: BlockId,
       values: Iterator[Any],
@@ -1254,7 +1261,9 @@ private[spark] class BlockManager(
 private[spark] object BlockManager extends Logging {
   private val ID_GENERATOR = new IdGenerator
 
-  /** Return the total amount of storage memory available. */
+  /** Return the total amount of storage memory available. 
+   * 返回内存存储允许的最大内存  
+   **/
   private def getMaxMemory(conf: SparkConf): Long = {
     val memoryFraction = conf.getDouble("spark.storage.memoryFraction", 0.6)
     val safetyFraction = conf.getDouble("spark.storage.safetyFraction", 0.9)
@@ -1262,10 +1271,12 @@ private[spark] object BlockManager extends Logging {
   }
 
   /**
-   * Attempt to clean up a ByteBuffer if it is memory-mapped. This uses an *unsafe* Sun API that
-   * might cause errors if one attempts to read from the unmapped buffer, but it's better than
-   * waiting for the GC to find it because that could lead to huge numbers of open files. There's
-   * unfortunately no standard API to do this.
+   * Attempt to clean up a ByteBuffer if it is memory-mapped. 
+   * 尝试去清理MappedByteBuffer内存映射需要的内存
+   * This uses an *unsafe* Sun API that might cause errors if one attempts to read from the unmapped buffer, 
+   * 在sun的api里面这个操作是不安全的,因为如果一个程序想要去读取的时候,会产生错误 
+   * but it's better than waiting for the GC to find it because that could lead to huge numbers of open files. There's unfortunately no standard API to do this.
+   * 但是这个却比等待GC发现,并且gc回收要好,因为他能够导致大量的打开文件操作,不幸的是,没有标准的API去做这个事情。
    */
   def dispose(buffer: ByteBuffer): Unit = {
     if (buffer != null && buffer.isInstanceOf[MappedByteBuffer]) {

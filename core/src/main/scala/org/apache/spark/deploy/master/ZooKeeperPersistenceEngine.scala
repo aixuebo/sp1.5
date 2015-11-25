@@ -29,25 +29,31 @@ import org.apache.spark.{Logging, SparkConf}
 import org.apache.spark.deploy.SparkCuratorUtil
 import org.apache.spark.serializer.Serializer
 
-
+//使用zookeeper存储序列化后的内容
 private[master] class ZooKeeperPersistenceEngine(conf: SparkConf, val serializer: Serializer)
   extends PersistenceEngine
   with Logging {
 
+  //获取zookeeper路径
   private val WORKING_DIR = conf.get("spark.deploy.zookeeper.dir", "/spark") + "/master_status"
+  
+  //创建zookeeper
   private val zk: CuratorFramework = SparkCuratorUtil.newClient(conf)
 
+  //在zookeeper上创建路径
   SparkCuratorUtil.mkdir(zk, WORKING_DIR)
 
-
+  //在zookeeper上name路径下存储obj内容
   override def persist(name: String, obj: Object): Unit = {
     serializeIntoFile(WORKING_DIR + "/" + name, obj)
   }
 
+  //删除zookeeper上指定name的节点
   override def unpersist(name: String): Unit = {
     zk.delete().forPath(WORKING_DIR + "/" + name)
   }
 
+  //读取全部符合prefix前缀的内容.并且反序列化成对象集合
   override def read[T: ClassTag](prefix: String): Seq[T] = {
     val file = zk.getChildren.forPath(WORKING_DIR).filter(_.startsWith(prefix))
     file.map(deserializeFromFile[T]).flatten
@@ -57,6 +63,7 @@ private[master] class ZooKeeperPersistenceEngine(conf: SparkConf, val serializer
     zk.close()
   }
 
+  //将value对象序列化到path路径节点存储
   private def serializeIntoFile(path: String, value: AnyRef) {
     val serialized = serializer.newInstance().serialize(value)
     val bytes = new Array[Byte](serialized.remaining())
@@ -64,6 +71,7 @@ private[master] class ZooKeeperPersistenceEngine(conf: SparkConf, val serializer
     zk.create().withMode(CreateMode.PERSISTENT).forPath(path, bytes)
   }
 
+  //将path路径节点存储的数据反序列化成对象
   private def deserializeFromFile[T](filename: String)(implicit m: ClassTag[T]): Option[T] = {
     val fileData = zk.getData().forPath(WORKING_DIR + "/" + filename)
     try {

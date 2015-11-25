@@ -56,7 +56,7 @@ private[deploy] class Master(
   private val forwardMessageThread =
     ThreadUtils.newDaemonSingleThreadScheduledExecutor("master-forward-message-thread")
 
-  private val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
+  private val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)//hadoop对应的配置信息
 
   private def createDateFormat = new SimpleDateFormat("yyyyMMddHHmmss") // For application IDs
 
@@ -66,12 +66,15 @@ private[deploy] class Master(
   private val REAPER_ITERATIONS = conf.getInt("spark.dead.worker.persistence", 15)
   private val RECOVERY_MODE = conf.get("spark.deploy.recoveryMode", "NONE")
 
-  val workers = new HashSet[WorkerInfo]
   val idToApp = new HashMap[String, ApplicationInfo]
   val waitingApps = new ArrayBuffer[ApplicationInfo]
   val apps = new HashSet[ApplicationInfo]
 
+  //当前注册的所有worker集合,如果worker被移除,仅仅设置其死亡,不从内存中删除
+  val workers = new HashSet[WorkerInfo]
+  //key是worker.id,value是对应的worker对象
   private val idToWorker = new HashMap[String, WorkerInfo]
+  //key是WorkerInfo.endpoint.address,value是对应的workder对象
   private val addressToWorker = new HashMap[RpcAddress, WorkerInfo]
 
   private val endpointToApp = new HashMap[RpcEndpointRef, ApplicationInfo]
@@ -107,9 +110,9 @@ private[deploy] class Master(
 
   private var state = RecoveryState.STANDBY
 
-  private var persistenceEngine: PersistenceEngine = _
+  private var persistenceEngine: PersistenceEngine = _ //存储数据信息的引擎,是文件系统还是zookeeper还是自定义
 
-  private var leaderElectionAgent: LeaderElectionAgent = _
+  private var leaderElectionAgent: LeaderElectionAgent = _ //选举master的代理类
 
   private var recoveryCompletionTask: ScheduledFuture[_] = _
 
@@ -162,6 +165,8 @@ private[deploy] class Master(
     applicationMetricsSystem.getServletHandlers.foreach(webUi.attachHandler)
 
     val serializer = new JavaSerializer(conf)
+    
+    //设置 "存储数据信息的引擎,是文件系统还是zookeeper还是自定义" 和 选举master的代理类
     val (persistenceEngine_, leaderElectionAgent_) = RECOVERY_MODE match {
       case "ZOOKEEPER" =>
         logInfo("Persisting recovery state to ZooKeeper")
@@ -214,12 +219,15 @@ private[deploy] class Master(
 
   override def receive: PartialFunction[Any, Unit] = {
     case ElectedLeader => {
+      //选举已经成功
+      //读取所有数据,分别返回三组集合,即所有app,所有driver,所有worker
       val (storedApps, storedDrivers, storedWorkers) = persistenceEngine.readPersistedData(rpcEnv)
       state = if (storedApps.isEmpty && storedDrivers.isEmpty && storedWorkers.isEmpty) {
         RecoveryState.ALIVE
       } else {
         RecoveryState.RECOVERING
       }
+      //打印日志,选举的leader节点现在处于什么状态
       logInfo("I have been elected leader! New state: " + state)
       if (state == RecoveryState.RECOVERING) {
         beginRecovery(storedApps, storedDrivers, storedWorkers)
@@ -490,10 +498,13 @@ private[deploy] class Master(
     if (state == RecoveryState.RECOVERING && canCompleteRecovery) { completeRecovery() }
   }
 
+  //当worker和application没有为止的时候,则返回true,表示已经完成的恢复操作
   private def canCompleteRecovery =
     workers.count(_.state == WorkerState.UNKNOWN) == 0 &&
       apps.count(_.state == ApplicationState.UNKNOWN) == 0
 
+  //masert节点选举成功后,开始恢复数据
+  //参数含义:读取所有数据,分别返回三组集合,即所有app,所有driver,所有worker
   private def beginRecovery(storedApps: Seq[ApplicationInfo], storedDrivers: Seq[DriverInfo],
       storedWorkers: Seq[WorkerInfo]) {
     for (app <- storedApps) {
@@ -501,6 +512,7 @@ private[deploy] class Master(
       try {
         registerApplication(app)
         app.state = ApplicationState.UNKNOWN
+        //master在恢复阶段向worker和application客户端发送该信息,即通知master已经更换了一个新的
         app.driver.send(MasterChanged(self, masterWebUiUrl))
       } catch {
         case e: Exception => logInfo("App " + app.id + " had exception on reconnect")
@@ -518,6 +530,7 @@ private[deploy] class Master(
       try {
         registerWorker(worker)
         worker.state = WorkerState.UNKNOWN
+        //master在恢复阶段向worker和application客户端发送该信息,即通知master已经更换了一个新的
         worker.endpoint.send(MasterChanged(self, masterWebUiUrl))
       } catch {
         case e: Exception => logInfo("Worker " + worker.id + " had exception on reconnect")
@@ -525,12 +538,16 @@ private[deploy] class Master(
     }
   }
 
+  //master节点启动后,进行恢复工作,当恢复完成时,调用该方法
   private def completeRecovery() {
     // Ensure "only-once" recovery semantics using a short synchronization period.
+    //状态一定是RECOVERING,将其状态改成COMPLETING_RECOVERY
     if (state != RecoveryState.RECOVERING) { return }
     state = RecoveryState.COMPLETING_RECOVERY
 
+    //以下进行恢复完成后的处理逻辑
     // Kill off any workers and apps that didn't respond to us.
+    //杀死掉任何不能有恢复的worker和app
     workers.filter(_.state == WorkerState.UNKNOWN).foreach(removeWorker)
     apps.filter(_.state == ApplicationState.UNKNOWN).foreach(finishApplication)
 
@@ -711,15 +728,19 @@ private[deploy] class Master(
       exec.id, worker.id, worker.hostPort, exec.cores, exec.memory))
   }
 
+  //注册一个worker
   private def registerWorker(worker: WorkerInfo): Boolean = {
     // There may be one or more refs to dead workers on this same node (w/ different ID's),
     // remove them.
+    //可能存在一个或者多个已经死亡的workder,该worker与注册的worker在同样的节点上,只是ID不同,则我们要移除他们
     workers.filter { w =>
-      (w.host == worker.host && w.port == worker.port) && (w.state == WorkerState.DEAD)
+      (w.host == worker.host && w.port == worker.port) && (w.state == WorkerState.DEAD) //找到可以移除的worker集合
     }.foreach { w =>
-      workers -= w
+      workers -= w //移除他们
     }
 
+    
+    //判断该worker地址是否有worker,并且非未知的,如果存在,则添加失败,返回false
     val workerAddress = worker.endpoint.address
     if (addressToWorker.contains(workerAddress)) {
       val oldWorker = addressToWorker(workerAddress)
@@ -733,31 +754,43 @@ private[deploy] class Master(
       }
     }
 
+    //内存中存储对应关系
     workers += worker
     idToWorker(worker.id) = worker
     addressToWorker(workerAddress) = worker
     true
   }
 
+  //移除该worker
   private def removeWorker(worker: WorkerInfo) {
     logInfo("Removing worker " + worker.id + " on " + worker.host + ":" + worker.port)
-    worker.setState(WorkerState.DEAD)
+    worker.setState(WorkerState.DEAD) //设置该workder状态为死亡,仅仅设置其死亡,不从内存中删除
+    
+    //清理workder的内存关系
     idToWorker -= worker.id
     addressToWorker -= worker.endpoint.address
+    
+    //处理该worker上所有的executors
     for (exec <- worker.executors.values) {
       logInfo("Telling app of lost executor: " + exec.id)
+      //对应执行者所在的应用对应的driver,发送信息,标示该driver的应用下某一个执行者状态更新,变成丢失,因为worker被抛弃了,在该worker上执行的进程都要被丢弃发送给driver,通知driver的某个应用下某一个执行者状态更新,变成丢失,因为worker被抛弃了,在该worker上执行的进程都要被丢弃
       exec.application.driver.send(ExecutorUpdated(exec.id, ExecutorState.LOST, Some("worker lost"), None))
+      //移除该执行者
       exec.application.removeExecutor(exec)
     }
+    
+    //处理该worker上所有的driver
     for (driver <- worker.drivers.values) {
-      if (driver.desc.supervise) {
+      if (driver.desc.supervise) {//重新启动开driver
         logInfo(s"Re-launching ${driver.id}")
         relaunchDriver(driver)
-      } else {
+      } else {//移除该driver
         logInfo(s"Not re-launching ${driver.id} because it was not supervised")
         removeDriver(driver.id, DriverState.ERROR, None)
       }
     }
+    
+    //移除该workder
     persistenceEngine.removeWorker(worker)
   }
 
@@ -790,6 +823,7 @@ private[deploy] class Master(
     waitingApps += app
   }
 
+  //移除一个app
   private def finishApplication(app: ApplicationInfo) {
     removeApplication(app, ApplicationState.FINISHED)
   }

@@ -120,6 +120,7 @@ private[deploy] object DeployMessages {
     Utils.checkHostPort(hostPort, "Required hostport")
   }
 
+  //master发送信息,发送给driver,通知driver的某个应用下某一个执行者状态更新,变成丢失,因为worker被抛弃了,在该worker上执行的进程都要被丢弃
   case class ExecutorUpdated(id: Int, state: ExecutorState, message: Option[String],
     exitStatus: Option[Int])
 
@@ -149,7 +150,8 @@ private[deploy] object DeployMessages {
   case object StopAppClient
 
   // Master to Worker & AppClient
-
+  //master在恢复阶段向worker和application客户端发送该信息,即通知master已经更换了一个新的
+  //传递对应的参数是master的交互对象,和master的webUi的URL
   case class MasterChanged(master: RpcEndpointRef, masterWebUiUrl: String)
 
   // MasterWebUI To Master

@@ -20,5 +20,8 @@ package org.apache.spark.deploy.master
 private[deploy] object RecoveryState extends Enumeration {
   type MasterState = Value
 
-  val STANDBY, ALIVE, RECOVERING, COMPLETING_RECOVERY = Value
+  val STANDBY,//备份 
+  ALIVE,//正常活着的
+  RECOVERING,//正在恢复过程中
+  COMPLETING_RECOVERY = Value //表示已经恢复完成,正在调用master的completeRecovery方法,做恢复完成后在处理的逻辑
 }

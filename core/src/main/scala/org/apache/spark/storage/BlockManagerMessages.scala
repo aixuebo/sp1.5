@@ -22,28 +22,30 @@ import java.io.{Externalizable, ObjectInput, ObjectOutput}
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.util.Utils
 
+//定义数据块管理过程中的节点间传递的信息
 private[spark] object BlockManagerMessages {
   //////////////////////////////////////////////////////////////////////////////////
-  // Messages from the master to slaves.
+  // Messages from the master to slaves.信息从master传递到slave
   //////////////////////////////////////////////////////////////////////////////////
   sealed trait ToBlockManagerSlave
 
   // Remove a block from the slaves that have it. This can only be used to remove
   // blocks that the master knows about.
+  //从slaves节点移除一个数据块,如果该数据块存在的话,这个操作仅仅被使用与master已经知道要移动该数据块的数据块
   case class RemoveBlock(blockId: BlockId) extends ToBlockManagerSlave
 
-  // Remove all blocks belonging to a specific RDD.
+  // Remove all blocks belonging to a specific RDD.移除该rdd下的所有的数据块
   case class RemoveRdd(rddId: Int) extends ToBlockManagerSlave
 
-  // Remove all blocks belonging to a specific shuffle.
+  // Remove all blocks belonging to a specific shuffle.移除该shuffle下所有的数据块
   case class RemoveShuffle(shuffleId: Int) extends ToBlockManagerSlave
 
-  // Remove all blocks belonging to a specific broadcast.
+  // Remove all blocks belonging to a specific broadcast.移除该广播下所有的数据块
   case class RemoveBroadcast(broadcastId: Long, removeFromDriver: Boolean = true)
     extends ToBlockManagerSlave
 
   //////////////////////////////////////////////////////////////////////////////////
-  // Messages from slaves to the master.
+  // Messages from slaves to the master. 从slaves节点发送数据到master节点
   //////////////////////////////////////////////////////////////////////////////////
   sealed trait ToBlockManagerMaster
 

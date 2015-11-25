@@ -26,7 +26,7 @@ import org.apache.spark.serializer.Serializer
  *
  * Implementation of this class can be plugged in as recovery mode alternative for Spark's
  * Standalone mode.
- *
+ * 恢复模式工厂
  */
 @DeveloperApi
 abstract class StandaloneRecoveryModeFactory(conf: SparkConf, serializer: Serializer) {
@@ -34,12 +34,13 @@ abstract class StandaloneRecoveryModeFactory(conf: SparkConf, serializer: Serial
   /**
    * PersistenceEngine defines how the persistent data(Information about worker, driver etc..)
    * is handled for recovery.
-   *
+   * 用什么方式存储数据,是文件系统,还是zookeeper等
    */
   def createPersistenceEngine(): PersistenceEngine
 
   /**
    * Create an instance of LeaderAgent that decides who gets elected as master.
+   * 选举master
    */
   def createLeaderElectionAgent(master: LeaderElectable): LeaderElectionAgent
 }
@@ -51,6 +52,7 @@ abstract class StandaloneRecoveryModeFactory(conf: SparkConf, serializer: Serial
 private[master] class FileSystemRecoveryModeFactory(conf: SparkConf, serializer: Serializer)
   extends StandaloneRecoveryModeFactory(conf, serializer) with Logging {
 
+  //创建存储恢复需要的文件夹
   val RECOVERY_DIR = conf.get("spark.deploy.recoveryDirectory", "")
 
   def createPersistenceEngine(): PersistenceEngine = {
@@ -63,6 +65,7 @@ private[master] class FileSystemRecoveryModeFactory(conf: SparkConf, serializer:
   }
 }
 
+//使用zookeeper方式进行恢复数据
 private[master] class ZooKeeperRecoveryModeFactory(conf: SparkConf, serializer: Serializer)
   extends StandaloneRecoveryModeFactory(conf, serializer) {
 

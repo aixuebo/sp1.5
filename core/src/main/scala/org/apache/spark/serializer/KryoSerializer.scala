@@ -43,9 +43,9 @@ import org.apache.spark.util.collection.CompactBuffer
 /**
  * A Spark serializer that uses the [[https://code.google.com/p/kryo/ Kryo serialization library]].
  *
- * Note that this serializer is not guaranteed to be wire-compatible across different versions of
- * Spark. It is intended to be used to serialize/de-serialize data within a single
- * Spark application.
+ * Note that this serializer is not guaranteed to be wire-compatible across different versions of Spark. 
+ * 注意,该序列化框架,不能保证兼容不同的spark版本
+ * It is intended to be used to serialize/de-serialize data within a single Spark application.
  */
 class KryoSerializer(conf: SparkConf)
   extends org.apache.spark.serializer.Serializer
