@@ -36,8 +36,12 @@ private[spark] class WorkerInfo(
   Utils.checkHost(host, "Expected hostname")
   assert (port > 0)
 
+  //key是该worker上执行的执行者ExecutorDesc.fullId,value是执行者对象
   @transient var executors: mutable.HashMap[String, ExecutorDesc] = _ // executorId => info
+  
+  //key是DriverInfo.id,value是DriverInfo对象,表示在该worker上要运行的driver集合
   @transient var drivers: mutable.HashMap[String, DriverInfo] = _ // driverId => info
+  
   @transient var state: WorkerState.Value = _ ////该worker服务器的状态
   @transient var coresUsed: Int = _//该worker服务器已经使用了多少个cpu
   @transient var memoryUsed: Int = _//该worker服务器已经使用了多少内存
@@ -69,13 +73,14 @@ private[spark] class WorkerInfo(
     host + ":" + port
   }
 
-  
+  //在该worker上执行该执行者
   def addExecutor(exec: ExecutorDesc) {
     executors(exec.fullId) = exec
     coresUsed += exec.cores
     memoryUsed += exec.memory
   }
 
+  //移除该worker上的一个执行者
   def removeExecutor(exec: ExecutorDesc) {
     if (executors.contains(exec.fullId)) {
       executors -= exec.fullId
@@ -89,13 +94,21 @@ private[spark] class WorkerInfo(
     executors.values.exists(_.application == app)
   }
 
+  /**
+   * Master的launchDriver方法调用该函数
+   * 表示在schedule方法里面,当一个worker的内存和cpu满足一个driver,则在该worker上启动该driver
+   */
   def addDriver(driver: DriverInfo) {
     drivers(driver.id) = driver
+    //累加被使用的资源
     memoryUsed += driver.desc.mem
     coresUsed += driver.desc.cores
   }
 
-  //回收该内存和cpu
+  /**
+   * master的removeDriver方法调用该函数
+   * 回收该内存和cpu
+   */
   def removeDriver(driver: DriverInfo) {
     drivers -= driver.id
     memoryUsed -= driver.desc.mem

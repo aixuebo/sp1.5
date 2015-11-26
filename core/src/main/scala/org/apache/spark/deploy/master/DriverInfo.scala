@@ -24,16 +24,22 @@ import org.apache.spark.deploy.DriverDescription
 import org.apache.spark.util.Utils
 
 private[deploy] class DriverInfo(
-    val startTime: Long,
-    val id: String,
-    val desc: DriverDescription,
-    val submitDate: Date)
+    val startTime: Long,//提交时间的时间戳
+    val id: String,//格式:格式:driver-yyyyMMddHHmmss-0001
+    val desc: DriverDescription,//客户端传到master上,表示一个driver的详细信息
+    val submitDate: Date) //提交时间
   extends Serializable {
 
   @transient var state: DriverState.Value = DriverState.SUBMITTED
-  /* If we fail when launching the driver, the exception is stored here. */
+  /* If we fail when launching the driver, the exception is stored here. 
+   * 当启动一个driver的时候,有异常,则将异常存储在这个变量里面
+   **/
   @transient var exception: Option[Exception] = None
-  /* Most recent worker assigned to this driver */
+  
+  /* Most recent worker assigned to this driver 
+   * Master的launchDriver方法调用该函数
+   * 表示该driver被分配到哪个worker上执行的 
+   **/
   @transient var worker: Option[WorkerInfo] = None
 
   init()

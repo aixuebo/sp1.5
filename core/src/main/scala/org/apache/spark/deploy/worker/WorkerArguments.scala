@@ -29,11 +29,11 @@ private[worker] class WorkerArguments(args: Array[String], conf: SparkConf) {
   var host = Utils.localHostName()
   var port = 0
   var webUiPort = 8081
-  var cores = inferDefaultCores()
-  var memory = inferDefaultMemory()
+  var cores = inferDefaultCores() //该worker提供多少cpu
+  var memory = inferDefaultMemory() //该worker提供多少内存
   var masters: Array[String] = null
-  var workDir: String = null
-  var propertiesFile: String = null
+  var workDir: String = null //worker的工作目录
+  var propertiesFile: String = null //worker的配置文件路径
 
   // Check for settings in environment variables
   if (System.getenv("SPARK_WORKER_PORT") != null) {

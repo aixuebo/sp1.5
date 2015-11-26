@@ -2212,7 +2212,10 @@ private[spark] object Utils extends Logging {
     masterUrls.stripPrefix("spark://").split(",").map("spark://" + _)
   }
 
-  /** An identifier that backup masters use in their responses. */
+  /** An identifier that backup masters use in their responses. 
+   * 如果当前master状态不是alive,则不能接受driver的提交
+   * 该信息只是一个标记,要回复在response中  
+   **/
   val BACKUP_STANDALONE_MASTER_PREFIX = "Current state is not alive"
 
   /** Return true if the response message is sent from a backup Master on standby. */

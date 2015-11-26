@@ -23,7 +23,7 @@ private[master] object ApplicationState extends Enumeration {
   type ApplicationState = Value
 
   val WAITING, 
-  RUNNING, //app正在运行
+  RUNNING, //app正在运行,当app中有一个执行者在worker上被分配了,则表示运行中
   FINISHED, 
   FAILED, 
   KILLED, 

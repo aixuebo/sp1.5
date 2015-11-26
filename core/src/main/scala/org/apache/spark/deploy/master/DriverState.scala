@@ -21,13 +21,20 @@ private[deploy] object DriverState extends Enumeration {
 
   type DriverState = Value
 
-  // SUBMITTED: Submitted but not yet scheduled on a worker
-  // RUNNING: Has been allocated to a worker to run
+  // SUBMITTED: Submitted but not yet scheduled on a worker 已经接收该driver的提交,但是还没有调度该driver到一个worker上
+  // RUNNING: Has been allocated to a worker to run 表示已经将driver分配到一个worker上去运行了
   // FINISHED: Previously ran and exited cleanly
   // RELAUNCHING: Exited non-zero or due to worker failure, but has not yet started running again
   // UNKNOWN: The state of the driver is temporarily not known due to master failure recovery
   // KILLED: A user manually killed this driver
   // FAILED: The driver exited non-zero and was not supervised
   // ERROR: Unable to run or restart due to an unrecoverable error (e.g. missing jar file)
-  val SUBMITTED, RUNNING, FINISHED, RELAUNCHING, UNKNOWN, KILLED, FAILED, ERROR = Value
+  val SUBMITTED, //master受收到客户端submitDriver后,创建一个DriverInfo对象,就是该状态
+  RUNNING, //在master的schedule方法里面,当一个worker的内存和cpu满足一个driver,则在该worker上启动该driver
+  FINISHED, 
+  RELAUNCHING, 
+  UNKNOWN,
+  KILLED, 
+  FAILED,
+  ERROR = Value
 }

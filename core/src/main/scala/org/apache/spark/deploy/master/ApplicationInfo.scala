@@ -28,8 +28,8 @@ import org.apache.spark.util.Utils
 
 //该对象表示一个应用,一个driver可以产生多个应用,但是一个应用会产生多个执行者执行任务
 private[spark] class ApplicationInfo(
-    val startTime: Long,//任务开启时间
-    val id: String,//任务ID
+    val startTime: Long,//任务提交时间戳
+    val id: String,//任务ID,格式:app-yyyyMMddHHmmss-0001
     val desc: ApplicationDescription,//任务描述
     val submitDate: Date,//任务提交时间
     val driver: RpcEndpointRef,//与该应用交互的流,即master服务器可以通过该driver对应的application进行通信
@@ -48,8 +48,8 @@ private[spark] class ApplicationInfo(
   // A cap on the number of executors this application can have at any given time.
   // By default, this is infinite. Only after the first allocation request is issued by the
   // application will this be set to a finite value. This is used for dynamic allocation.
-  //仅仅测试的时候使用,可忽略
-  @transient private[master] var executorLimit: Int = _
+  //仅仅测试的时候使用,可忽略,表示正在运行的执行者的上限,不允许超过该值
+  @transient private[master] var executorLimit: Int = _ //master的handleRequestExecutors方法调用
 
   @transient private var nextExecutorId: Int = _ //该应用下一个执行者的ID
 
@@ -85,7 +85,7 @@ private[spark] class ApplicationInfo(
     }
   }
 
-  //添加一个执行者
+  //添加一个执行者,在worker上执行该应用,返回被创建的执行者
   private[master] def addExecutor(
       worker: WorkerInfo,//该执行者在哪个节点执行
       cores: Int,//该执行者所需要的cpu

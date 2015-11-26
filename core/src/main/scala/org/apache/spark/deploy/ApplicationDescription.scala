@@ -26,10 +26,10 @@ private[spark] class ApplicationDescription(
     val memoryPerExecutorMB: Int,//每一个执行者需要的内存数量
     val command: Command,
     var appUiUrl: String,
-    val eventLogDir: Option[URI] = None,
+    val eventLogDir: Option[URI] = None,//存储应用对应的日志目录,可以通过该目录还原应用信息
     // short name of compression codec used when writing event logs, if any (e.g. lzf)
     val eventLogCodec: Option[String] = None,
-    val coresPerExecutor: Option[Int] = None)
+    val coresPerExecutor: Option[Int] = None) //该应用每一个执行者需要多少cpu,如果没有设置每一个执行者默认需要多少cpu,则允许worker上执行多个执行者
   extends Serializable {
 
   val user = System.getProperty("user.name", "<unknown>")

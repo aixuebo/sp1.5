@@ -105,7 +105,11 @@ private[deploy] class Worker(
   private val workerUri = rpcEnv.uriOf(systemName, rpcEnv.address, endpointName)
   private var registered = false
   private var connected = false
+  
+  //workerId的格式:worker-yyyyMMddHHmmss-host-port
   private val workerId = generateWorkerId()
+  
+  //获取spark的home File对象
   private val sparkHome =
     if (testing) {
       assert(sys.props.contains("spark.test.home"), "spark.test.home is not set!")
@@ -154,12 +158,13 @@ private[deploy] class Worker(
     new SynchronousQueue[Runnable](),
     ThreadUtils.namedThreadFactory("worker-register-master-threadpool"))
 
-  var coresUsed = 0
-  var memoryUsed = 0
+  var coresUsed = 0 //该worker已经使用的cpu数量
+  var memoryUsed = 0 //该worker已经使用的内存数量
 
-  def coresFree: Int = cores - coresUsed
-  def memoryFree: Int = memory - memoryUsed
+  def coresFree: Int = cores - coresUsed //该worker剩余cpu数量
+  def memoryFree: Int = memory - memoryUsed //该worker剩余内存数量
 
+  //创建工作目录,默认是spark_home/work目录
   private def createWorkDir() {
     workDir = Option(workDirPath).map(new File(_)).getOrElse(new File(sparkHome, "work"))
     try {
@@ -184,7 +189,7 @@ private[deploy] class Worker(
       host, port, cores, Utils.megabytesToString(memory)))
     logInfo(s"Running Spark version ${org.apache.spark.SPARK_VERSION}")
     logInfo("Spark home: " + sparkHome)
-    createWorkDir()
+    createWorkDir() //创建工作目录
     shuffleService.startIfEnabled()
     webUi = new WorkerWebUI(this, workDir, webUiPort)
     webUi.bind()
@@ -573,6 +578,7 @@ private[deploy] class Worker(
     }
   }
 
+  //workerId的格式:worker-yyyyMMddHHmmss-host-port
   private def generateWorkerId(): String = {
     "worker-%s-%s-%d".format(createDateFormat.format(new Date), host, port)
   }
@@ -682,7 +688,7 @@ private[deploy] object Worker extends Logging {
       webUiPort: Int,
       cores: Int,
       memory: Int,
-      masterUrls: Array[String],
+      masterUrls: Array[String],//master的url集合
       workDir: String,
       workerNumber: Option[Int] = None,
       conf: SparkConf = new SparkConf): RpcEnv = {
@@ -691,12 +697,13 @@ private[deploy] object Worker extends Logging {
     val systemName = SYSTEM_NAME + workerNumber.map(_.toString).getOrElse("")
     val securityMgr = new SecurityManager(conf)
     val rpcEnv = RpcEnv.create(systemName, host, port, conf, securityMgr)
-    val masterAddresses = masterUrls.map(RpcAddress.fromSparkURL(_))
+    val masterAddresses = masterUrls.map(RpcAddress.fromSparkURL(_)) //获取master的host和port 集合
     rpcEnv.setupEndpoint(ENDPOINT_NAME, new Worker(rpcEnv, webUiPort, cores, memory,
       masterAddresses, systemName, ENDPOINT_NAME, workDir, conf, securityMgr))
     rpcEnv
   }
 
+  //true表示-Dspark.ssl.useNodeLocalConf属性配置为true
   def isUseLocalNodeSSLConfig(cmd: Command): Boolean = {
     val pattern = """\-Dspark\.ssl\.useNodeLocalConf\=(.+)""".r
     val result = cmd.javaOpts.collectFirst {
