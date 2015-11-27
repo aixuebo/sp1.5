@@ -27,12 +27,14 @@ import java.util.Map;
  */
 class CommandBuilderUtils {
 
-  static final String DEFAULT_MEM = "1g";
-  static final String DEFAULT_PROPERTIES_FILE = "spark-defaults.conf";
-  static final String ENV_SPARK_HOME = "SPARK_HOME";
+  static final String DEFAULT_MEM = "1g";//默认内存,被用于设置-Xms,开启JVM的默认内存
+  static final String DEFAULT_PROPERTIES_FILE = "spark-defaults.conf";//默认配置文件
+  static final String ENV_SPARK_HOME = "SPARK_HOME"; //spark的安装目录
   static final String ENV_SPARK_ASSEMBLY = "_SPARK_ASSEMBLY";
 
-  /** The set of known JVM vendors. */
+  /** The set of known JVM vendors.
+   * JVM提供商
+   **/
   static enum JavaVendor {
     Oracle, IBM, OpenJDK, Unknown
   };
@@ -42,7 +44,9 @@ class CommandBuilderUtils {
     return s == null || s.isEmpty();
   }
 
-  /** Joins a list of strings using the given separator. */
+  /** Joins a list of strings using the given separator. 
+   * 使用第一个参数,将第二个数组参数组装成一个字符串返回
+   **/
   static String join(String sep, String... elements) {
     StringBuilder sb = new StringBuilder();
     for (String e : elements) {
@@ -56,7 +60,9 @@ class CommandBuilderUtils {
     return sb.toString();
   }
 
-  /** Joins a list of strings using the given separator. */
+  /** Joins a list of strings using the given separator. 
+   * 使用第一个参数,将第二个集合参数组装成一个字符串返回
+   **/
   static String join(String sep, Iterable<String> elements) {
     StringBuilder sb = new StringBuilder();
     for (String e : elements) {
@@ -72,9 +78,10 @@ class CommandBuilderUtils {
 
   /**
    * Returns the first non-empty value mapped to the given key in the given maps, or null otherwise.
+   * 从一组map中查询key的值,返回第一个存在该key的value值,如果所有map该值不存在,则返回null
    */
   static String firstNonEmptyValue(String key, Map<?, ?>... maps) {
-    for (Map<?, ?> map : maps) {
+    for (Map<?, ?> map : maps) {//循环所有map集合
       String value = (String) map.get(key);
       if (!isEmpty(value)) {
         return value;
@@ -83,7 +90,9 @@ class CommandBuilderUtils {
     return null;
   }
 
-  /** Returns the first non-empty, non-null string in the given list, or null otherwise. */
+  /** Returns the first non-empty, non-null string in the given list, or null otherwise. 
+   * 返回数组中第一个不是null的值
+   **/
   static String firstNonEmpty(String... candidates) {
     for (String s : candidates) {
       if (!isEmpty(s)) {
@@ -93,7 +102,9 @@ class CommandBuilderUtils {
     return null;
   }
 
-  /** Returns the name of the env variable that holds the native library path. */
+  /** Returns the name of the env variable that holds the native library path. 
+   * 根据操作系统不同,获取对应的环境变量命令 
+   **/
   static String getLibPathEnvName() {
     if (isWindows()) {
       return "PATH";
@@ -113,7 +124,9 @@ class CommandBuilderUtils {
     return os.startsWith("Windows");
   }
 
-  /** Returns an enum value indicating whose JVM is being used. */
+  /** Returns an enum value indicating whose JVM is being used.
+   * 获取JVM的提供方 
+   **/
   static JavaVendor getJavaVendor() {
     String vendorString = System.getProperty("java.vendor");
     if (vendorString.contains("Oracle")) {
@@ -131,6 +144,9 @@ class CommandBuilderUtils {
   /**
    * Updates the user environment, appending the given pathList to the existing value of the given
    * environment variable (or setting it if it hasn't yet been set).
+   * 合并环境变量,使用;符号进行合并,类似于设置环境变量
+   * 在当前环境中,追加;pathList
+   * 从userEnv或者System中获取envKey对应的当前path,然后追加新的pathList
    */
   static void mergeEnvPathList(Map<String, String> userEnv, String envKey, String pathList) {
     if (!isEmpty(pathList)) {
@@ -229,21 +245,27 @@ class CommandBuilderUtils {
     return opts;
   }
 
-  /** Throws IllegalArgumentException if the given object is null. */
+  /** Throws IllegalArgumentException if the given object is null. 
+   * 如果o==null,则抛异常 
+   **/
   static void checkNotNull(Object o, String arg) {
     if (o == null) {
       throw new IllegalArgumentException(String.format("'%s' must not be null.", arg));
     }
   }
 
-  /** Throws IllegalArgumentException with the given message if the check is false. */
+  /** Throws IllegalArgumentException with the given message if the check is false. 
+   * 如果check=false,则抛异常,异常信息就是message以及参数集合args 
+   **/
   static void checkArgument(boolean check, String msg, Object... args) {
     if (!check) {
       throw new IllegalArgumentException(String.format(msg, args));
     }
   }
 
-  /** Throws IllegalStateException with the given message if the check is false. */
+  /** Throws IllegalStateException with the given message if the check is false.
+   * 如果check=false,则抛异常,异常信息就是message以及参数集合args
+   **/
   static void checkState(boolean check, String msg, Object... args) {
     if (!check) {
       throw new IllegalStateException(String.format(msg, args));
@@ -258,6 +280,11 @@ class CommandBuilderUtils {
    *  For example:
    *    original single argument: ab="cde fgh"
    *    quoted: "ab^=""cde fgh"""
+   *    
+   *如果参数有特殊字符的话,需要将参数添加双引号,
+   例子:
+   zzz=\"sds,sd s,\\ 改成"zzz=""sds,sd s,\\"
+	zzz=sds,sd s, 改成"zzz=sds,sd s,"
    */
   static String quoteForBatchScript(String arg) {
 
@@ -278,7 +305,7 @@ class CommandBuilderUtils {
       int cp = arg.codePointAt(i);
       switch (cp) {
       case '"':
-        quoted.append('"');
+        quoted.append('"'); //如果遇见”,则多添加一个"
         break;
 
       default:
@@ -300,6 +327,7 @@ class CommandBuilderUtils {
    *    after: "ab \"cd\" ef"
    *
    * This can be parsed back into a single argument by python's "shlex.split()" function.
+   * 参数字符中有"或者\的时候,需要追加\\转义字符
    */
   static String quoteForCommandString(String s) {
     StringBuilder quoted = new StringBuilder().append('"');

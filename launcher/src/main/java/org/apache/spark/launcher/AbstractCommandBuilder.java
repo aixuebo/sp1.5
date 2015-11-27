@@ -40,19 +40,19 @@ import static org.apache.spark.launcher.CommandBuilderUtils.*;
  */
 abstract class AbstractCommandBuilder {
 
-  boolean verbose;
+  boolean verbose;//true表示打印详细日志
   String appName;
   String appResource;
   String deployMode;
-  String javaHome;
-  String mainClass;
-  String master;
-  String propertiesFile;
+  String javaHome;//手动设置javahome信息
+  String mainClass;//运行的主类
+  String master;//master节点url
+  String propertiesFile;//配置文件路径
   final List<String> appArgs;
   final List<String> jars;
   final List<String> files;
   final List<String> pyFiles;
-  final Map<String, String> childEnv;
+  final Map<String, String> childEnv;//上下文环境,该环境会替代默认环境信息
   final Map<String, String> conf;
 
   public AbstractCommandBuilder() {
@@ -83,11 +83,15 @@ abstract class AbstractCommandBuilder {
    *
    * Callers should still add at least the class to run, as well as any arguments to pass to the
    * class.
+   * 构建java执行环境
+   * 包括:
+   * javaHome/bin/java -Dkey=value -Dkey=value -cp classpath1;classpath2;extraClassPath
    */
   List<String> buildJavaCommand(String extraClassPath) throws IOException {
     List<String> cmd = new ArrayList<String>();
     String envJavaHome;
 
+    //命令集合cmd添加第一个命令: javaHome/bin/java
     if (javaHome != null) {
       cmd.add(join(File.separator, javaHome, "bin", "java"));
     } else if ((envJavaHome = System.getenv("JAVA_HOME")) != null) {
@@ -97,6 +101,7 @@ abstract class AbstractCommandBuilder {
     }
 
     // Load extra JAVA_OPTS from conf/java-opts, if it exists.
+    //添加getConfDir()/java-opts文件对应的java JVM参数集合,每一个参数key=value用回车换行区分
     File javaOpts = new File(join(File.separator, getConfDir(), "java-opts"));
     if (javaOpts.isFile()) {
       BufferedReader br = new BufferedReader(new InputStreamReader(
@@ -111,14 +116,16 @@ abstract class AbstractCommandBuilder {
       }
     }
 
+    //添加-cp 命令,添加classpath
     cmd.add("-cp");
-    cmd.add(join(File.pathSeparator, buildClassPath(extraClassPath)));
+    cmd.add(join(File.pathSeparator, buildClassPath(extraClassPath))); //将classpath添加到cmd中,并且将额外环境extraClassPath也添加进去
     return cmd;
   }
 
   /**
    * Adds the default perm gen size option for Spark if the VM requires it and the user hasn't
    * set it.
+   * 添加-XX:MaxPermSize=256m参数
    */
   void addPermGenSizeOpt(List<String> cmd) {
     // Don't set MaxPermSize for IBM Java, or Oracle Java 8 and later.
@@ -139,9 +146,13 @@ abstract class AbstractCommandBuilder {
     cmd.add("-XX:MaxPermSize=256m");
   }
 
+  /**
+   * @param cmd classpath集合
+   * @param options 需要运行的命令集合
+   */
   void addOptionString(List<String> cmd, String options) {
     if (!isEmpty(options)) {
-      for (String opt : parseOptionString(options)) {
+      for (String opt : parseOptionString(options)) {//解析,并且添加命令参数集合
         cmd.add(opt);
       }
     }
@@ -151,6 +162,8 @@ abstract class AbstractCommandBuilder {
    * Builds the classpath for the application. Returns a list with one classpath entry per element;
    * each entry is formatted in the way expected by <i>java.net.URLClassLoader</i> (more
    * specifically, with trailing slashes for directories).
+   * 将机器上各种关于spark或者scala的classpath追加,并且返回classpath集合
+   * 参数是app应用存储路径,其他的追加是系统环境classpath
    */
   List<String> buildClassPath(String appClassPath) throws IOException {
     String sparkHome = getSparkHome();
@@ -232,17 +245,18 @@ abstract class AbstractCommandBuilder {
   /**
    * Adds entries to the classpath.
    *
-   * @param cp List to which the new entries are appended.
-   * @param entries New classpath entries (separated by File.pathSeparator).
+   * @param cp List to which the new entries are appended.classpath的集合,该集合存储的是classpath的目录集合
+   * @param entries New classpath entries (separated by File.pathSeparator).待添加的集合,通过;拆分,然后结果添加到cp集合中
+   * 将entries通过;拆分,然后结果添加到cp集合中
    */
   private void addToClassPath(List<String> cp, String entries) {
     if (isEmpty(entries)) {
       return;
     }
-    String[] split = entries.split(Pattern.quote(File.pathSeparator));
+    String[] split = entries.split(Pattern.quote(File.pathSeparator));//按照;拆分entries
     for (String entry : split) {
       if (!isEmpty(entry)) {
-        if (new File(entry).isDirectory() && !entry.endsWith(File.separator)) {
+        if (new File(entry).isDirectory() && !entry.endsWith(File.separator)) {//如果path对应的是目录,则要将最后一个字符添加/
           entry += File.separator;
         }
         cp.add(entry);
@@ -250,6 +264,7 @@ abstract class AbstractCommandBuilder {
     }
   }
 
+  //获取scala的版本号
   String getScalaVersion() {
     String scala = getenv("SPARK_SCALA_VERSION");
     if (scala != null) {
@@ -269,6 +284,7 @@ abstract class AbstractCommandBuilder {
     }
   }
 
+  //获取spark的安装目录,该目录必须存在
   String getSparkHome() {
     String path = getenv(ENV_SPARK_HOME);
     checkState(path != null,
@@ -280,15 +296,17 @@ abstract class AbstractCommandBuilder {
    * Loads the configuration file for the application, if it exists. This is either the
    * user-specified properties file, or the spark-defaults.conf file under the Spark configuration
    * directory.
+   * 加载配置文件
    */
   Properties loadPropertiesFile() throws IOException {
     Properties props = new Properties();
     File propsFile;
     if (propertiesFile != null) {
       propsFile = new File(propertiesFile);
+      //校验配置文件一定是一个文件,不能是目录
       checkArgument(propsFile.isFile(), "Invalid properties file '%s'.", propertiesFile);
     } else {
-      propsFile = new File(getConfDir(), DEFAULT_PROPERTIES_FILE);
+      propsFile = new File(getConfDir(), DEFAULT_PROPERTIES_FILE);//加载默认配置文件
     }
 
     if (propsFile.isFile()) {
@@ -313,21 +331,29 @@ abstract class AbstractCommandBuilder {
     return props;
   }
 
+  //先从childEnv寻找key,在从system中寻找key,返回key对应的值
   String getenv(String key) {
     return firstNonEmpty(childEnv.get(key), System.getenv(key));
   }
 
+  //在安装目录中查找spark-assembly.*hadoop.*\\.jar文件,并且返回该jar文件所在目录
   private String findAssembly() {
     String sparkHome = getSparkHome();
+    /**
+     * 1.寻找getSparkHome()/lib目录
+     * 2.寻找getSparkHome()/assembly/target/scala-scalaVersion目录
+     */
     File libdir;
     if (new File(sparkHome, "RELEASE").isFile()) {
-      libdir = new File(sparkHome, "lib");
+      libdir = new File(sparkHome, "lib");//寻找getSparkHome()/lib目录
+      //校验getSparkHome()/lib必须是目录,否则抛异常
       checkState(libdir.isDirectory(), "Library directory '%s' does not exist.",
           libdir.getAbsolutePath());
     } else {
       libdir = new File(sparkHome, String.format("assembly/target/scala-%s", getScalaVersion()));
     }
 
+    //查找spark-assembly.*hadoop.*\\.jar的jar文件
     final Pattern re = Pattern.compile("spark-assembly.*hadoop.*\\.jar");
     FileFilter filter = new FileFilter() {
       @Override
@@ -336,11 +362,15 @@ abstract class AbstractCommandBuilder {
       }
     };
     File[] assemblies = libdir.listFiles(filter);
+    
+    //spark-assembly.*hadoop.*\\.jar文件必须存在,并且仅1个jar文件存在
     checkState(assemblies != null && assemblies.length > 0, "No assemblies found in '%s'.", libdir);
     checkState(assemblies.length == 1, "Multiple assemblies found in '%s'.", libdir);
+    //返回spark-assembly.*hadoop.*\\.jar对应的一个jar文件所在目录
     return assemblies[0].getAbsolutePath();
   }
 
+  //获取SPARK_CONF_DIR对应的value目录,默认是获取getSparkHome()/conf目录
   private String getConfDir() {
     String confDir = getenv("SPARK_CONF_DIR");
     return confDir != null ? confDir : join(File.separator, getSparkHome(), "conf");

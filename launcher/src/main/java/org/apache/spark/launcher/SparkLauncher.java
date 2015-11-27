@@ -325,7 +325,7 @@ public class SparkLauncher {
   public Process launch() throws IOException {
     List<String> cmd = new ArrayList<String>();
     String script = isWindows() ? "spark-submit.cmd" : "spark-submit";
-    cmd.add(join(File.separator, builder.getSparkHome(), "bin", script));
+    cmd.add(join(File.separator, builder.getSparkHome(), "bin", script)); //sparkHome/bin/spark-submit 命令
     cmd.addAll(builder.buildSparkSubmitArgs());
 
     // Since the child process is a batch script, let's quote things so that special characters are

@@ -34,8 +34,8 @@ import static org.apache.spark.launcher.CommandBuilderUtils.*;
  */
 class SparkClassCommandBuilder extends AbstractCommandBuilder {
 
-  private final String className;
-  private final List<String> classArgs;
+  private final String className;//运行主类
+  private final List<String> classArgs;//运行主类所需要参数
 
   SparkClassCommandBuilder(String className, List<String> classArgs) {
     this.className = className;
@@ -45,8 +45,8 @@ class SparkClassCommandBuilder extends AbstractCommandBuilder {
   @Override
   public List<String> buildCommand(Map<String, String> env) throws IOException {
     List<String> javaOptsKeys = new ArrayList<String>();
-    String memKey = null;
-    String extraClassPath = null;
+    String memKey = null;//开启JVM所需要的内存
+    String extraClassPath = null;//sparkHome/tools/target/scala-ScalaVersion目录下spark-tools_.*\\.jar存在,则为sparkHome/tools/target/scala-ScalaVersion返回值
 
     // Master, Worker, and HistoryServer use SPARK_DAEMON_JAVA_OPTS (and specific opts) +
     // SPARK_DAEMON_MEMORY.
@@ -77,9 +77,10 @@ class SparkClassCommandBuilder extends AbstractCommandBuilder {
     } else if (className.startsWith("org.apache.spark.tools.")) {
       String sparkHome = getSparkHome();
       File toolsDir = new File(join(File.separator, sparkHome, "tools", "target",
-        "scala-" + getScalaVersion()));
-      checkState(toolsDir.isDirectory(), "Cannot find tools build directory.");
+        "scala-" + getScalaVersion()));//sparkHome/tools/target/scala-ScalaVersion目录
+      checkState(toolsDir.isDirectory(), "Cannot find tools build directory.");//校验toolsDir必须是目录
 
+      //在该目录查找spark-tools_.*\\.jar
       Pattern re = Pattern.compile("spark-tools_.*\\.jar");
       for (File f : toolsDir.listFiles()) {
         if (re.matcher(f.getName()).matches()) {
@@ -99,11 +100,15 @@ class SparkClassCommandBuilder extends AbstractCommandBuilder {
       memKey = "SPARK_DRIVER_MEMORY";
     }
 
+    //先构建环境
     List<String> cmd = buildJavaCommand(extraClassPath);
+    
+    //添加java各种命令参数
     for (String key : javaOptsKeys) {
       addOptionString(cmd, System.getenv(key));
     }
 
+    //返回默认内存
     String mem = firstNonEmpty(memKey != null ? System.getenv(memKey) : null, DEFAULT_MEM);
     cmd.add("-Xms" + mem);
     cmd.add("-Xmx" + mem);

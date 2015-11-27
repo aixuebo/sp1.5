@@ -122,6 +122,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
     }
   }
 
+  //将各种命令参数的key value方式组装成List集合
   List<String> buildSparkSubmitArgs() {
     List<String> args = new ArrayList<String>();
     SparkSubmitOptionParser parser = new SparkSubmitOptionParser();
@@ -313,6 +314,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
   }
 
 
+  //解析提交命令参数
   private class OptionParser extends SparkSubmitOptionParser {
 
     boolean helpRequested = false;
