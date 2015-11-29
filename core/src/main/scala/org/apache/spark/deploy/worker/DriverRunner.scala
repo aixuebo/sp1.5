@@ -36,22 +36,23 @@ import org.apache.spark.util.{Utils, Clock, SystemClock}
 /**
  * Manages the execution of one driver, including automatically restarting the driver on failure.
  * This is currently only used in standalone cluster deploy mode.
+ * worker上接受LaunchDriver事件后,产生该对象
  */
 private[deploy] class DriverRunner(
-    conf: SparkConf,
-    val driverId: String,
-    val workDir: File,
-    val sparkHome: File,
-    val driverDesc: DriverDescription,
-    val worker: RpcEndpointRef,
-    val workerUrl: String,
+    conf: SparkConf,//worker上的配置信息
+    val driverId: String,//master传递过来的driverId,driver的唯一标示
+    val workDir: File,//该worker上的工作目录
+    val sparkHome: File,//获取spark的home File对象
+    val driverDesc: DriverDescription,//master传递过来关于driver的描述
+    val worker: RpcEndpointRef,//worker自己本身通道
+    val workerUrl: String,//worker上的webUiUrl
     val securityManager: SecurityManager)
   extends Logging {
 
-  @volatile private var process: Option[Process] = None
+  @volatile private var process: Option[Process] = None //执行命令工作的进程对象
   @volatile private var killed = false
 
-  // Populated once finished
+  // Populated once finished 最终完成的状态、异常、返回状态码
   private[worker] var finalState: Option[DriverState] = None
   private[worker] var finalException: Option[Exception] = None
   private var finalExitCode: Option[Int] = None
@@ -70,13 +71,15 @@ private[deploy] class DriverRunner(
     def sleep(seconds: Int): Unit = (0 until seconds).takeWhile(f => {Thread.sleep(1000); !killed})
   }
 
-  /** Starts a thread to run and manage the driver. */
+  /** Starts a thread to run and manage the driver. 
+   *  开启一个driver,这个是入口类 
+   **/
   private[worker] def start() = {
     new Thread("DriverRunner for " + driverId) {
       override def run() {
         try {
-          val driverDir = createWorkingDirectory()
-          val localJarFilename = downloadUserJar(driverDir)
+          val driverDir = createWorkingDirectory() //创建work/app目录
+          val localJarFilename = downloadUserJar(driverDir) //下载user的jar包,返回本地的jar包所在路径
 
           def substituteVariables(argument: String): String = argument match {
             case "{{WORKER_URL}}" => workerUrl
@@ -85,8 +88,11 @@ private[deploy] class DriverRunner(
           }
 
           // TODO: If we add ability to submit multiple jars they should also be added here
+          //构建运行该driver的命令
           val builder = CommandUtils.buildProcessBuilder(driverDesc.command, securityManager,
             driverDesc.mem, sparkHome.getAbsolutePath, substituteVariables)
+            
+            //运行该driver
           launchDriver(builder, driverDir, driverDesc.supervise)
         }
         catch {
@@ -107,6 +113,7 @@ private[deploy] class DriverRunner(
 
         finalState = Some(state)
 
+        //向worker发送driver状态更新命令
         worker.send(DriverStateChanged(driverId, state, finalException))
       }
     }.start()
@@ -123,6 +130,7 @@ private[deploy] class DriverRunner(
   /**
    * Creates the working directory for this driver.
    * Will throw an exception if there are errors preparing the directory.
+   * 创建work/app目录
    */
   private def createWorkingDirectory(): File = {
     val driverDir = new File(workDir, driverId)
@@ -135,21 +143,26 @@ private[deploy] class DriverRunner(
   /**
    * Download the user jar into the supplied directory and return its local path.
    * Will throw an exception if there are errors downloading the jar.
+   * 下载用户的jar包等资源在本地的工作目录下,如果下载过程中出现异常,则抛出异常
+   * @driverDir :创建的work/app目录
+   * 
+   * 返回本地的jar包所在路径
    */
   private def downloadUserJar(driverDir: File): String = {
     val jarPath = new Path(driverDesc.jarUrl)
 
     val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
-    val destPath = new File(driverDir.getAbsolutePath, jarPath.getName)
-    val jarFileName = jarPath.getName
-    val localJarFile = new File(driverDir, jarFileName)
-    val localJarFilename = localJarFile.getAbsolutePath
+    val destPath = new File(driverDir.getAbsolutePath, jarPath.getName) //设置目的地
+    val jarFileName = jarPath.getName //jar包名
+    val localJarFile = new File(driverDir, jarFileName) //本地jar包
+    val localJarFilename = localJarFile.getAbsolutePath //本地的jar包所在路径
 
+    //如果本地没有该jar包
     if (!localJarFile.exists()) { // May already exist if running multiple workers on one node
       logInfo(s"Copying user jar $jarPath to $destPath")
-      Utils.fetchFile(
+      Utils.fetchFile(//下载jar包到
         driverDesc.jarUrl,
-        driverDir,
+        driverDir,//下载到本地目录
         conf,
         securityManager,
         hadoopConf,
@@ -157,6 +170,7 @@ private[deploy] class DriverRunner(
         useCache = false)
     }
 
+    //如果下载后jar包依然不存在,则抛异常
     if (!localJarFile.exists()) { // Verify copy succeeded
       throw new Exception(s"Did not see expected jar $jarFileName in $driverDir")
     }
@@ -164,22 +178,26 @@ private[deploy] class DriverRunner(
     localJarFilename
   }
 
+  //运行该driver
   private def launchDriver(builder: ProcessBuilder, baseDir: File, supervise: Boolean) {
-    builder.directory(baseDir)
+    builder.directory(baseDir) //设置工作目录,即work/app目录
     def initialize(process: Process): Unit = {
-      // Redirect stdout and stderr to files
+      // Redirect stdout and stderr to files,work/app/stdout文件作为标准输出
       val stdout = new File(baseDir, "stdout")
       CommandUtils.redirectStream(process.getInputStream, stdout)
 
-      val stderr = new File(baseDir, "stderr")
+      val stderr = new File(baseDir, "stderr") //work/app/stderr文件作为异常输出
       val header = "Launch Command: %s\n%s\n\n".format(
         builder.command.mkString("\"", "\" \"", "\""), "=" * 40)
       Files.append(header, stderr, UTF_8)
       CommandUtils.redirectStream(process.getErrorStream, stderr)
     }
+    
+    //运行命令执行driver
     runCommandWithRetry(ProcessBuilderLike(builder), initialize, supervise)
   }
 
+  //运行命令执行driver
   def runCommandWithRetry(
       command: ProcessBuilderLike, initialize: Process => Unit, supervise: Boolean): Unit = {
     // Time to wait between submission retries.

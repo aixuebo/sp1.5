@@ -42,9 +42,9 @@ object CommandUtils extends Logging {
   def buildProcessBuilder(
       command: Command,
       securityMgr: SecurityManager,
-      memory: Int,
+      memory: Int,//命令需要的内存
       sparkHome: String,
-      substituteArguments: String => String,
+      substituteArguments: String => String,//环境变量Map类型
       classPaths: Seq[String] = Seq[String](),
       env: Map[String, String] = sys.env): ProcessBuilder = {
     val localCommand = buildLocalCommand(
@@ -69,6 +69,7 @@ object CommandUtils extends Logging {
    * Build a command based on the given one, taking into account the local environment
    * of where this command is expected to run, substitute any placeholders, and append
    * any extra class paths.
+   * 重新构建命令
    */
   private def buildLocalCommand(
       command: Command,
@@ -76,13 +77,15 @@ object CommandUtils extends Logging {
       substituteArguments: String => String,
       classPath: Seq[String] = Seq[String](),
       env: Map[String, String]): Command = {
-    val libraryPathName = Utils.libraryPathEnvName
-    val libraryPathEntries = command.libraryPathEntries
-    val cmdLibraryPath = command.environment.get(libraryPathName)
+    
+    //首先设置环境变量path
+    val libraryPathName = Utils.libraryPathEnvName //获取操作系统的环境变量默认key,例如index 为path
+    val libraryPathEntries = command.libraryPathEntries //jar包等path路径
+    val cmdLibraryPath = command.environment.get(libraryPathName) //环境path对应的信息
 
     var newEnvironment = if (libraryPathEntries.nonEmpty && libraryPathName.nonEmpty) {
-      val libraryPaths = libraryPathEntries ++ cmdLibraryPath ++ env.get(libraryPathName)
-      command.environment + ((libraryPathName, libraryPaths.mkString(File.pathSeparator)))
+      val libraryPaths = libraryPathEntries ++ cmdLibraryPath ++ env.get(libraryPathName) //合并pah信息
+      command.environment + ((libraryPathName, libraryPaths.mkString(File.pathSeparator))) //将合并后的path信息存储到path环境变量里面
     } else {
       command.environment
     }
@@ -99,10 +102,13 @@ object CommandUtils extends Logging {
       command.classPathEntries ++ classPath,
       Seq[String](), // library path already captured in environment variable
       // filter out auth secret from java options
+      //过滤仅保留-D开头的JVM参数信息
       command.javaOpts.filterNot(_.startsWith("-D" + SecurityManager.SPARK_AUTH_SECRET_CONF)))
   }
 
-  /** Spawn a thread that will redirect a given stream to a file */
+  /** Spawn a thread that will redirect a given stream to a file 
+   *  开启一个线程,作用是重定向in到一个文件中
+   **/
   def redirectStream(in: InputStream, file: File) {
     val out = new FileOutputStream(file, true)
     // TODO: It would be nice to add a shutdown hook here that explains why the output is

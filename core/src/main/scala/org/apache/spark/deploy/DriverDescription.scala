@@ -19,7 +19,7 @@ package org.apache.spark.deploy
 
 //对driver的一个简单描述信息
 private[deploy] class DriverDescription(
-    val jarUrl: String,
+    val jarUrl: String,//driver所需要的jar包路径,可以是hdfs上路径
     val mem: Int,//该driver需要多少内存
     val cores: Int,//该driver需要多少cpu
     val supervise: Boolean,//true表示允许重新启动该driver

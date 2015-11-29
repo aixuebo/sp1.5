@@ -21,8 +21,8 @@ import org.apache.spark.annotation.DeveloperApi
 
 /**
  * An opaque handle to a shuffle, used by a ShuffleManager to pass information about it to tasks.
- *
- * @param shuffleId ID of the shuffle
+ * 一个不透明的操作去做一个shuffle操作,被ShuffleManager使用
+ * @param shuffleId ID of the shuffle 仅仅包含一个shuffleId
  */
 @DeveloperApi
 abstract class ShuffleHandle(val shuffleId: Int) extends Serializable {}

@@ -34,7 +34,9 @@ private[spark] object ClosureCleaner extends Logging {
   // Get an ASM class reader for a given class from the JAR that loaded it
   private[util] def getClassReader(cls: Class[_]): ClassReader = {
     // Copy data over, before delegating to ClassReader - else we can run out of open file handles.
+    //例如org.apache.spark.util.ClosureCleaner 返回ClosureCleaner.class
     val className = cls.getName.replaceFirst("^.*\\.", "") + ".class"
+    //读取该class的输入流
     val resourceStream = cls.getResourceAsStream(className)
     // todo: Fixme - continuing with earlier behavior ...
     if (resourceStream == null) return new ClassReader(resourceStream)
@@ -44,7 +46,7 @@ private[spark] object ClosureCleaner extends Logging {
     new ClassReader(new ByteArrayInputStream(baos.toByteArray))
   }
 
-  // Check whether a class represents a Scala closure
+  // Check whether a class represents a Scala closure,true表示是closure类
   private def isClosure(cls: Class[_]): Boolean = {
     cls.getName.contains("$anonfun$")
   }

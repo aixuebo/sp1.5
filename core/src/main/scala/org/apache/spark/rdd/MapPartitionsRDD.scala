@@ -23,12 +23,13 @@ import org.apache.spark.{Partition, TaskContext}
 
 /**
  * An RDD that applies the provided function to every partition of the parent RDD.
+ * 提供一个函数.partition中的每一个泛型元素T都会转换成U,组成新的RDD
  */
 private[spark] class MapPartitionsRDD[U: ClassTag, T: ClassTag](
-    prev: RDD[T],
-    f: (TaskContext, Int, Iterator[T]) => Iterator[U],  // (TaskContext, partition index, iterator)
-    preservesPartitioning: Boolean = false)
-  extends RDD[U](prev) {
+    prev: RDD[T],//父RDD[T]
+    f: (TaskContext, Int, Iterator[T]) => Iterator[U],  // (TaskContext, partition index, iterator) 函数,三个参数,返回RDD[U]后,迭代每一个泛型U对象
+    preservesPartitioning: Boolean = false) //true表示维持父类RDD[T]对应的Partitioner分隔类
+  extends RDD[U](prev) { //继承RDD[U],该RDD依赖RDD[T]
 
   override val partitioner = if (preservesPartitioning) firstParent[T].partitioner else None
 

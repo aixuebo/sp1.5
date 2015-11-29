@@ -344,6 +344,7 @@ private[spark] object Utils extends Logging {
    *
    * Throws SparkException if the target file already exists and has different contents than
    * the requested file.
+   * 下载指定url的文件到targetDir目录下
    */
   def fetchFile(
       url: String,
@@ -352,36 +353,39 @@ private[spark] object Utils extends Logging {
       securityMgr: SecurityManager,
       hadoopConf: Configuration,
       timestamp: Long,
-      useCache: Boolean) {
+      useCache: Boolean) {//true表示该文件下载后需要缓存
     val fileName = url.split("/").last
     val targetFile = new File(targetDir, fileName)
     val fetchCacheEnabled = conf.getBoolean("spark.files.useFetchCache", defaultValue = true)
-    if (useCache && fetchCacheEnabled) {
-      val cachedFileName = s"${url.hashCode}${timestamp}_cache"
-      val lockFileName = s"${url.hashCode}${timestamp}_lock"
-      val localDir = new File(getLocalDir(conf))
-      val lockFile = new File(localDir, lockFileName)
+    
+    if (useCache && fetchCacheEnabled) {//缓存该文件
+      val cachedFileName = s"${url.hashCode}${timestamp}_cache" //缓存的文件名
+      val lockFileName = s"${url.hashCode}${timestamp}_lock" //为缓存文件创建锁文件
+      val localDir = new File(getLocalDir(conf)) //缓存文件存储的目录
+      val lockFile = new File(localDir, lockFileName) //创建锁文件
       val lockFileChannel = new RandomAccessFile(lockFile, "rw").getChannel()
       // Only one executor entry.
       // The FileLock is only used to control synchronization for executors download file,
       // it's always safe regardless of lock type (mandatory or advisory).
-      val lock = lockFileChannel.lock()
-      val cachedFile = new File(localDir, cachedFileName)
+      val lock = lockFileChannel.lock() //开始锁文件处理
+      val cachedFile = new File(localDir, cachedFileName) //在root/cachedFileName 就是缓存的文件
       try {
-        if (!cachedFile.exists()) {
+        if (!cachedFile.exists()) {//如果缓存文件不存在,则去下载,并且存储在缓存文件里
           doFetchFile(url, localDir, cachedFileName, conf, securityMgr, hadoopConf)
         }
       } finally {
+        //关闭锁文件,释放锁
         lock.release()
         lockFileChannel.close()
       }
+      //将缓存文件copy到目标目录里面
       copyFile(
         url,
         cachedFile,
         targetFile,
         conf.getBoolean("spark.files.overwrite", false)
       )
-    } else {
+    } else {//如果不需要缓存文件,则去下载目标文件到target目录中
       doFetchFile(url, targetDir, fileName, conf, securityMgr, hadoopConf)
     }
 
@@ -448,13 +452,14 @@ private[spark] object Utils extends Logging {
    *   - throw an exception if `fileOverwrite` is false,
    *   - attempt to overwrite it otherwise.
    *
-   * @param url URL that `sourceFile` originated from, for logging purposes.
-   * @param sourceFile File path to copy/move from.
-   * @param destFile File path to copy/move to.
-   * @param fileOverwrite Whether to delete/overwrite an existing `destFile` that does not match
-   *                      `sourceFile`
+   * @param url URL that `sourceFile` originated from, for logging purposes.该原始文件所对应的url信息
+   * @param sourceFile File path to copy/move from.原始目录
+   * @param destFile File path to copy/move to. 目的地
+   * @param fileOverwrite Whether to delete/overwrite an existing `destFile` that does not match 
+   *                      `sourceFile` 是否覆盖
    * @param removeSourceFile Whether to remove `sourceFile` after / as part of moving/copying it to
-   *                         `destFile`.
+   *                         `destFile`. 是否删除原始文件
+   * 将本地资源文件进行copy,目标是sourceFile
    */
   private def copyFile(
       url: String,
@@ -540,18 +545,19 @@ private[spark] object Utils extends Logging {
    *
    * Throws SparkException if the target file already exists and has different contents than
    * the requested file.
+   * 去下载目标文件到target目录中
    */
   private def doFetchFile(
-      url: String,
-      targetDir: File,
-      filename: String,
+      url: String,//待下载的目标所在路径,可以是HDFS路径
+      targetDir: File,//下载到目标文件夹
+      filename: String,//下载下来后存储的名字
       conf: SparkConf,
       securityMgr: SecurityManager,
       hadoopConf: Configuration) {
-    val targetFile = new File(targetDir, filename)
+    val targetFile = new File(targetDir, filename) //目标存储的路径
     val uri = new URI(url)
-    val fileOverwrite = conf.getBoolean("spark.files.overwrite", defaultValue = false)
-    Option(uri.getScheme).getOrElse("file") match {
+    val fileOverwrite = conf.getBoolean("spark.files.overwrite", defaultValue = false) //是否覆盖下载
+    Option(uri.getScheme).getOrElse("file") match {//默认从本地路径下载,获取url所在的协议
       case "http" | "https" | "ftp" =>
         var uc: URLConnection = null
         if (securityMgr.isAuthenticationEnabled()) {
@@ -572,12 +578,12 @@ private[spark] object Utils extends Logging {
         uc.connect()
         val in = uc.getInputStream()
         downloadFile(url, in, targetFile, fileOverwrite)
-      case "file" =>
+      case "file" => //本地路径copy
         // In the case of a local file, copy the local file to the target directory.
         // Note the difference between uri vs url.
         val sourceFile = if (uri.isAbsolute) new File(uri) else new File(url)
         copyFile(url, sourceFile, targetFile, fileOverwrite)
-      case _ =>
+      case _ => //hdfs方式下载
         val fs = getHadoopFileSystem(uri, hadoopConf)
         val path = new Path(uri)
         fetchHcfsFile(path, targetDir, fs, conf, hadoopConf, fileOverwrite,
@@ -589,15 +595,16 @@ private[spark] object Utils extends Logging {
    * Fetch a file or directory from a Hadoop-compatible filesystem.
    *
    * Visible for testing
+   * 从HDFS上下载文件
    */
   private[spark] def fetchHcfsFile(
-      path: Path,
-      targetDir: File,
+      path: Path,//hdfs上原始文件的路径
+      targetDir: File,//目标存储url
       fs: FileSystem,
       conf: SparkConf,
       hadoopConf: Configuration,
-      fileOverwrite: Boolean,
-      filename: Option[String] = None): Unit = {
+      fileOverwrite: Boolean,//目标文件存在的话,是否覆盖
+      filename: Option[String] = None): Unit = {//目标文件下载后的文件名
     if (!targetDir.exists() && !targetDir.mkdir()) {
       throw new IOException(s"Failed to create directory ${targetDir.getPath}")
     }
@@ -684,6 +691,7 @@ private[spark] object Utils extends Logging {
     }
   }
 
+  //创建本地的Root根目录,根目录集合被返回
   private def getOrCreateLocalRootDirsImpl(conf: SparkConf): Array[String] = {
     getConfiguredLocalDirs(conf).flatMap { root =>
       try {

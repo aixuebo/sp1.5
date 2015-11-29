@@ -30,6 +30,7 @@ object TaskContext {
   /**
    * Return the currently active TaskContext. This can be called inside of
    * user functions to access contextual information about running tasks.
+   * 返回当前线程下的任务上下文
    */
   def get(): TaskContext = taskContext.get
 
@@ -38,7 +39,7 @@ object TaskContext {
    * if there is no active TaskContext for cases like local execution.
    */
   def getPartitionId(): Int = {
-    val tc = taskContext.get()
+    val tc = taskContext.get() //返回当前线程下的任务上下文
     if (tc eq null) {
       0
     } else {
@@ -52,11 +53,13 @@ object TaskContext {
   // showing up in JavaDoc.
   /**
    * Set the thread local TaskContext. Internal to Spark.
+   * 设置当前线程下的任务上下文
    */
   protected[spark] def setTaskContext(tc: TaskContext): Unit = taskContext.set(tc)
 
   /**
    * Unset the thread local TaskContext. Internal to Spark.
+   * 从当前线程的上下文中移除
    */
   protected[spark] def unset(): Unit = taskContext.remove()
 

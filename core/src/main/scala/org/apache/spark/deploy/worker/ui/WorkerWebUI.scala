@@ -55,6 +55,6 @@ class WorkerWebUI(
 
 private[worker] object WorkerWebUI {
   val STATIC_RESOURCE_BASE = SparkUI.STATIC_RESOURCE_DIR
-  val DEFAULT_RETAINED_DRIVERS = 1000
-  val DEFAULT_RETAINED_EXECUTORS = 1000
+  val DEFAULT_RETAINED_DRIVERS = 1000 //针对已经完成的driver,确认其中保留在worker内存中的数量,则移除10%已经完成的执行者
+  val DEFAULT_RETAINED_EXECUTORS = 1000 //针对已经完成的执行者,确认其中保留在worker内存中的数量,则移除10%已经完成的执行者
 }

@@ -24,6 +24,6 @@ private[spark] case class Command(
     arguments: Seq[String],//主类需要的参数集合
     environment: Map[String, String],//环境信息
     classPathEntries: Seq[String],
-    libraryPathEntries: Seq[String],
+    libraryPathEntries: Seq[String],//jar包等path路径
     javaOpts: Seq[String]) { //java的额外选项
 }

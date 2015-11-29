@@ -1618,6 +1618,9 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
 
   /**
    * Unpersist an RDD from memory and/or disk storage
+   * 从内存和磁盘上移除RDD的缓存,
+   * @rddId 准备被删除的RDD数据块
+   * @blocking 表示是否阻塞,直到所有属于RDD的数据块被删除完后在解除阻塞
    */
   private[spark] def unpersistRDD(rddId: Int, blocking: Boolean = true) {
     env.blockManager.master.removeRdd(rddId, blocking)
@@ -2096,7 +2099,9 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
 
   private val nextRddId = new AtomicInteger(0)
 
-  /** Register a new RDD, returning its RDD ID */
+  /** Register a new RDD, returning its RDD ID 
+   * 创建RDD的ID,唯一标示RDD的标志  
+   **/
   private[spark] def newRddId(): Int = nextRddId.getAndIncrement()
 
   /**

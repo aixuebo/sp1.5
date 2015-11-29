@@ -35,13 +35,14 @@ import RollingFileAppender._
  * @param bufferSize              Optional buffer size. Used mainly for testing.
  */
 private[spark] class RollingFileAppender(
-    inputStream: InputStream,
-    activeFile: File,
-    val rollingPolicy: RollingPolicy,
+    inputStream: InputStream,//将inputStream的信息写入到file文件中
+    activeFile: File,//将inputStream的信息写入到file文件中
+    val rollingPolicy: RollingPolicy,//文件切换策略
     conf: SparkConf,
     bufferSize: Int = DEFAULT_BUFFER_SIZE
   ) extends FileAppender(inputStream, activeFile, bufferSize) {
 
+  //删除的历史文件信息,最终只保持有maxRetainedFiles个文件存在即可
   private val maxRetainedFiles = conf.getInt(RETAINED_FILES_PROPERTY, -1)
 
   /** Stop the appender */
@@ -49,22 +50,26 @@ private[spark] class RollingFileAppender(
     super.stop()
   }
 
-  /** Append bytes to file after rolling over is necessary */
+  /** Append bytes to file after rolling over is necessary 
+   *  将字节数组中数据存储到文件中 
+   **/
   override protected def appendToFile(bytes: Array[Byte], len: Int) {
-    if (rollingPolicy.shouldRollover(len)) {
-      rollover()
-      rollingPolicy.rolledOver()
+    if (rollingPolicy.shouldRollover(len)) {//判断是否应该回滚切换文件
+      rollover()//切换文件
+      rollingPolicy.rolledOver() //切换文件后,重新初始化切换策略信息
     }
-    super.appendToFile(bytes, len)
-    rollingPolicy.bytesWritten(len)
+    super.appendToFile(bytes, len) //将字节内容写入到文件中
+    rollingPolicy.bytesWritten(len) //更新切换策略,本次写了多少个字节
   }
 
-  /** Rollover the file, by closing the output stream and moving it over */
+  /** Rollover the file, by closing the output stream and moving it over 
+   * 真正去切换文件 
+   **/
   private def rollover() {
     try {
-      closeFile()
-      moveFile()
-      openFile()
+      closeFile() //关闭文件
+      moveFile() //进行文件切换
+      openFile() //打开新的文件
       if (maxRetainedFiles > 0) {
         deleteOldFiles()
       }
@@ -74,19 +79,22 @@ private[spark] class RollingFileAppender(
     }
   }
 
-  /** Move the active log file to a new rollover file */
+  /** Move the active log file to a new rollover file 
+   *  切换文件 
+   **/
   private def moveFile() {
-    val rolloverSuffix = rollingPolicy.generateRolledOverFileSuffix()
+    val rolloverSuffix = rollingPolicy.generateRolledOverFileSuffix() //获取本次要切换文件时的文件名
     val rolloverFile = new File(
-      activeFile.getParentFile, activeFile.getName + rolloverSuffix).getAbsoluteFile
+      activeFile.getParentFile, activeFile.getName + rolloverSuffix).getAbsoluteFile //获取文件切换后的具体路径+文件名信息
     try {
       logDebug(s"Attempting to rollover file $activeFile to file $rolloverFile")
       if (activeFile.exists) {
         if (!rolloverFile.exists) {
-          Files.move(activeFile, rolloverFile)
+          Files.move(activeFile, rolloverFile) //剪切文件
           logInfo(s"Rolled over $activeFile to $rolloverFile")
         } else {
           // In case the rollover file name clashes, make a unique file name.
+          //文件名字冲突,则在后缀后面添加--序号
           // The resultant file names are long and ugly, so this is used only
           // if there is a name collision. This can be avoided by the using
           // the right pattern such that name collisions do not occur.
@@ -108,14 +116,19 @@ private[spark] class RollingFileAppender(
     }
   }
 
-  /** Retain only last few files */
+  /** Retain only last few files 
+   * 删除的历史文件信息,最终只保持有maxRetainedFiles个文件存在即可  
+   **/
   private[util] def deleteOldFiles() {
     try {
+      //寻找所有的切换文件集合,并且排序
       val rolledoverFiles = activeFile.getParentFile.listFiles(new FileFilter {
         def accept(f: File): Boolean = {
           f.getName.startsWith(activeFile.getName) && f != activeFile
         }
       }).sorted
+      
+      //获取要删除的历史文件信息,最终只保持有maxRetainedFiles个文件存在即可
       val filesToBeDeleted = rolledoverFiles.take(
         math.max(0, rolledoverFiles.size - maxRetainedFiles))
       filesToBeDeleted.foreach { file =>
@@ -134,13 +147,13 @@ private[spark] class RollingFileAppender(
  * names of configurations that configure rolling file appenders.
  */
 private[spark] object RollingFileAppender {
-  val STRATEGY_PROPERTY = "spark.executor.logs.rolling.strategy"
+  val STRATEGY_PROPERTY = "spark.executor.logs.rolling.strategy" //策略
   val STRATEGY_DEFAULT = ""
-  val INTERVAL_PROPERTY = "spark.executor.logs.rolling.time.interval"
-  val INTERVAL_DEFAULT = "daily"
-  val SIZE_PROPERTY = "spark.executor.logs.rolling.maxSize"
+  val INTERVAL_PROPERTY = "spark.executor.logs.rolling.time.interval" //基于time的时间间隔
+  val INTERVAL_DEFAULT = "daily" //默认值是24小时切换时间间隔
+  val SIZE_PROPERTY = "spark.executor.logs.rolling.maxSize" //基于字节数量的字节数
   val SIZE_DEFAULT = (1024 * 1024).toString
-  val RETAINED_FILES_PROPERTY = "spark.executor.logs.rolling.maxRetainedFiles"
+  val RETAINED_FILES_PROPERTY = "spark.executor.logs.rolling.maxRetainedFiles" //最终保留多少个切换过的文件
   val DEFAULT_BUFFER_SIZE = 8192
 
   /**
@@ -148,16 +161,23 @@ private[spark] object RollingFileAppender {
    * over file names are prefixed with the `activeFileName`, and the active file
    * name has the latest logs. So it sorts all the rolled over logs (that are
    * prefixed with `activeFileName`) and appends the active file
+   * 获取文件夹下所有以activeFileName开头和activeFileName文件本身组成的集合
    */
   def getSortedRolledOverFiles(directory: String, activeFileName: String): Seq[File] = {
+    
+    //查找目录下以activeFileName开头的文件集合,并且排序
     val rolledOverFiles = new File(directory).getAbsoluteFile.listFiles.filter { file =>
       val fileName = file.getName
       fileName.startsWith(activeFileName) && fileName != activeFileName
     }.sorted
+    
+    //获取文件夹下activeFileName文件,返回该文件File对象
     val activeFile = {
       val file = new File(directory, activeFileName).getAbsoluteFile
       if (file.exists) Some(file) else None
     }
+    
+    //将两组文件集合合并后返回
     rolledOverFiles ++ activeFile
   }
 }

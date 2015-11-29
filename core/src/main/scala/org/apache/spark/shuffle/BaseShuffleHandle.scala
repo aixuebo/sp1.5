@@ -24,7 +24,7 @@ import org.apache.spark.serializer.Serializer
  * A basic ShuffleHandle implementation that just captures registerShuffle's parameters.
  */
 private[spark] class BaseShuffleHandle[K, V, C](
-    shuffleId: Int,
+    shuffleId: Int,//shuffle的唯一标示ID
     val numMaps: Int,
     val dependency: ShuffleDependency[K, V, C])
   extends ShuffleHandle(shuffleId)

@@ -22,6 +22,7 @@ import org.apache.spark.annotation.DeveloperApi
 /**
  * :: DeveloperApi ::
  * A class with pseudorandom behavior.
+ * 代表一个伪随机行为的接口
  */
 @DeveloperApi
 trait Pseudorandom {

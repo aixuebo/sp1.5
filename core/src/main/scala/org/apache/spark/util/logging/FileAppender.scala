@@ -24,14 +24,15 @@ import org.apache.spark.util.{IntParam, Utils}
 
 /**
  * Continuously appends the data from an input stream into the given file.
+ * 将inputStream的信息写入到file文件中
  */
 private[spark] class FileAppender(inputStream: InputStream, file: File, bufferSize: Int = 8192)
   extends Logging {
-  @volatile private var outputStream: FileOutputStream = null
+  @volatile private var outputStream: FileOutputStream = null //file文件的输出流
   @volatile private var markedForStop = false     // has the appender been asked to stopped
   @volatile private var stopped = false           // has the appender stopped
 
-  // Thread that reads the input stream and writes to file
+  // Thread that reads the input stream and writes to file 线程,不断的去读input信息,并且写入到file文件中
   private val writingThread = new Thread("File appending thread for " + file) {
     setDaemon(true)
     override def run() {
@@ -59,7 +60,9 @@ private[spark] class FileAppender(inputStream: InputStream, file: File, bufferSi
     markedForStop = true
   }
 
-  /** Continuously read chunks from the input stream and append to the file */
+  /** Continuously read chunks from the input stream and append to the file 
+   *  不断的去读input信息,并且写入到file文件中
+   **/
   protected def appendStreamToFile() {
     try {
       logDebug("Started appending thread")
@@ -84,7 +87,9 @@ private[spark] class FileAppender(inputStream: InputStream, file: File, bufferSi
     }
   }
 
-  /** Append bytes to the file output stream */
+  /** Append bytes to the file output stream 
+   * 写入字节到文件输出流中  
+   **/
   protected def appendToFile(bytes: Array[Byte], len: Int) {
     if (outputStream == null) {
       openFile()
@@ -92,13 +97,17 @@ private[spark] class FileAppender(inputStream: InputStream, file: File, bufferSi
     outputStream.write(bytes, 0, len)
   }
 
-  /** Open the file output stream */
+  /** Open the file output stream 
+   *  打开file文件 
+   **/
   protected def openFile() {
     outputStream = new FileOutputStream(file, false)
     logDebug(s"Opened file $file")
   }
 
-  /** Close the file output stream */
+  /** Close the file output stream 
+   * 关闭file文件  
+   **/
   protected def closeFile() {
     outputStream.flush()
     outputStream.close()
@@ -117,11 +126,14 @@ private[spark] object FileAppender extends Logging {
 
     import RollingFileAppender._
 
-    val rollingStrategy = conf.get(STRATEGY_PROPERTY, STRATEGY_DEFAULT)
-    val rollingSizeBytes = conf.get(SIZE_PROPERTY, STRATEGY_DEFAULT)
-    val rollingInterval = conf.get(INTERVAL_PROPERTY, INTERVAL_DEFAULT)
+    val rollingStrategy = conf.get(STRATEGY_PROPERTY, STRATEGY_DEFAULT) //切换策略
+    val rollingSizeBytes = conf.get(SIZE_PROPERTY, STRATEGY_DEFAULT) //基于字节数量的字节数
+    val rollingInterval = conf.get(INTERVAL_PROPERTY, INTERVAL_DEFAULT) //基于time的时间间隔
 
+    //创建基于时间的切换策略
     def createTimeBasedAppender(): FileAppender = {
+      
+      //返回值元祖,第一个是切换间隔,第二个是字符串形式表示的切换间隔,用于生成文件后缀
       val validatedParams: Option[(Long, String)] = rollingInterval match {
         case "daily" =>
           logInfo(s"Rolling executor logs enabled for $file with daily rolling")
@@ -149,6 +161,7 @@ private[spark] object FileAppender extends Logging {
       }
     }
 
+    //创建基于文件大小的切换策略
     def createSizeBasedAppender(): FileAppender = {
       rollingSizeBytes match {
         case IntParam(bytes) =>
@@ -161,6 +174,7 @@ private[spark] object FileAppender extends Logging {
       }
     }
 
+    //根据文件策略,生成文件输出流
     rollingStrategy match {
       case "" =>
         new FileAppender(inputStream, file)

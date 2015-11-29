@@ -46,43 +46,58 @@ import org.apache.spark.util.random.{BernoulliSampler, PoissonSampler, Bernoulli
 /**
  * A Resilient Distributed Dataset (RDD), the basic abstraction in Spark. Represents an immutable,
  * RDD是弹性的分布式数据集,在spark中抽象的基础类,代表不变的类,
- * partitioned collection of elements that can be operated on in parallel. This class contains the
- * basic operations available on all RDDs, such as `map`, `filter`, and `persist`. In addition,
- * [[org.apache.spark.rdd.PairRDDFunctions]] contains operations available only on RDDs of key-value
+ * partitioned collection of elements that can be operated on in parallel. 
+ * 被分隔的数据集能够支持并发的去操作
+ * This class contains the basic operations available on all RDDs, such as `map`, `filter`, and `persist`. 
+ * 在所有的RDD上都包含基本的操作,比如map filter persist等
+ * In addition, [[org.apache.spark.rdd.PairRDDFunctions]] contains operations available only on RDDs of key-value
  * pairs, such as `groupByKey` and `join`;
+ * 另外PairRDDFunctions包含的操作仅仅被适用于key-value键值对的RDD类型,例如groupByKey或者join
  * [[org.apache.spark.rdd.DoubleRDDFunctions]] contains operations available only on RDDs of
- * Doubles; and
- * [[org.apache.spark.rdd.SequenceFileRDDFunctions]] contains operations available on RDDs that
+ * Doubles; 
+ * DoubleRDDFunctions 包含的操作仅仅用于Double类型的RDD数据集
+ * and [[org.apache.spark.rdd.SequenceFileRDDFunctions]] contains operations available on RDDs that
  * can be saved as SequenceFiles.
+ * SequenceFileRDDFunctions包含的操作仅仅被用于SequenceFiles序列化文件的RDD数据集上
+ * 
  * All operations are automatically available on any RDD of the right type (e.g. RDD[(Int, Int)]
  * through implicit.
- *
+ * 所有的操作被自动用于任何正确的RDD类型上,例如RDD[(Int, Int)
  * Internally, each RDD is characterized by five main properties:
- *
- *  - A list of partitions
- *  - A function for computing each split
- *  - A list of dependencies on other RDDs
- *  - Optionally, a Partitioner for key-value RDDs (e.g. to say that the RDD is hash-partitioned)
+ * 内部,每一个RDD的特性都有以下5个主要特点
+ *  - A list of partitions 一个被分隔后的结果集,每一个分隔的内容可以支持并发操作
+ *  - A function for computing each split 函数式计算每一个被拆分的数据集
+ *  - A list of dependencies on other RDDs 可以序列化的方式依赖一组其他的RDD集合
+ *  - Optionally, a Partitioner for key-value RDDs (e.g. to say that the RDD is hash-partitioned) key-value形式的RDD很随意的依赖任何拆分实现类
  *  - Optionally, a list of preferred locations to compute each split on (e.g. block locations for
- *    an HDFS file)
+ *    an HDFS file)优先本地数据计算每一个split,例如数据块在HDFS所在节点上优先运行
  *
  * All of the scheduling and execution in Spark is done based on these methods, allowing each RDD
- * to implement its own way of computing itself. Indeed, users can implement custom RDDs (e.g. for
- * reading data from a new storage system) by overriding these functions. Please refer to the
+ * to implement its own way of computing itself. 
+ * 在spark中,所有的调度以及执行,都允许每一个RDD去用自己的方式去实现计算
+ * Indeed, users can implement custom RDDs (e.g. for reading data from a new storage system) by overriding these functions.
+ * 因此,用户能够实现自定义RDD,例如从一个存储系统中读取数据,覆盖以上那些函数即可
+ * Please refer to the
  * [[http://www.cs.berkeley.edu/~matei/papers/2012/nsdi_spark.pdf Spark paper]] for more details
  * on RDD internals.
+ * 详细可以参见该spark关于RDD的论文
+ * 
+ * @参数 T,是一个泛型.对应RDD的类型class,例如RDD[Double],表示Double类型的RDD
+ * 注意:RDD的泛型不允许是RDD类型,如果是RDD类型,说明就是RDD嵌套了,暂时是不支持的
  */
 abstract class RDD[T: ClassTag](
-    @transient private var _sc: SparkContext,
-    @transient private var deps: Seq[Dependency[_]]
+    @transient private var _sc: SparkContext,//spark环境信息
+    @transient private var deps: Seq[Dependency[_]] //该RDD依赖的RDD集合
   ) extends Serializable with Logging {
 
-  if (classOf[RDD[_]].isAssignableFrom(elementClassTag.runtimeClass)) {
+  if (classOf[RDD[_]].isAssignableFrom(elementClassTag.runtimeClass)) {//即RDD的泛型不允许是RDD类型,如果是RDD类型,说明就是RDD嵌套了,暂时是不支持的
     // This is a warning instead of an exception in order to avoid breaking user programs that
     // might have defined nested RDDs without running jobs with them.
-    logWarning("Spark does not support nested RDDs (see SPARK-5063)")
+    //这是一个警告,去代替一个异常信息,为了避免中断用户的程序,该警告的意思是说可能RDD被定义成嵌套的RDD了,该RDD是不能被运行的
+    logWarning("Spark does not support nested RDDs (see SPARK-5063)") //目前spark不支持嵌套RDD
   }
 
+  //RDD所持有的spark环境必须存在,不能是null
   private def sc: SparkContext = {
     if (_sc == null) {
       throw new SparkException(
@@ -90,22 +105,31 @@ abstract class RDD[T: ClassTag](
         "transformations; for example, rdd1.map(x => rdd2.values.count() * x) is invalid because " +
         "the values transformation and count action cannot be performed inside of the rdd1.map " +
         "transformation. For more information, see SPARK-5063.")
+      /**
+       * RDD的转变和行为操作仅仅能被执行时通过自己的Driver,而不是其他RDD内部调用
+       * 例如rdd1.map(x => rdd2.values.count() * x)  是非法操作,
+       * 因为values转换和count计算不是在RDD1的map中进行转换的
+       * 即RDD内部的转换必须接收的是函数式编程,而不是其他RDD
+       */
     }
     _sc
   }
 
-  /** Construct an RDD with just a one-to-one dependency on one parent */
+  /** Construct an RDD with just a one-to-one dependency on one parent 
+   * 创建一个RDD,该创建的RDD仅仅依赖一个RDD 
+   **/
   def this(@transient oneParent: RDD[_]) =
     this(oneParent.context , List(new OneToOneDependency(oneParent)))
 
-  private[spark] def conf = sc.conf
+  private[spark] def conf = sc.conf //获取环境信息
   // =======================================================================
-  // Methods that should be implemented by subclasses of RDD
+  // Methods that should be implemented by subclasses of RDD 子类RDD要自己实现的方法
   // =======================================================================
 
   /**
    * :: DeveloperApi ::
    * Implemented by subclasses to compute a given partition.
+   * 子类进行操作每一个partition,返回值是RDD的泛型类型的迭代器
    */
   @DeveloperApi
   def compute(split: Partition, context: TaskContext): Iterator[T]
@@ -113,12 +137,16 @@ abstract class RDD[T: ClassTag](
   /**
    * Implemented by subclasses to return the set of partitions in this RDD. This method will only
    * be called once, so it is safe to implement a time-consuming computation in it.
+   * 子类实现,将RDD进行拆分,拆分成一组partitions集合,这些partitions可以并发执行
+   * 该方法仅仅被调用一次，因此安全的去实现一个非常耗时的计算在这里面
    */
   protected def getPartitions: Array[Partition]
 
   /**
    * Implemented by subclasses to return how this RDD depends on parent RDDs. This method will only
    * be called once, so it is safe to implement a time-consuming computation in it.
+   * 子类去实现,该RDD如何依赖父RDD,
+   * 这个方法也仅仅被调用一次,也因此安全的去实现一个非常耗时的计算在这里面
    */
   protected def getDependencies: Seq[Dependency[_]] = deps
 
@@ -127,7 +155,9 @@ abstract class RDD[T: ClassTag](
    */
   protected def getPreferredLocations(split: Partition): Seq[String] = Nil
 
-  /** Optionally overridden by subclasses to specify how they are partitioned. */
+  /** Optionally overridden by subclasses to specify how they are partitioned. 
+   *  拆分对象,该类去指明如何拆分RDD
+   **/
   @transient val partitioner: Option[Partitioner] = None
 
   // =======================================================================
@@ -137,10 +167,14 @@ abstract class RDD[T: ClassTag](
   /** The SparkContext that created this RDD. */
   def sparkContext: SparkContext = sc
 
-  /** A unique ID for this RDD (within its SparkContext). */
+  /** A unique ID for this RDD (within its SparkContext). 
+   * RDD的唯一ID 
+   **/
   val id: Int = sc.newRddId()
 
-  /** A friendly name for this RDD */
+  /** A friendly name for this RDD 
+   * RDD友好的名字 
+   **/
   @transient var name: String = null
 
   /** Assign a name to this RDD */
@@ -187,17 +221,22 @@ abstract class RDD[T: ClassTag](
     }
   }
 
-  /** Persist this RDD with the default storage level (`MEMORY_ONLY`). */
+  /** Persist this RDD with the default storage level (`MEMORY_ONLY`). 
+   *  默认存储RDD在内存中
+   **/
   def persist(): this.type = persist(StorageLevel.MEMORY_ONLY)
 
-  /** Persist this RDD with the default storage level (`MEMORY_ONLY`). */
+  /** Persist this RDD with the default storage level (`MEMORY_ONLY`).
+   *  存储RDD在内存中
+   **/
   def cache(): this.type = persist()
 
   /**
    * Mark the RDD as non-persistent, and remove all blocks for it from memory and disk.
-   *
-   * @param blocking Whether to block until all blocks are deleted.
+   * 使RDD不进行缓存,并且从内存和磁盘上移除所有的数据块
+   * @param blocking Whether to block until all blocks are deleted.是否阻塞,直到所有的数据块被删除
    * @return This RDD.
+   * 移除RDD的缓存
    */
   def unpersist(blocking: Boolean = true): this.type = {
     logInfo("Removing RDD " + id + " from persistence list")
@@ -314,6 +353,7 @@ abstract class RDD[T: ClassTag](
 
   /**
    * Return a new RDD by applying a function to all elements of this RDD.
+   * 返回一个新的RDD,参数是函数f,该函数的f是RDD的泛型对象,转换成U对象
    */
   def map[U: ClassTag](f: T => U): RDD[U] = withScope {
     val cleanF = sc.clean(f)
@@ -1606,16 +1646,20 @@ abstract class RDD[T: ClassTag](
 
   private[spark] def getCreationSite: String = Option(creationSite).map(_.shortForm).getOrElse("")
 
-  private[spark] def elementClassTag: ClassTag[T] = classTag[T]
+  private[spark] def elementClassTag: ClassTag[T] = classTag[T] //RDD对应的泛型对应的类
 
   private[spark] var checkpointData: Option[RDDCheckpointData[T]] = None
 
-  /** Returns the first parent RDD */
+  /** Returns the first parent RDD 
+   * 返回依赖的父类中第一个RDD对象  
+   **/
   protected[spark] def firstParent[U: ClassTag]: RDD[U] = {
     dependencies.head.rdd.asInstanceOf[RDD[U]]
   }
 
-  /** Returns the jth parent RDD: e.g. rdd.parent[T](0) is equivalent to rdd.firstParent[T] */
+  /** Returns the jth parent RDD: e.g. rdd.parent[T](0) is equivalent to rdd.firstParent[T] 
+   *  返回依赖的父RDD中第j个RDD对象
+   **/
   protected[spark] def parent[U: ClassTag](j: Int) = {
     dependencies(j).rdd.asInstanceOf[RDD[U]]
   }

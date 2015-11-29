@@ -119,6 +119,7 @@ private[spark] abstract class RpcEnv(conf: SparkConf) {
   /**
    * Retrieve the [[RpcEndpointRef]] represented by `systemName`, `address` and `endpointName`.
    * This is a blocking action.
+   * 与address建立一个连接通道,即调用者要与address去连接
    */
   def setupEndpointRef(
       systemName: String, address: RpcAddress, endpointName: String): RpcEndpointRef = {
