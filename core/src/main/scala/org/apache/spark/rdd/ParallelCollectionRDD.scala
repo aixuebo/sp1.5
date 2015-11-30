@@ -86,7 +86,7 @@ private[spark] class ParallelCollectionRDD[T: ClassTag](
     @transient sc: SparkContext,
     @transient data: Seq[T],
     numSlices: Int,
-    locationPrefs: Map[Int, Seq[String]])
+    locationPrefs: Map[Int, Seq[String]]) //key是partitionId,value是该partitionId对应的存储路径集合,即可以从这些集合内的路径获取该partitionId的信息
     extends RDD[T](sc, Nil) {
   // TODO: Right now, each split sends along its full data, even if later down the RDD chain it gets
   // cached. It might be worthwhile to write the data to a file in the DFS and read it in the split
@@ -102,6 +102,7 @@ private[spark] class ParallelCollectionRDD[T: ClassTag](
     new InterruptibleIterator(context, s.asInstanceOf[ParallelCollectionPartition[T]].iterator)
   }
 
+  //获取partitionId对应的存储路径集合
   override def getPreferredLocations(s: Partition): Seq[String] = {
     locationPrefs.getOrElse(s.index, Nil)
   }

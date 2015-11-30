@@ -27,7 +27,9 @@ import org.apache.spark.Partition
  */
 private[spark] object CheckpointState extends Enumeration {
   type CheckpointState = Value
-  val Initialized, CheckpointingInProgress, Checkpointed = Value
+  val Initialized, //进行初始化checkPoint操作
+  CheckpointingInProgress,//正在进行RDD的 checkPoint操作
+  Checkpointed = Value //该RDD已经完成checkPoint操作了
 }
 
 /**
@@ -35,6 +37,7 @@ private[spark] object CheckpointState extends Enumeration {
  * class is associated with a RDD. It manages process of checkpointing of the associated RDD,
  * as well as, manages the post-checkpoint state by providing the updated partitions,
  * iterator and preferred locations of the checkpointed RDD.
+ * 对RDD创建一个新的可支持checkPoint的RDD对象
  */
 private[spark] abstract class RDDCheckpointData[T: ClassTag](@transient rdd: RDD[T])
   extends Serializable {
@@ -42,15 +45,16 @@ private[spark] abstract class RDDCheckpointData[T: ClassTag](@transient rdd: RDD
   import CheckpointState._
 
   // The checkpoint state of the associated RDD.
-  protected var cpState = Initialized
+  protected var cpState = Initialized //该RDD的checkPoint状态
 
-  // The RDD that contains our checkpointed data
+  // The RDD that contains our checkpointed data 获取该RDD的checkPoint对象
   private var cpRDD: Option[CheckpointRDD[T]] = None
 
   // TODO: are we sure we need to use a global lock in the following methods?
 
   /**
    * Return whether the checkpoint data for this RDD is already persisted.
+   * true表示该RDD已经完成的checkPoint操作
    */
   def isCheckpointed: Boolean = RDDCheckpointData.synchronized {
     cpState == Checkpointed
@@ -86,18 +90,21 @@ private[spark] abstract class RDDCheckpointData[T: ClassTag](@transient rdd: RDD
    *
    * Subclasses should override this method to define custom checkpointing behavior.
    * @return the checkpoint RDD created in the process.
+   * 将RDD进程checkPoint操作,产生新的RDD对象
    */
   protected def doCheckpoint(): CheckpointRDD[T]
 
   /**
    * Return the RDD that contains our checkpointed data.
    * This is only defined if the checkpoint state is `Checkpointed`.
+   * 获取该RDD的checkPoint对象
    */
   def checkpointRDD: Option[CheckpointRDD[T]] = RDDCheckpointData.synchronized { cpRDD }
 
   /**
    * Return the partitions of the resulting checkpoint RDD.
    * For tests only.
+   * 返回checkpoint的RDD对应的所有partition集合信息
    */
   def getPartitions: Array[Partition] = RDDCheckpointData.synchronized {
     cpRDD.map(_.partitions).getOrElse { Array.empty }
@@ -107,5 +114,6 @@ private[spark] abstract class RDDCheckpointData[T: ClassTag](@transient rdd: RDD
 
 /**
  * Global lock for synchronizing checkpoint operations.
+ * 同步checkPoint锁对象
  */
 private[spark] object RDDCheckpointData

@@ -19,13 +19,16 @@ package org.apache.spark
 
 /**
  * An identifier for a partition in an RDD.
+ * 标示一个RDD的一个分割部分,主要定义了序号
  */
 trait Partition extends Serializable {
   /**
    * Get the partition's index within its parent RDD
+   * 表示在父RDD中第几个分割部分,即第几个partition
    */
   def index: Int
 
   // A better default implementation of HashCode
+  //hashCode用index会更好
   override def hashCode(): Int = index
 }

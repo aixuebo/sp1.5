@@ -27,12 +27,14 @@ import org.apache.spark.util.SerializableConfiguration
 /**
  * An implementation of checkpointing that writes the RDD data to reliable storage.
  * This allows drivers to be restarted on failure with previously computed state.
+ * 该类是针对RDD进行抽象处理的,相当于RDD的checkPoint的管理类
  */
 private[spark] class ReliableRDDCheckpointData[T: ClassTag](@transient rdd: RDD[T])
   extends RDDCheckpointData[T](rdd) with Logging {
 
   // The directory to which the associated RDD has been checkpointed to
   // This is assumed to be a non-local path that points to some reliable storage
+  //返回该RDD写入到哪个目录下,返回被写入的目录,格式checkpointDir/rdd-$rddId
   private val cpDir: String =
     ReliableRDDCheckpointData.checkpointPath(rdd.context, rdd.id)
       .map(_.toString)
@@ -41,9 +43,10 @@ private[spark] class ReliableRDDCheckpointData[T: ClassTag](@transient rdd: RDD[
   /**
    * Return the directory to which this RDD was checkpointed.
    * If the RDD is not checkpointed yet, return None.
+   * 返回该RDD进行checkPoint的目录,如果该RDD还没有进行checkpointed,则返回null
    */
   def getCheckpointDir: Option[String] = RDDCheckpointData.synchronized {
-    if (isCheckpointed) {
+    if (isCheckpointed) { //如果已经完成了checkPoint,则获取该RDD的目录
       Some(cpDir.toString)
     } else {
       None
@@ -53,22 +56,23 @@ private[spark] class ReliableRDDCheckpointData[T: ClassTag](@transient rdd: RDD[
   /**
    * Materialize this RDD and write its content to a reliable DFS.
    * This is called immediately after the first action invoked on this RDD has completed.
+   * 
    */
   protected override def doCheckpoint(): CheckpointRDD[T] = {
-
-    // Create the output path for the checkpoint
+    // Create the output path for the checkpoint 创建RDD的输出目录
     val path = new Path(cpDir)
     val fs = path.getFileSystem(rdd.context.hadoopConfiguration)
     if (!fs.mkdirs(path)) {
       throw new SparkException(s"Failed to create checkpoint path $cpDir")
     }
 
-    // Save to file, and reload it as an RDD
+    // Save to file, and reload it as an RDD 加载RDD对应的hadoop配置对象
     val broadcastedConf = rdd.context.broadcast(
       new SerializableConfiguration(rdd.context.hadoopConfiguration))
-    // TODO: This is expensive because it computes the RDD again unnecessarily (SPARK-8582)
+    // TODO: This is expensive because it computes the RDD again unnecessarily (SPARK-8582) 这是一个非常耗时的操作
     rdd.context.runJob(rdd, ReliableCheckpointRDD.writeCheckpointFile[T](cpDir, broadcastedConf) _)
-    val newRDD = new ReliableCheckpointRDD[T](rdd.context, cpDir)
+    
+    val newRDD = new ReliableCheckpointRDD[T](rdd.context, cpDir) //创建可以被checkPoint的RDD
     if (newRDD.partitions.length != rdd.partitions.length) {
       throw new SparkException(
         s"Checkpoint RDD $newRDD(${newRDD.partitions.length}) has different " +
@@ -91,13 +95,19 @@ private[spark] class ReliableRDDCheckpointData[T: ClassTag](@transient rdd: RDD[
 
 private[spark] object ReliableRDDCheckpointData {
 
-  /** Return the path of the directory to which this RDD's checkpoint data is written. */
+  /** Return the path of the directory to which this RDD's checkpoint data is written. 
+   *  返回该RDD写入到哪个目录下
+   *  返回被写入的目录,格式checkpointDir/rdd-$rddId
+   **/
   def checkpointPath(sc: SparkContext, rddId: Int): Option[Path] = {
     sc.checkpointDir.map { dir => new Path(dir, s"rdd-$rddId") }
   }
 
-  /** Clean up the files associated with the checkpoint data for this RDD. */
+  /** Clean up the files associated with the checkpoint data for this RDD.
+   * 情况该RDD所有的checkPoint文件  
+   **/
   def cleanCheckpoint(sc: SparkContext, rddId: Int): Unit = {
+    //找到RDD下所有的文件,依次进行删除
     checkpointPath(sc, rddId).foreach { path =>
       val fs = path.getFileSystem(sc.hadoopConfiguration)
       if (fs.exists(path)) {

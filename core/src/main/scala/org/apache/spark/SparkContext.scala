@@ -347,7 +347,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
 
   private[spark] def cleaner: Option[ContextCleaner] = _cleaner
 
-  private[spark] var checkpointDir: Option[String] = None
+  private[spark] var checkpointDir: Option[String] = None //返回所有的RDD进行checkpoint的根目录,RDD写入的具体目录是checkpointDir/rdd-$rddId
 
   // Thread Local variable that can be used by users to pass information down the stack
   protected[spark] val localProperties = new InheritableThreadLocal[Properties] {

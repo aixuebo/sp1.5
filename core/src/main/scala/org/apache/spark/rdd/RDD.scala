@@ -253,7 +253,7 @@ abstract class RDD[T: ClassTag](
   private var dependencies_ : Seq[Dependency[_]] = null
   @transient private var partitions_ : Array[Partition] = null
 
-  /** An Option holding our checkpoint RDD, if we are checkpointed */
+  /** An Option holding our checkpoint RDD, if we are checkpointed 如果我们已经checkPoint了,则获取该RDD的checkPoint对象*/
   private def checkpointRDD: Option[CheckpointRDD[T]] = checkpointData.flatMap(_.checkpointRDD)
 
   /**
@@ -1099,8 +1099,8 @@ abstract class RDD[T: ClassTag](
     // Clone the zero value since we will also be serializing it as part of tasks
     var jobResult = Utils.clone(zeroValue, sc.env.closureSerializer.newInstance())
     val cleanOp = sc.clean(op)
-    val foldPartition = (iter: Iterator[T]) => iter.fold(zeroValue)(cleanOp)
-    val mergeResult = (index: Int, taskResult: T) => jobResult = op(jobResult, taskResult)
+    val foldPartition = (iter: Iterator[T]) => iter.fold(zeroValue)(cleanOp) //针对一个Iterator进行处理
+    val mergeResult = (index: Int, taskResult: T) => jobResult = op(jobResult, taskResult) //合并结果集
     sc.runJob(this, foldPartition, mergeResult)
     jobResult
   }
@@ -1648,7 +1648,7 @@ abstract class RDD[T: ClassTag](
 
   private[spark] def elementClassTag: ClassTag[T] = classTag[T] //RDD对应的泛型对应的类
 
-  private[spark] var checkpointData: Option[RDDCheckpointData[T]] = None
+  private[spark] var checkpointData: Option[RDDCheckpointData[T]] = None //对RDD创建一个新的可支持checkPoint的RDD对象
 
   /** Returns the first parent RDD 
    * 返回依赖的父类中第一个RDD对象  

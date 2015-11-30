@@ -23,6 +23,7 @@ import org.apache.spark.{Partition, SparkContext, TaskContext}
 
 /**
  * An RDD that has no partitions and no elements.
+ * 没有partition,没有元素,没有父依赖的RDD
  */
 private[spark] class EmptyRDD[T: ClassTag](sc: SparkContext) extends RDD[T](sc, Nil) {
 

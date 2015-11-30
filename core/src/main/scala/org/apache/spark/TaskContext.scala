@@ -122,6 +122,7 @@ abstract class TaskContext extends Serializable {
    * This will be called in all situations - success, failure, or cancellation.
    * An example use is for HadoopRDD to register a callback to close the input stream.
    * 当task任务完成的时候调用该函数f,传入参数TaskContext为任务的上下文,无返回值
+   * 例如:为任务上下文添加一个监听,当该task完成的时候调用该监听,关闭输入源
    */
   def addTaskCompletionListener(f: (TaskContext) => Unit): TaskContext
 
