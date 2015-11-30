@@ -27,6 +27,7 @@ import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.util.NextIterator
 import org.apache.spark.{Logging, Partition, SparkContext, TaskContext}
 
+//第idx个partition,仅仅抓取从lower到upper的数据
 private[spark] class JdbcPartition(idx: Int, val lower: Long, val upper: Long) extends Partition {
   override def index: Int = idx
 }
@@ -53,17 +54,18 @@ private[spark] class JdbcPartition(idx: Int, val lower: Long, val upper: Long) e
  */
 class JdbcRDD[T: ClassTag](
     sc: SparkContext,
-    getConnection: () => Connection,
-    sql: String,
-    lowerBound: Long,
-    upperBound: Long,
-    numPartitions: Int,
-    mapRow: (ResultSet) => T = JdbcRDD.resultSetToObjectArray _)
+    getConnection: () => Connection,//无参数,返回一个连接
+    sql: String,//等待查询的sql
+    lowerBound: Long,//最小值
+    upperBound: Long,//最大值
+    numPartitions: Int,//最终拆分成多少个partition
+    mapRow: (ResultSet) => T = JdbcRDD.resultSetToObjectArray _) //将参数为ResultSet,转换成T对象
   extends RDD[T](sc, Nil) with Logging {
 
+  //第idx个partition,仅仅抓取从lower到upper的数据
   override def getPartitions: Array[Partition] = {
     // bounds are inclusive, hence the + 1 here and - 1 on end
-    val length = BigInt(1) + upperBound - lowerBound
+    val length = BigInt(1) + upperBound - lowerBound //一共要查询多少条记录
     (0 until numPartitions).map(i => {
       val start = lowerBound + ((i * length) / numPartitions)
       val end = lowerBound + (((i + 1) * length) / numPartitions) - 1
@@ -71,25 +73,28 @@ class JdbcRDD[T: ClassTag](
     }).toArray
   }
 
+  //计算某一个partition,返回该partition的每一个记录
   override def compute(thePart: Partition, context: TaskContext): Iterator[T] = new NextIterator[T]
   {
+    //监听,当任务完成后,关闭资源
     context.addTaskCompletionListener{ context => closeIfNeeded() }
     val part = thePart.asInstanceOf[JdbcPartition]
-    val conn = getConnection()
+    val conn = getConnection() //获取一个连接
     val stmt = conn.prepareStatement(sql, ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY)
 
     // setFetchSize(Integer.MIN_VALUE) is a mysql driver specific way to force streaming results,
     // rather than pulling entire resultset into memory.
     // see http://dev.mysql.com/doc/refman/5.0/en/connector-j-reference-implementation-notes.html
-    if (conn.getMetaData.getURL.matches("jdbc:mysql:.*")) {
+    if (conn.getMetaData.getURL.matches("jdbc:mysql:.*")) {//mysql进行独特设置
       stmt.setFetchSize(Integer.MIN_VALUE)
       logInfo("statement fetch size set to: " + stmt.getFetchSize + " to force MySQL streaming ")
     }
 
-    stmt.setLong(1, part.lower)
+    stmt.setLong(1, part.lower) //设置预编译sql的值
     stmt.setLong(2, part.upper)
-    val rs = stmt.executeQuery()
+    val rs = stmt.executeQuery()//执行sql
 
+    //将结果集转换成T对象
     override def getNext(): T = {
       if (rs.next()) {
         mapRow(rs)
@@ -127,10 +132,13 @@ class JdbcRDD[T: ClassTag](
 }
 
 object JdbcRDD {
+  
+  //将一条结果集,转换成对象数组,每一个元素就是一个column对应的对象
   def resultSetToObjectArray(rs: ResultSet): Array[Object] = {
     Array.tabulate[Object](rs.getMetaData.getColumnCount)(i => rs.getObject(i + 1))
   }
 
+  //连接器工场
   trait ConnectionFactory extends Serializable {
     @throws[Exception]
     def getConnection: Connection
@@ -202,6 +210,7 @@ object JdbcRDD {
 
     val mapRow = new JFunction[ResultSet, Array[Object]] {
       override def call(resultSet: ResultSet): Array[Object] = {
+        //将一条结果集,转换成对象数组,每一个元素就是一个column对应的对象
         resultSetToObjectArray(resultSet)
       }
     }

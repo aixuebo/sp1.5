@@ -26,29 +26,34 @@ import org.apache.spark.util.Utils
 /**
  * :: DeveloperApi ::
  * Flags for controlling the storage of an RDD. Each StorageLevel records whether to use memory,
+ * 标记,用于控制RDD的存储,每一个记录是使用内存还是外部存储,
  * or ExternalBlockStore, whether to drop the RDD to disk if it falls out of memory or
  * ExternalBlockStore, whether to keep the data in memory in a serialized format, and whether
  * to replicate the RDD partitions on multiple nodes.
- *
+ * 如果内存溢出的时候是写入磁盘还是写入额外的存储
+ * 是否需要压缩后的数据存储在内存中
+ * 是否需要将RDD的partition存储在多个节点上
  * The [[org.apache.spark.storage.StorageLevel$]] singleton object contains some static constants
  * for commonly useful storage levels. To create your own storage level object, use the
  * factory method of the singleton object (`StorageLevel(...)`).
- * 存储级别
+ * 存储级别与方式
  */
 @DeveloperApi
 class StorageLevel private(
-    private var _useDisk: Boolean,
-    private var _useMemory: Boolean,
-    private var _useOffHeap: Boolean,
+    private var _useDisk: Boolean,//使用磁盘存储
+    private var _useMemory: Boolean,//使用内存存储
+    private var _useOffHeap: Boolean,//使用额外的存储
     private var _deserialized: Boolean,
-    private var _replication: Int = 1)
+    private var _replication: Int = 1)//备份到多少个节点上
   extends Externalizable {
 
   // TODO: Also add fields for caching priority, dataset ID, and flushing.
+  //使用flag标示四个boolean类型的
   private def this(flags: Int, replication: Int) {
     this((flags & 8) != 0, (flags & 4) != 0, (flags & 2) != 0, (flags & 1) != 0, replication)
   }
 
+  //默认使用内存做存储
   def this() = this(false, true, false, false)  // For deserialization
 
   def useDisk: Boolean = _useDisk
@@ -57,8 +62,10 @@ class StorageLevel private(
   def deserialized: Boolean = _deserialized
   def replication: Int = _replication
 
+  //约束数据的备份数不能多于40个
   assert(replication < 40, "Replication restricted to be less than 40 for calculating hash codes")
 
+  //校验如果useOffHeap=true,必须不能使用内存，也不能使用磁盘,也不能支持序列化,也不能支持多个备份
   if (useOffHeap) {
     require(!useDisk, "Off-heap storage level does not support using disk")
     require(!useMemory, "Off-heap storage level does not support using heap memory")
@@ -66,6 +73,7 @@ class StorageLevel private(
     require(replication == 1, "Off-heap storage level does not support multiple replication")
   }
 
+  //复制一个存储对象
   override def clone(): StorageLevel = {
     new StorageLevel(useDisk, useMemory, useOffHeap, deserialized, replication)
   }
@@ -81,8 +89,10 @@ class StorageLevel private(
       false
   }
 
+  //true表示可用,即有存储的方式 以及 有备份数量即可
   def isValid: Boolean = (useMemory || useDisk || useOffHeap) && (replication > 0)
 
+  //将四个boolean转换成int
   def toInt: Int = {
     var ret = 0
     if (_useDisk) {
@@ -100,11 +110,13 @@ class StorageLevel private(
     ret
   }
 
+  //序列化
   override def writeExternal(out: ObjectOutput): Unit = Utils.tryOrIOException {
     out.writeByte(toInt)
     out.writeByte(_replication)
   }
 
+  //反序列化对象
   override def readExternal(in: ObjectInput): Unit = Utils.tryOrIOException {
     val flags = in.readByte()
     _useDisk = (flags & 8) != 0
@@ -140,18 +152,18 @@ class StorageLevel private(
  * new storage levels.
  */
 object StorageLevel {
-  val NONE = new StorageLevel(false, false, false, false)
-  val DISK_ONLY = new StorageLevel(true, false, false, false)
-  val DISK_ONLY_2 = new StorageLevel(true, false, false, false, 2)
-  val MEMORY_ONLY = new StorageLevel(false, true, false, true)
-  val MEMORY_ONLY_2 = new StorageLevel(false, true, false, true, 2)
+  val NONE = new StorageLevel(false, false, false, false) //没有存储,没有序列化,1个备份
+  val DISK_ONLY = new StorageLevel(true, false, false, false) //仅仅存储在磁盘,1个备份
+  val DISK_ONLY_2 = new StorageLevel(true, false, false, false, 2) //仅仅存储在磁盘,2个备份
+  val MEMORY_ONLY = new StorageLevel(false, true, false, true) //仅仅内存存储,序列化,1个备份
+  val MEMORY_ONLY_2 = new StorageLevel(false, true, false, true, 2) //仅仅内存存储,序列化,2个备份
   val MEMORY_ONLY_SER = new StorageLevel(false, true, false, false)
   val MEMORY_ONLY_SER_2 = new StorageLevel(false, true, false, false, 2)
   val MEMORY_AND_DISK = new StorageLevel(true, true, false, true)
   val MEMORY_AND_DISK_2 = new StorageLevel(true, true, false, true, 2)
   val MEMORY_AND_DISK_SER = new StorageLevel(true, true, false, false)
   val MEMORY_AND_DISK_SER_2 = new StorageLevel(true, true, false, false, 2)
-  val OFF_HEAP = new StorageLevel(false, false, true, false)
+  val OFF_HEAP = new StorageLevel(false, false, true, false) //使用外部存储
 
   /**
    * :: DeveloperApi ::
@@ -222,6 +234,7 @@ object StorageLevel {
     getCachedStorageLevel(obj)
   }
 
+  //单例方法
   private[spark] val storageLevelCache = new ConcurrentHashMap[StorageLevel, StorageLevel]()
 
   private[spark] def getCachedStorageLevel(level: StorageLevel): StorageLevel = {
