@@ -239,6 +239,7 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
    * Timestamp based HashMap for storing mapStatuses and cached serialized statuses in the driver,
    * so that statuses are dropped only by explicit de-registering or by TTL-based cleaning (if set).
    * Other than these two scenarios, nothing should be dropped from this HashMap.
+   * key是shuffleId,value是该shuffleId对应的Map阶段的状态集合
    */
   protected val mapStatuses = new TimeStampedHashMap[Int, Array[MapStatus]]()
   private val cachedSerializedStatuses = new TimeStampedHashMap[Int, Array[Byte]]()
@@ -247,12 +248,14 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
   private val metadataCleaner =
     new MetadataCleaner(MetadataCleanerType.MAP_OUTPUT_TRACKER, this.cleanup, conf)
 
+  //注册一个shuffleId对应多少个Map
   def registerShuffle(shuffleId: Int, numMaps: Int) {
-    if (mapStatuses.put(shuffleId, new Array[MapStatus](numMaps)).isDefined) {
+    if (mapStatuses.put(shuffleId, new Array[MapStatus](numMaps)).isDefined) {//返回值如果已经被定义了,说明该shuffleId曾经已经被注册一次了,是不允许注册两次的
       throw new IllegalArgumentException("Shuffle ID " + shuffleId + " registered twice")
     }
   }
 
+  //注册某个shuffleId的某个mapId对应的MapStatus
   def registerMapOutput(shuffleId: Int, mapId: Int, status: MapStatus) {
     val array = mapStatuses(shuffleId)
     array.synchronized {
@@ -260,7 +263,9 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
     }
   }
 
-  /** Register multiple map output information for the given shuffle */
+  /** Register multiple map output information for the given shuffle 
+   *  注册一组MapStatus结果到shuffle中
+   **/
   def registerMapOutputs(shuffleId: Int, statuses: Array[MapStatus], changeEpoch: Boolean = false) {
     mapStatuses.put(shuffleId, Array[MapStatus]() ++ statuses)
     if (changeEpoch) {
@@ -268,7 +273,9 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
     }
   }
 
-  /** Unregister map output information of the given shuffle, mapper and block manager */
+  /** Unregister map output information of the given shuffle, mapper and block manager 
+   *  移除该shuffleId的mapId对应的数据块映射
+   **/
   def unregisterMapOutput(shuffleId: Int, mapId: Int, bmAddress: BlockManagerId) {
     val arrayOpt = mapStatuses.get(shuffleId)
     if (arrayOpt.isDefined && arrayOpt.get != null) {
@@ -284,13 +291,17 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
     }
   }
 
-  /** Unregister shuffle data */
+  /** Unregister shuffle data 
+   *  移除所有的shuffleId相关信息
+   **/
   override def unregisterShuffle(shuffleId: Int) {
     mapStatuses.remove(shuffleId)
     cachedSerializedStatuses.remove(shuffleId)
   }
 
-  /** Check if the given shuffle is being tracked */
+  /** Check if the given shuffle is being tracked
+   *  true表示该shuffle已经存在了
+   **/
   def containsShuffle(shuffleId: Int): Boolean = {
     cachedSerializedStatuses.contains(shuffleId) || mapStatuses.contains(shuffleId)
   }
@@ -315,7 +326,7 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
     : Option[Array[BlockManagerId]] = {
 
     if (mapStatuses.contains(shuffleId)) {
-      val statuses = mapStatuses(shuffleId)
+      val statuses = mapStatuses(shuffleId) //shuffleId对应的Array[MapStatus]集合
       if (statuses.nonEmpty) {
         // HashMap to add up sizes of all blocks at the same location
         val locs = new HashMap[BlockManagerId, Long]

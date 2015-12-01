@@ -35,14 +35,14 @@ import org.apache.spark.serializer.Serializer
   * task closure. */
 private[spark] case class NarrowCoGroupSplitDep(
     @transient rdd: RDD[_],
-    @transient splitIndex: Int,
-    var split: Partition
+    @transient splitIndex: Int,//第几个partition
+    var split: Partition //该splitIndex对应的Partition对象
   ) extends Serializable {
 
   @throws(classOf[IOException])
   private def writeObject(oos: ObjectOutputStream): Unit = Utils.tryOrIOException {
     // Update the reference to parent split at the time of task serialization
-    split = rdd.partitions(splitIndex)
+    split = rdd.partitions(splitIndex) //获取RDD的第splitIndex个partition对象
     oos.defaultWriteObject()
   }
 }
@@ -80,9 +80,9 @@ class CoGroupedRDD[K](@transient var rdds: Seq[RDD[_ <: Product2[K, _]]], part: 
   // For example, `(k, a) cogroup (k, b)` produces k -> Array(ArrayBuffer as, ArrayBuffer bs).
   // Each ArrayBuffer is represented as a CoGroup, and the resulting Array as a CoGroupCombiner.
   // CoGroupValue is the intermediate state of each value before being merged in compute.
-  private type CoGroup = CompactBuffer[Any]
+  private type CoGroup = CompactBuffer[Any] //类似于ArrayBuffer.但是内存使用更有效,该数组存储任务对象作为元素
   private type CoGroupValue = (Any, Int)  // Int is dependency number
-  private type CoGroupCombiner = Array[CoGroup]
+  private type CoGroupCombiner = Array[CoGroup] //数组,每一个元素是CompactBuffer,即这个是一个二维数组
 
   private var serializer: Option[Serializer] = None
 

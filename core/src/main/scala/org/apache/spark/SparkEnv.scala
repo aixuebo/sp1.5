@@ -156,8 +156,8 @@ class SparkEnv (
 object SparkEnv extends Logging {
   @volatile private var env: SparkEnv = _
 
-  private[spark] val driverActorSystemName = "sparkDriver"
-  private[spark] val executorActorSystemName = "sparkExecutor"
+  private[spark] val driverActorSystemName = "sparkDriver" //为driver设置名字
+  private[spark] val executorActorSystemName = "sparkExecutor" //为执行者设置名字
 
   def set(e: SparkEnv) {
     env = e
@@ -236,25 +236,27 @@ object SparkEnv extends Logging {
       executorId: String,
       hostname: String,
       port: Int,
-      isDriver: Boolean,
+      isDriver: Boolean,//true表示是driver的环境,false表示是执行者的环境
       isLocal: Boolean,
       numUsableCores: Int,
-      listenerBus: LiveListenerBus = null,
+      listenerBus: LiveListenerBus = null,//该属性仅仅用于driver,非driver的都是null
       mockOutputCommitCoordinator: Option[OutputCommitCoordinator] = None): SparkEnv = {
 
-    // Listener bus is only used on the driver
+    // Listener bus is only used on the driver 该属性仅仅用于driver,非driver的都是null
     if (isDriver) {
       assert(listenerBus != null, "Attempted to create driver SparkEnv with null listener bus!")
     }
 
     val securityManager = new SecurityManager(conf)
 
-    // Create the ActorSystem for Akka and get the port it binds to.
+    // Create the ActorSystem for Akka and get the port it binds to.绑定的Actor名字
     val actorSystemName = if (isDriver) driverActorSystemName else executorActorSystemName
+    
+    //对host,port创建一个RPC
     val rpcEnv = RpcEnv.create(actorSystemName, hostname, port, conf, securityManager)
     val actorSystem = rpcEnv.asInstanceOf[AkkaRpcEnv].actorSystem
 
-    // Figure out which port Akka actually bound to in case the original port is 0 or occupied.
+    // Figure out which port Akka actually bound to in case the original port is 0 or occupied.计算真正的绑定端口
     if (isDriver) {
       conf.set("spark.driver.port", rpcEnv.address.port.toString)
     } else {
@@ -262,10 +264,12 @@ object SparkEnv extends Logging {
     }
 
     // Create an instance of the class with the given name, possibly initializing it with our conf
+    //创建参数对应的class的实例对象
     def instantiateClass[T](className: String): T = {
       val cls = Utils.classForName(className)
       // Look for a constructor taking a SparkConf and a boolean isDriver, then one taking just
       // SparkConf, then one taking no arguments
+      //首先寻找两个参数的构造函数,SparkConf和boolean isDriver,如果找不到,则找一个SparkConf参数的方法,如果继续找不到则找无参数的构造方法
       try {
         cls.getConstructor(classOf[SparkConf], java.lang.Boolean.TYPE)
           .newInstance(conf, new java.lang.Boolean(isDriver))
@@ -283,14 +287,17 @@ object SparkEnv extends Logging {
 
     // Create an instance of the class named by the given SparkConf property, or defaultClassName
     // if the property is not set, possibly initializing it with our conf
+    //通过key是propertyName,读取配置文件对应的内容是具体class,去创建class对象,默认获取defaultClassName对应的class对象
     def instantiateClassFromConf[T](propertyName: String, defaultClassName: String): T = {
       instantiateClass[T](conf.get(propertyName, defaultClassName))
     }
 
+    //获取序列化对象
     val serializer = instantiateClassFromConf[Serializer](
       "spark.serializer", "org.apache.spark.serializer.JavaSerializer")
     logDebug(s"Using serializer: ${serializer.getClass}")
 
+    //获取闭环的序列化对象
     val closureSerializer = instantiateClassFromConf[Serializer](
       "spark.closure.serializer", "org.apache.spark.serializer.JavaSerializer")
 

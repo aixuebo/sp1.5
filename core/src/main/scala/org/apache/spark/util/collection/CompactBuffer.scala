@@ -26,20 +26,24 @@ import scala.reflect.ClassTag
  * elements in fields of the main object, and only allocates an Array[AnyRef] if there are more
  * entries than that. This makes it more efficient for operations like groupBy where we expect
  * some keys to have very few elements.
+ * 类似于ArrayBuffer.但是内存使用更有效
+ * 因为ArrayBuffer总是默认使用16个实体存储数据,所以头文件应该有80-100个字节,
+ * 而与之对比的是,CompactBuffer能够用2个元素,而如果多余2个元素时,分配Array存储,因此他更有效操作类似groupBy,因为groupBy的时候我们一般期望key的元素是很少的
  */
 private[spark] class CompactBuffer[T: ClassTag] extends Seq[T] with Serializable {
-  // First two elements
+  // First two elements 前两个元素
   private var element0: T = _
   private var element1: T = _
 
-  // Number of elements, including our two in the main object
+  // Number of elements, including our two in the main object 当前数组的元素数量,包括前两个固定的元素
   private var curSize = 0
 
-  // Array for extra elements
+  // Array for extra elements 存储其他元素的容器
   private var otherElements: Array[T] = null
 
+  //通过下标,获取对应的元素
   def apply(position: Int): T = {
-    if (position < 0 || position >= curSize) {
+    if (position < 0 || position >= curSize) {//数组越界
       throw new IndexOutOfBoundsException
     }
     if (position == 0) {
@@ -51,6 +55,8 @@ private[spark] class CompactBuffer[T: ClassTag] extends Seq[T] with Serializable
     }
   }
 
+  
+  //通过下标,更新对应的元素内容
   private def update(position: Int, value: T): Unit = {
     if (position < 0 || position >= curSize) {
       throw new IndexOutOfBoundsException
@@ -64,6 +70,7 @@ private[spark] class CompactBuffer[T: ClassTag] extends Seq[T] with Serializable
     }
   }
 
+  //追加一个元素
   def += (value: T): CompactBuffer[T] = {
     val newIndex = curSize
     if (newIndex == 0) {
@@ -73,12 +80,13 @@ private[spark] class CompactBuffer[T: ClassTag] extends Seq[T] with Serializable
       element1 = value
       curSize = 2
     } else {
-      growToSize(curSize + 1)
+      growToSize(curSize + 1) //扩容
       otherElements(newIndex - 2) = value
     }
     this
   }
 
+  //追加一组元素,
   def ++= (values: TraversableOnce[T]): CompactBuffer[T] = {
     values match {
       // Optimize merging of CompactBuffers, used in cogroup and groupByKey
@@ -87,7 +95,7 @@ private[spark] class CompactBuffer[T: ClassTag] extends Seq[T] with Serializable
         // Copy the other buffer's size and elements to local variables in case it is equal to us
         val itsSize = compactBuf.curSize
         val itsElements = compactBuf.otherElements
-        growToSize(curSize + itsSize)
+        growToSize(curSize + itsSize) //扩容
         if (itsSize == 1) {
           this(oldSize) = compactBuf.element0
         } else if (itsSize == 2) {
@@ -108,10 +116,11 @@ private[spark] class CompactBuffer[T: ClassTag] extends Seq[T] with Serializable
     this
   }
 
-  override def length: Int = curSize
+  override def length: Int = curSize //获取元素数量
 
-  override def size: Int = curSize
+  override def size: Int = curSize //获取元素数量
 
+  //遍历每一个数组的元素
   override def iterator: Iterator[T] = new Iterator[T] {
     private var pos = 0
     override def hasNext: Boolean = pos < curSize
@@ -124,12 +133,14 @@ private[spark] class CompactBuffer[T: ClassTag] extends Seq[T] with Serializable
     }
   }
 
-  /** Increase our size to newSize and grow the backing array if needed. */
+  /** Increase our size to newSize and grow the backing array if needed. 
+   *  扩容,参数代表总的容量
+   **/
   private def growToSize(newSize: Int): Unit = {
     if (newSize < 0) {
       throw new UnsupportedOperationException("Can't grow buffer past Int.MaxValue elements")
     }
-    val capacity = if (otherElements != null) otherElements.length + 2 else 2
+    val capacity = if (otherElements != null) otherElements.length + 2 else 2 //目前总容量
     if (newSize > capacity) {
       var newArrayLen = 8
       while (newSize - 2 > newArrayLen) {

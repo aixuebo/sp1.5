@@ -152,6 +152,7 @@ abstract class RDD[T: ClassTag](
 
   /**
    * Optionally overridden by subclasses to specify placement preferences.
+   * 获取该partition对应的文件在哪些路径上可以获取
    */
   protected def getPreferredLocations(split: Partition): Seq[String] = Nil
 
@@ -272,6 +273,7 @@ abstract class RDD[T: ClassTag](
   /**
    * Get the array of partitions of this RDD, taking into account whether the
    * RDD is checkpointed or not.
+   * 返回该RDD所有的partition分区集合
    */
   final def partitions: Array[Partition] = {
     checkpointRDD.map(_.partitions).getOrElse {
@@ -285,6 +287,7 @@ abstract class RDD[T: ClassTag](
   /**
    * Get the preferred locations of a partition, taking into account whether the
    * RDD is checkpointed.
+   * 获取该partition对应的文件在哪些路径上可以获取
    */
   final def preferredLocations(split: Partition): Seq[String] = {
     checkpointRDD.map(_.getPreferredLocations(split)).getOrElse {
