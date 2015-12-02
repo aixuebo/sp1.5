@@ -366,6 +366,7 @@ abstract class RDD[T: ClassTag](
   /**
    *  Return a new RDD by first applying a function to all elements of this
    *  RDD, and then flattening the results.
+   *  参数f表示传入RDD的每一条记录,返回可以迭代U新的RDD的迭代器
    */
   def flatMap[U: ClassTag](f: T => TraversableOnce[U]): RDD[U] = withScope {
     val cleanF = sc.clean(f)
@@ -374,6 +375,8 @@ abstract class RDD[T: ClassTag](
 
   /**
    * Return a new RDD containing only the elements that satisfy a predicate.
+   * 每一个partition对每一行记录进行filter处理,处理函数是f
+   * 参数f表示传入RDD的每一条记录,返回boolean值,true表示需要被保留
    */
   def filter(f: T => Boolean): RDD[T] = withScope {
     val cleanF = sc.clean(f)
@@ -385,6 +388,8 @@ abstract class RDD[T: ClassTag](
 
   /**
    * Return a new RDD containing the distinct elements in this RDD.
+   * 1.RDD -> MapPartitionsRDD[U, T]
+   * 2.
    */
   def distinct(numPartitions: Int)(implicit ord: Ordering[T] = null): RDD[T] = withScope {
     map(x => (x, null)).reduceByKey((x, y) => x, numPartitions).map(_._1)
@@ -763,7 +768,7 @@ abstract class RDD[T: ClassTag](
    * should be `false` unless this is a pair RDD and the input function doesn't modify the keys.
    */
   def mapPartitionsWithIndex[U: ClassTag](
-      f: (Int, Iterator[T]) => Iterator[U],
+      f: (Int, Iterator[T]) => Iterator[U], //f参数int表示第几个partition,iter表示该partition的数据源的迭代器,返回新的迭代器
       preservesPartitioning: Boolean = false): RDD[U] = withScope {
     val cleanedF = sc.clean(f)
     new MapPartitionsRDD(
@@ -948,6 +953,7 @@ abstract class RDD[T: ClassTag](
 
   /**
    * Return an array that contains all of the elements in this RDD.
+   * 返回:Array[Array[T]],有多少个partition,就是多少个数组,每一个元素又是一个数组.表示一个partition内部返回的所有结果集
    */
   def collect(): Array[T] = withScope {
     val results = sc.runJob(this, (iter: Iterator[T]) => iter.toArray)

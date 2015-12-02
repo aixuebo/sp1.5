@@ -869,11 +869,17 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   /**
    * Return the list of values in the RDD for key `key`. This operation is done efficiently if the
    * RDD has a known partitioner by only searching the partition that the key maps to.
+   * 返回该key对应的所有value值的集合
+   * 如果这个RDD是有partition分区的,该操作非常有效率的做完,因为仅需要搜索该partition分区就可以了
+   * 
+   * 返回值是ArrayBuffer[V]
    */
   def lookup(key: K): Seq[V] = self.withScope {
     self.partitioner match {
       case Some(p) =>
         val index = p.getPartition(key)
+        
+        //迭代key-value,找到key与参数key相同的,将value追加到ArrayBuffer中返回即可
         val process = (it: Iterator[(K, V)]) => {
           val buf = new ArrayBuffer[V]
           for (pair <- it if pair._1 == key) {
@@ -884,7 +890,9 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
         val res = self.context.runJob(self, process, Array(index))
         res(0)
       case None =>
-        self.filter(_._1 == key).map(_._2).collect()
+        self.filter(_._1 == key).map(_._2).collect() //如果没有partition,则需要遍历整个RDD,寻找与key相同的value值
+        //1.过滤与key相同的key-value集合
+        //2.将转换成value集合
     }
   }
 
@@ -1144,18 +1152,23 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
 
   /**
    * Return an RDD with the keys of each tuple.
+   * 返回所有的key组成的RDD
    */
   def keys: RDD[K] = self.map(_._1)
 
   /**
    * Return an RDD with the values of each tuple.
+   * 返回所有的value组成的RDD
    */
   def values: RDD[V] = self.map(_._2)
 
+  //key对应的class
   private[spark] def keyClass: Class[_] = kt.runtimeClass
 
+  //VALUE对应的class
   private[spark] def valueClass: Class[_] = vt.runtimeClass
 
+  //key对应的排序对象
   private[spark] def keyOrdering: Option[Ordering[K]] = Option(ord)
 
   // Note: this needs to be a function instead of a 'val' so that the disableOutputSpecValidation

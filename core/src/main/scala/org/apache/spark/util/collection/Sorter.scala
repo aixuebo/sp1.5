@@ -28,10 +28,12 @@ import java.util.Comparator
 private[spark]
 class Sorter[K, Buffer](private val s: SortDataFormat[K, Buffer]) {
 
+  //快速排序类
   private val timSort = new TimSort(s)
 
   /**
    * Sorts the input buffer within range [lo, hi).
+   * 对a这个数组中lo开始到hi位置的数据进行排序,按照c排序类进行排序
    */
   def sort(a: Buffer, lo: Int, hi: Int, c: Comparator[_ >: K]): Unit = {
     timSort.sort(a, lo, hi, c)

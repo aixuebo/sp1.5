@@ -37,20 +37,25 @@ import org.apache.spark.executor.ShuffleWriteMetrics
  * :: DeveloperApi ::
  * An append-only map that spills sorted content to disk when there is insufficient space for it
  * to grow.
+ * 也是一个类似hash table的map内存映射
+ * 当没有足够的空间增长的时候,要将排序后的内容存储到磁盘上
  *
  * This map takes two passes over the data:
  *
- *   (1) Values are merged into combiners, which are sorted and spilled to disk as necessary
- *   (2) Combiners are read from disk and merged together
+ *   (1) Values are merged into combiners, which are sorted and spilled to disk as necessary value被合并到combiners里面,然后combiners排序后写入到磁盘上
+ *   (2) Combiners are read from disk and merged together 从磁盘上读取combiners数据,然后进行合并
  *
- * The setting of the spill threshold faces the following trade-off: If the spill threshold is
- * too high, the in-memory map may occupy more memory than is available, resulting in OOM.
+ * The setting of the spill threshold faces the following trade-off: 
+ * If the spill threshold is too high, the in-memory map may occupy more memory than is available, resulting in OOM.
+ * 如果spill溢出入口设置的太高了,在映射都会存储在内存中,容易发生OOM异常
+ * 
  * However, if the spill threshold is too low, we spill frequently and incur unnecessary disk
  * writes. This may lead to a performance regression compared to the normal case of using the
  * non-spilling AppendOnlyMap.
+ * 然而如果溢出入口设置太低,我们溢出到磁盘太频繁,将会引发不必要的磁盘频繁写操作,这会影响性能
  *
  * Two parameters control the memory threshold:
- *
+ * 两个参数去控制内存的溢出值
  *   `spark.shuffle.memoryFraction` specifies the collective amount of memory used for storing
  *   these maps as a fraction of the executor's total memory. Since each concurrently running
  *   task maintains one map, the actual threshold for each map is this quantity divided by the
@@ -58,15 +63,19 @@ import org.apache.spark.executor.ShuffleWriteMetrics
  *
  *   `spark.shuffle.safetyFraction` specifies an additional margin of safety as a fraction of
  *   this threshold, in case map size estimation is not sufficiently accurate.
+ *   
+ *   
+ *   
+ *   该类表示外部存储类似hash tale的结构
  */
 @DeveloperApi
 class ExternalAppendOnlyMap[K, V, C](
-    createCombiner: V => C,
-    mergeValue: (C, V) => C,
-    mergeCombiners: (C, C) => C,
+    createCombiner: V => C, //V转换成C
+    mergeValue: (C, V) => C, //合并,将相同的key对应的value进行合并,c是以前合并的值,V是新的value值,返回值是合并后的C
+    mergeCombiners: (C, C) => C, //最终合并,c与c进行合并,生成C
     serializer: Serializer = SparkEnv.get.serializer,
     blockManager: BlockManager = SparkEnv.get.blockManager)
-  extends Iterable[(K, C)]
+  extends Iterable[(K, C)] //返回值就是K 和合并后的C
   with Serializable
   with Logging
   with Spillable[SizeTracker] {
@@ -107,6 +116,7 @@ class ExternalAppendOnlyMap[K, V, C](
 
   /**
    * Insert the given key and value into the map.
+   * 添加一个 key-value键值对
    */
   def insert(key: K, value: V): Unit = {
     insertAll(Iterator((key, value)))
@@ -120,17 +130,24 @@ class ExternalAppendOnlyMap[K, V, C](
    * otherwise, spill the in-memory map to disk.
    *
    * The shuffle memory usage of the first trackMemoryThreshold entries is not tracked.
+   * 添加一组 key-value的迭代器
    */
   def insertAll(entries: Iterator[Product2[K, V]]): Unit = {
     // An update function for the map that we reuse across entries to avoid allocating
     // a new closure each time
-    var curEntry: Product2[K, V] = null
+    var curEntry: Product2[K, V] = null //迭代的每一个key-value
+    
+    //参数hadVal true表示已经存在该key,参数oldVal是该key对应的value值
     val update: (Boolean, C) => C = (hadVal, oldVal) => {
-      if (hadVal) mergeValue(oldVal, curEntry._2) else createCombiner(curEntry._2)
+      if (hadVal) {//存在key,需要合并value
+       mergeValue(oldVal, curEntry._2) 
+      }else {//不存在key,则创建value
+        createCombiner(curEntry._2) 
+      }
     }
 
     while (entries.hasNext) {
-      curEntry = entries.next()
+      curEntry = entries.next() //遍历key-value
       val estimatedSize = currentMap.estimateSize()
       if (estimatedSize > _peakMemoryUsedBytes) {
         _peakMemoryUsedBytes = estimatedSize
@@ -501,10 +518,13 @@ class ExternalAppendOnlyMap[K, V, C](
     }
   }
 
-  /** Convenience function to hash the given (K, C) pair by the key. */
+  /** Convenience function to hash the given (K, C) pair by the key. 
+   * 对key进行hash运算,返回key的hash值  
+   **/
   private def hashKey(kc: (K, C)): Int = ExternalAppendOnlyMap.hash(kc._1)
 }
 
+//外部存储类似hash tale的结构
 private[spark] object ExternalAppendOnlyMap {
 
   /**
@@ -516,6 +536,7 @@ private[spark] object ExternalAppendOnlyMap {
 
   /**
    * A comparator which sorts arbitrary keys based on their hash codes.
+   * 按照hash值进行比较
    */
   private class HashComparator[K] extends Comparator[K] {
     def compare(key1: K, key2: K): Int = {

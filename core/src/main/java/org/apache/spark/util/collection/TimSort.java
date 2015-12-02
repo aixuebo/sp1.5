@@ -55,6 +55,7 @@ import java.util.Comparator;
  *
  * @see org.apache.spark.util.collection.SortDataFormat
  * @see org.apache.spark.util.collection.Sorter
+ * 快速排序类
  */
 class TimSort<K, Buffer> {
 

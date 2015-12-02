@@ -49,8 +49,8 @@ import org.apache.spark.serializer.Serializer
  * out of memory because of the size of `rdd2`.
  */
 private[spark] class SubtractedRDD[K: ClassTag, V: ClassTag, W: ClassTag](
-    @transient var rdd1: RDD[_ <: Product2[K, V]],
-    @transient var rdd2: RDD[_ <: Product2[K, W]],
+    @transient var rdd1: RDD[_ <: Product2[K, V]],//K-V键值对的RDD1
+    @transient var rdd2: RDD[_ <: Product2[K, W]],//K-W键值对的RDD2
     part: Partitioner)
   extends RDD[(K, V)](rdd1.context, Nil) {
 

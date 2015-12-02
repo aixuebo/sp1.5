@@ -20,43 +20,46 @@ package org.apache.spark.util.random
 import scala.reflect.ClassTag
 import scala.util.Random
 
+//抽样工具类
 private[spark] object SamplingUtils {
 
   /**
    * Reservoir sampling implementation that also returns the input size.
    *
-   * @param input input size
-   * @param k reservoir size
-   * @param seed random seed
-   * @return (samples, input size)
+   * @param input input size 输入源
+   * @param k reservoir size 最多抽取k个元素
+   * @param seed random seed 随机码
+   * @return (samples, input size) 返回值是抽取元素Array[T]数组,以及该partition一共多少条数据
+   * 返回随机抽样,以及该partition一共多少条数据
    */
   def reservoirSampleAndCount[T: ClassTag](
-      input: Iterator[T],
+      input: Iterator[T],//迭代器,可以从中湖区每一个T
       k: Int,
       seed: Long = Random.nextLong())
     : (Array[T], Int) = {
-    val reservoir = new Array[T](k)
-    // Put the first k elements in the reservoir.
+    val reservoir = new Array[T](k) //初始化k个元素组成的返回数组
+    // Put the first k elements in the reservoir.将input中前k个元素存储到reservoir中
     var i = 0
-    while (i < k && input.hasNext) {
+    while (i < k && input.hasNext) { //不断的从input中获取数据,存储到reservoir数组中
       val item = input.next()
       reservoir(i) = item
       i += 1
     }
 
     // If we have consumed all the elements, return them. Otherwise do the replacement.
+    //i < k 说明 input数据源中总共也没有k个元素,因此将全部元素都提取出来,返回
     if (i < k) {
       // If input size < k, trim the array to return only an array of input size.
-      val trimReservoir = new Array[T](i)
+      val trimReservoir = new Array[T](i) //复制i个元素到新数组中
       System.arraycopy(reservoir, 0, trimReservoir, 0, i)
-      (trimReservoir, i)
-    } else {
+      (trimReservoir, i) //最终返回i个元素
+    } else {//说明input数据源中满足k个元素
       // If input size > k, continue the sampling process.
       val rand = new XORShiftRandom(seed)
-      while (input.hasNext) {
+      while (input.hasNext) {//继续循环k个元素之后的元素,
         val item = input.next()
-        val replacementIndex = rand.nextInt(i)
-        if (replacementIndex < k) {
+        val replacementIndex = rand.nextInt(i) //每次随机一个位置
+        if (replacementIndex < k) { //将item元素放置到随机的位置中
           reservoir(replacementIndex) = item
         }
         i += 1

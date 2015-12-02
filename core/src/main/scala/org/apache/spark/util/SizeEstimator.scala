@@ -34,7 +34,7 @@ import org.apache.spark.util.collection.OpenHashSet
  * :: DeveloperApi ::
  * Estimates the sizes of Java objects (number of bytes of memory they occupy), for use in
  * memory-aware caches.
- *
+ * 估算一个java对象的内存消耗大小
  * Based on the following JavaWorld article:
  * http://www.javaworld.com/javaworld/javaqa/2003-12/02-qa-1226-sizeof.html
  */
@@ -265,6 +265,7 @@ object SizeEstimator extends Logging {
     size
   }
 
+  //获取基础类型对应的字节大小
   private def primitiveSize(cls: Class[_]): Int = {
     if (cls == classOf[Byte]) {
       BYTE_SIZE

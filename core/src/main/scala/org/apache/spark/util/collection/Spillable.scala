@@ -23,12 +23,13 @@ import org.apache.spark.SparkEnv
 /**
  * Spills contents of an in-memory collection to disk when the memory threshold
  * has been exceeded.
+ * 当内存入口超出范围后,将内存的内容,溢出到磁盘
  */
 private[spark] trait Spillable[C] extends Logging {
   /**
    * Spills the current in-memory collection to disk, and releases the memory.
-   *
-   * @param collection collection to spill to disk
+   * 溢出当前内存的集合到磁盘上,并且释放内存空间
+   * @param collection collection to spill to disk 准备去写入到磁盘上的集合
    */
   protected def spill(collection: C): Unit
 
@@ -72,7 +73,7 @@ private[spark] trait Spillable[C] extends Logging {
     if (elementsRead % 32 == 0 && currentMemory >= myMemoryThreshold) {
       // Claim up to double our current memory from the shuffle memory pool
       val amountToRequest = 2 * currentMemory - myMemoryThreshold
-      val granted = shuffleMemoryManager.tryToAcquire(amountToRequest)
+      val granted = shuffleMemoryManager.tryToAcquire(amountToRequest) // 为当前线程对应的任务申请内存,返回值是真正申请到的内存数量
       myMemoryThreshold += granted
       if (myMemoryThreshold <= currentMemory) {
         // We were granted too little memory to grow further (either tryToAcquire returned 0,

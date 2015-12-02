@@ -65,7 +65,7 @@ class ShuffleMemoryManager protected (
    * in some situations, to make sure each task has a chance to ramp up to at least 1 / 2N of the
    * total memory pool (where N is the # of active tasks) before it is forced to spill. This can
    * happen if the number of tasks increases but an older task had a lot of memory already.
-   *为当前线程对应的任务申请内存,返回值是真正申请到的内存数量
+   * 为当前线程对应的任务申请内存,返回值是真正申请到的内存数量
    */
   def tryToAcquire(numBytes: Long): Long = synchronized {
     val taskAttemptId = currentTaskAttemptId()
