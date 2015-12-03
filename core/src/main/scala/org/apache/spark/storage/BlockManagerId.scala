@@ -35,7 +35,7 @@ import org.apache.spark.util.Utils
  */
 @DeveloperApi
 class BlockManagerId private (
-    private var executorId_ : String,
+    private var executorId_ : String,//该值为<driver>或者driver时,表示是driver
     private var host_ : String,
     private var port_ : Int)
   extends Externalizable {
@@ -44,11 +44,13 @@ class BlockManagerId private (
 
   def executorId: String = executorId_
 
+  //校验参数一定是host,不能有port
   if (null != host_){
     Utils.checkHost(host_, "Expected hostname")
     assert (port_ > 0)
   }
 
+  //返回 host:port
   def hostPort: String = {
     // DEBUG code
     Utils.checkHost(host)
@@ -60,6 +62,7 @@ class BlockManagerId private (
 
   def port: Int = port_
 
+  //是否是driver
   def isDriver: Boolean = {
     executorId == SparkContext.DRIVER_IDENTIFIER ||
       executorId == SparkContext.LEGACY_DRIVER_IDENTIFIER
@@ -112,8 +115,10 @@ private[spark] object BlockManagerId {
     getCachedBlockManagerId(obj)
   }
 
+  //静态方法,获取唯一的BlockManagerId对象
   val blockManagerIdCache = new ConcurrentHashMap[BlockManagerId, BlockManagerId]()
 
+  //返回缓存过得BlockManagerId对象
   def getCachedBlockManagerId(id: BlockManagerId): BlockManagerId = {
     blockManagerIdCache.putIfAbsent(id, id)
     blockManagerIdCache.get(id)

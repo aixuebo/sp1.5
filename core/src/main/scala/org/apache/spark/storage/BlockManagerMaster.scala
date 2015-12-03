@@ -28,7 +28,7 @@ import org.apache.spark.util.{ThreadUtils, RpcUtils}
 
 private[spark]
 class BlockManagerMaster(
-    var driverEndpoint: RpcEndpointRef,
+    var driverEndpoint: RpcEndpointRef,//该引用是ref,表示客户端
     conf: SparkConf,
     isDriver: Boolean)
   extends Logging {
@@ -220,9 +220,11 @@ class BlockManagerMaster(
     }
   }
 
-  /** Send a one-way message to the master endpoint, to which we expect it to reply with true. */
+  /** Send a one-way message to the master endpoint, to which we expect it to reply with true.
+   * 发送信息去master,他期望返回是true  
+   **/
   private def tell(message: Any) {
-    if (!driverEndpoint.askWithRetry[Boolean](message)) {
+    if (!driverEndpoint.askWithRetry[Boolean](message)) {//如果返回不是true,则抛异常
       throw new SparkException("BlockManagerMasterEndpoint returned false, expected true.")
     }
   }

@@ -28,6 +28,7 @@ import org.apache.spark.annotation.DeveloperApi
  *
  * This class assumes BlockId and BlockStatus are immutable, such that the consumers of this
  * class cannot mutate the source of the information. Accesses are not thread-safe.
+ * 每一个BlockManagerId对应一个该对象,表示该blockManagerId对某一个执行者最多允许的内存
  */
 @DeveloperApi
 class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
@@ -37,8 +38,10 @@ class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
    *
    * We store RDD blocks and non-RDD blocks separately to allow quick retrievals of RDD blocks.
    * These collections should only be mutated through the add/update/removeBlock methods.
+   * RDD数据,与该RDD数据的所有数据块的状态 映射
    */
   private val _rddBlocks = new mutable.HashMap[Int, mutable.Map[BlockId, BlockStatus]]
+  //非RDD数据块ID,数据块的状态 映射
   private val _nonRddBlocks = new mutable.HashMap[BlockId, BlockStatus]
 
   /**
@@ -57,7 +60,9 @@ class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
   private val _rddStorageInfo = new mutable.HashMap[Int, (Long, Long, Long, StorageLevel)]
   private var _nonRddStorageInfo: (Long, Long, Long) = (0L, 0L, 0L)
 
-  /** Create a storage status with an initial set of blocks, leaving the source unmodified. */
+  /** Create a storage status with an initial set of blocks, leaving the source unmodified. 
+   *   @initialBlocks 表示该BlockManagerId上每一个数据块以及对应的数据块状态
+   **/
   def this(bmid: BlockManagerId, maxMem: Long, initialBlocks: Map[BlockId, BlockStatus]) {
     this(bmid, maxMem)
     initialBlocks.foreach { case (bid, bstatus) => addBlock(bid, bstatus) }
@@ -69,6 +74,7 @@ class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
    * Note that this is somewhat expensive, as it involves cloning the underlying maps and then
    * concatenating them together. Much faster alternatives exist for common operations such as
    * contains, get, and size.
+   * 所有数据块集合
    */
   def blocks: Map[BlockId, BlockStatus] = _nonRddBlocks ++ rddBlocks
 
@@ -78,15 +84,20 @@ class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
    * Note that this is somewhat expensive, as it involves cloning the underlying maps and then
    * concatenating them together. Much faster alternatives exist for common operations such as
    * getting the memory, disk, and off-heap memory sizes occupied by this RDD.
+   * 返回所有RDD对应的数据块集合Map[BlockId, BlockStatus]
    */
   def rddBlocks: Map[BlockId, BlockStatus] = _rddBlocks.flatMap { case (_, blocks) => blocks }
 
-  /** Return the blocks that belong to the given RDD stored in this block manager. */
+  /** Return the blocks that belong to the given RDD stored in this block manager.
+   *  通过RDDId,获取该rdd对应的所有数据块映射
+   **/
   def rddBlocksById(rddId: Int): Map[BlockId, BlockStatus] = {
     _rddBlocks.get(rddId).getOrElse(Map.empty)
   }
 
-  /** Add the given block to this storage status. If it already exists, overwrite it. */
+  /** Add the given block to this storage status. If it already exists, overwrite it. 
+   * 该节点存储的数据块以及对应的数据块状态  
+   **/
   private[spark] def addBlock(blockId: BlockId, blockStatus: BlockStatus): Unit = {
     updateStorageInfo(blockId, blockStatus)
     blockId match {

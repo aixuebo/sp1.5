@@ -32,9 +32,15 @@ import org.apache.spark.serializer.Serializer
 /** The references to rdd and splitIndex are transient because redundant information is stored
   * in the CoGroupedRDD object.  Because CoGroupedRDD is serialized separately from
   * CoGroupPartition, if rdd and splitIndex aren't transient, they'll be included twice in the
-  * task closure. */
+  * task closure. 
+  * 
+  * CoGroupedRDD的每一个partition对应一个CoGroupPartition对象
+  * 而CoGroupPartition对象中有一个Array数组NarrowCoGroupSplitDep
+  * 
+  * NarrowCoGroupSplitDep表示在CoGroupedRDD的一个partition中,从什么父RDD中获取数据
+  **/
 private[spark] case class NarrowCoGroupSplitDep(
-    @transient rdd: RDD[_],
+    @transient rdd: RDD[_],//父RDD,也可能是None,此时说明是ShuffleDependency
     @transient splitIndex: Int,//第几个partition
     var split: Partition //该splitIndex对应的Partition对象
   ) extends Serializable {
@@ -54,11 +60,14 @@ private[spark] case class NarrowCoGroupSplitDep(
  *                   dependency in dependencies, narrowDeps has a NarrowCoGroupSplitDep (describing
  *                   the partition for that dependency) at the corresponding index. The size of
  *                   narrowDeps should always be equal to the number of parents.
+ *  该类表示CoGroupedRDD的每一个partition对应一个该对象
+ *  @idx 表示该CoGroupPartition是CoGroupedRDD的第几个partition
+ *  @narrowDeps
  */
 private[spark] class CoGroupPartition(
     idx: Int, val narrowDeps: Array[Option[NarrowCoGroupSplitDep]])
   extends Partition with Serializable {
-  override val index: Int = idx
+  override val index: Int = idx //表示该CoGroupPartition是CoGroupedRDD的第几个partition
   override def hashCode(): Int = idx
 }
 
@@ -66,16 +75,19 @@ private[spark] class CoGroupPartition(
  * :: DeveloperApi ::
  * A RDD that cogroups its parents. For each key k in parent RDDs, the resulting RDD contains a
  * tuple with the list of values for that key.
- *
+ * 每一个父RDD的key,与每一个父RDD对应的value迭代器组合作为返回值
  * Note: This is an internal API. We recommend users use RDD.cogroup(...) instead of
  * instantiating this directly.
 
- * @param rdds parent RDDs.
+ * @param rdds parent RDDs.父RDD集合
  * @param part partitioner used to partition the shuffle output
+ * eg: 传入4个RDD
+ * val cg = new CoGroupedRDD[K](Seq(self, other1, other2, other3), partitioner)
+ * 返回值是RDD[(K, (Iterable[V], Iterable[W1], Iterable[W2], Iterable[W3]))],即key与三个RDD对应的迭代器组成的元组作为value返回
  */
 @DeveloperApi
 class CoGroupedRDD[K](@transient var rdds: Seq[RDD[_ <: Product2[K, _]]], part: Partitioner)
-  extends RDD[(K, Array[Iterable[_]])](rdds.head.context, Nil) {
+  extends RDD[(K, Array[Iterable[_]])](rdds.head.context, Nil) {//返回值是key,value是Array数组,每一个元素是一个迭代器,每一个迭代器都是RDD与key关联后的返回值
 
   // For example, `(k, a) cogroup (k, b)` produces k -> Array(ArrayBuffer as, ArrayBuffer bs).
   // Each ArrayBuffer is represented as a CoGroup, and the resulting Array as a CoGroupCombiner.
@@ -92,9 +104,13 @@ class CoGroupedRDD[K](@transient var rdds: Seq[RDD[_ <: Product2[K, _]]], part: 
     this
   }
 
+  /**
+   * 循环每一个RDD,返回每一个RDD与新的RDD之间的关系
+   * 例如返回值是 seq[OneToOneDependency,OneToOneDependency,ShuffleDependency] 表示该CoGroupedRDD有3个父RDD,与三个RDD每一个对应依赖关系是OneToOneDependency,OneToOneDependency,ShuffleDependency
+   */
   override def getDependencies: Seq[Dependency[_]] = {
     rdds.map { rdd: RDD[_] =>
-      if (rdd.partitioner == Some(part)) {
+      if (rdd.partitioner == Some(part)) {//partitioner类型相同,并且分区数量相同,因此是一对一依赖
         logDebug("Adding one-to-one dependency with " + rdd)
         new OneToOneDependency(rdd)
       } else {
@@ -105,10 +121,11 @@ class CoGroupedRDD[K](@transient var rdds: Seq[RDD[_ <: Product2[K, _]]], part: 
     }
   }
 
+  //返回新的RDD提供多少个Partition,每一个Partition是CoGroupPartition,每一个CoGroupPartition对应该Partition要抓取每一个父RDD的哪些Partition
   override def getPartitions: Array[Partition] = {
-    val array = new Array[Partition](part.numPartitions)
-    for (i <- 0 until array.length) {
-      // Each CoGroupPartition will have a dependency per contributing RDD
+    val array = new Array[Partition](part.numPartitions) //该CoGroupedRDD最后有多少个partition
+    for (i <- 0 until array.length) {//为CoGroupedRDD的每一个partition分配数据,每一个partition是CoGroupPartition对象
+      // Each CoGroupPartition will have a dependency per contributing RDD 循环每一个父RDD以及j代表父RDD对应是第几个父RDD
       array(i) = new CoGroupPartition(i, rdds.zipWithIndex.map { case (rdd, j) =>
         // Assume each RDD contributed a single dependency, and get it
         dependencies(j) match {
@@ -122,6 +139,7 @@ class CoGroupedRDD[K](@transient var rdds: Seq[RDD[_ <: Product2[K, _]]], part: 
     array
   }
 
+  //获取拆分器对象
   override val partitioner: Some[Partitioner] = Some(part)
 
   override def compute(s: Partition, context: TaskContext): Iterator[(K, Array[Iterable[_]])] = {
@@ -130,17 +148,19 @@ class CoGroupedRDD[K](@transient var rdds: Seq[RDD[_ <: Product2[K, _]]], part: 
     val split = s.asInstanceOf[CoGroupPartition]
     val numRdds = dependencies.length
 
-    // A list of (rdd iterator, dependency number) pairs
+    // A list of (rdd iterator, dependency number) pairs,数组的每一个元素组成,key是每一个父RDD的某个partition的输出流迭代器,value是该父RDD是第几个依赖的RDD
     val rddIterators = new ArrayBuffer[(Iterator[Product2[K, Any]], Int)]
+    //循环所有依赖的父RDD集合,元组是依赖的父RDD,以及父RDD的序号
     for ((dep, depNum) <- dependencies.zipWithIndex) dep match {
+      //如果依赖是一对一的,所以只要找到该父RDD对应的一个partiton即可
       case oneToOneDependency: OneToOneDependency[Product2[K, Any]] @unchecked =>
-        val dependencyPartition = split.narrowDeps(depNum).get.split
-        // Read them from the parent
+        val dependencyPartition = split.narrowDeps(depNum).get.split //为该父RDD对应的partition对象,该partition对象就是为子RDD分配到的partition
+        // Read them from the parent,读取该父RDD的partition,返回K, Any类型的迭代器
         val it = oneToOneDependency.rdd.iterator(dependencyPartition, context)
-        rddIterators += ((it, depNum))
+        rddIterators += ((it, depNum)) //追加该迭代器,以及第几个父RDD序号
 
       case shuffleDependency: ShuffleDependency[_, _, _] =>
-        // Read map outputs of shuffle
+        // Read map outputs of shuffle 如果依赖是需要shuffer的,即父RDD的N个partition都要向N个新的RDD写入数据,因此要读取父RDD中数据,以shuffle方式读取
         val it = SparkEnv.get.shuffleManager
           .getReader(shuffleDependency.shuffleHandle, split.index, split.index + 1, context)
           .read()

@@ -180,12 +180,13 @@ object SparkEnv extends Logging {
 
   /**
    * Create a SparkEnv for the driver.
+   * 为driver创建环境
    */
   private[spark] def createDriverEnv(
       conf: SparkConf,
-      isLocal: Boolean,
+      isLocal: Boolean,//true表示是本地方式启动,不是集群方式
       listenerBus: LiveListenerBus,
-      numCores: Int,
+      numCores: Int,//driver需要多少cpu去执行本地模式.非本地模式都是返回0
       mockOutputCommitCoordinator: Option[OutputCommitCoordinator] = None): SparkEnv = {
     assert(conf.contains("spark.driver.host"), "spark.driver.host is not set on the driver!")
     assert(conf.contains("spark.driver.port"), "spark.driver.port is not set on the driver!")
@@ -233,12 +234,12 @@ object SparkEnv extends Logging {
    */
   private def create(
       conf: SparkConf,
-      executorId: String,
-      hostname: String,
-      port: Int,
+      executorId: String,//如果是driver,则写入固定的driver名字
+      hostname: String,//driver所在host
+      port: Int,//driver所在post
       isDriver: Boolean,//true表示是driver的环境,false表示是执行者的环境
-      isLocal: Boolean,
-      numUsableCores: Int,
+      isLocal: Boolean,//true表示是本地方式启动,不是集群方式,即master == "local" || master.startsWith("local[")
+      numUsableCores: Int,//driver需要多少cpu去执行本地模式.非本地模式都是返回0
       listenerBus: LiveListenerBus = null,//该属性仅仅用于driver,非driver的都是null
       mockOutputCommitCoordinator: Option[OutputCommitCoordinator] = None): SparkEnv = {
 

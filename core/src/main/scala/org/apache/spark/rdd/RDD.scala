@@ -749,6 +749,8 @@ abstract class RDD[T: ClassTag](
    *
    * `preservesPartitioning` indicates whether the input function preserves the partitioner, which
    * should be `false` unless this is a pair RDD and the input function doesn't modify the keys.
+   * 相当于Map操作
+   * 参数f是传递每一个RDD上的实体T,转换成实体U
    */
   def mapPartitions[U: ClassTag](
       f: Iterator[T] => Iterator[U],

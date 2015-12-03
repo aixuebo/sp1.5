@@ -30,9 +30,9 @@ private[spark] class HashShuffleManager(conf: SparkConf) extends ShuffleManager 
 
   /* Register a shuffle with the manager and obtain a handle for it to pass to tasks. */
   override def registerShuffle[K, V, C](
-      shuffleId: Int,
-      numMaps: Int,
-      dependency: ShuffleDependency[K, V, C]): ShuffleHandle = {
+      shuffleId: Int,//shuffle唯一的ID
+      numMaps: Int,//父RDD一共多少个partition
+      dependency: ShuffleDependency[K, V, C]): ShuffleHandle = {//ShuffleDependency表示子类依赖的对象
     new BaseShuffleHandle(shuffleId, numMaps, dependency)
   }
 

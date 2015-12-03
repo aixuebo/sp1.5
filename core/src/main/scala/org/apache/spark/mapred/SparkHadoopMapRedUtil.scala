@@ -31,7 +31,11 @@ import org.apache.spark.util.{Utils => SparkUtils}
 
 private[spark]
 trait SparkHadoopMapRedUtil {
+  
+  //通过传入JobConf和JobID创建一个JobContextImpl对象或者JobContext对象
+  //创建一个Job的上下文
   def newJobContext(conf: JobConf, jobId: JobID): JobContext = {
+    //创建class
     val klass = firstAvailableClass("org.apache.hadoop.mapred.JobContextImpl",
       "org.apache.hadoop.mapred.JobContext")
     val ctor = klass.getDeclaredConstructor(classOf[JobConf],
@@ -44,6 +48,8 @@ trait SparkHadoopMapRedUtil {
     ctor.newInstance(conf, jobId).asInstanceOf[JobContext]
   }
 
+  //通过传入JobConf和TaskAttemptID创建一个TaskAttemptContext对象或者TaskAttemptContextImpl对象
+  //创建一个任务的上下文
   def newTaskAttemptContext(conf: JobConf, attemptId: TaskAttemptID): TaskAttemptContext = {
     val klass = firstAvailableClass("org.apache.hadoop.mapred.TaskAttemptContextImpl",
       "org.apache.hadoop.mapred.TaskAttemptContext")
@@ -55,6 +61,7 @@ trait SparkHadoopMapRedUtil {
     ctor.newInstance(conf, attemptId).asInstanceOf[TaskAttemptContext]
   }
 
+  //创建TaskAttemptID尝试任务ID
   def newTaskAttemptID(
       jtIdentifier: String,
       jobId: Int,
@@ -64,6 +71,7 @@ trait SparkHadoopMapRedUtil {
     new TaskAttemptID(jtIdentifier, jobId, isMap, taskId, attemptId)
   }
 
+  //首先尝试反射第一个class,如果不可用,则反射第二个class
   private def firstAvailableClass(first: String, second: String): Class[_] = {
     try {
       SparkUtils.classForName(first)
@@ -85,7 +93,8 @@ object SparkHadoopMapRedUtil extends Logging {
    * to `true`:
    *
    *  - `spark.speculation`
-   *  - `spark.hadoop.outputCommitCoordination.enabled`
+   *  - `spark.hadoop.outputCommitCoordination.enabled`、
+   * 提交一个任务完成
    */
   def commitTask(
       committer: MapReduceOutputCommitter,
@@ -114,6 +123,7 @@ object SparkHadoopMapRedUtil extends Logging {
         val sparkConf = SparkEnv.get.conf
         // We only need to coordinate with the driver if there are multiple concurrent task
         // attempts, which should only occur if speculation is enabled
+        //如果尝试任务被设置成true,则我们会发生针对同一个task,会有多个尝试任务同时在执行
         val speculationEnabled = sparkConf.getBoolean("spark.speculation", defaultValue = false)
         // This (undocumented) setting is an escape-hatch in case the commit code introduces bugs
         sparkConf.getBoolean("spark.hadoop.outputCommitCoordination.enabled", speculationEnabled)

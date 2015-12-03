@@ -265,6 +265,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   @deprecated("Use externalBlockStoreFolderName instead.", "1.4.0")
   val tachyonFolderName = externalBlockStoreFolderName
 
+  //true表示是本地方式启动,不是集群方式
   def isLocal: Boolean = (master == "local" || master.startsWith("local["))
 
   // An asynchronous listener bus for Spark events
@@ -2572,13 +2573,15 @@ object SparkContext extends Logging {
 
   /**
    * The number of driver cores to use for execution in local mode, 0 otherwise.
+   * driver需要多少cpu去执行本地模式.非本地模式都是返回0
    */
   private[spark] def numDriverCores(master: String): Int = {
+    //如果是*则返回机器的cpu数量,否则将参数转换成整数
     def convertToInt(threads: String): Int = {
       if (threads == "*") Runtime.getRuntime.availableProcessors() else threads.toInt
     }
     master match {
-      case "local" => 1
+      case "local" => 1 //本地模式默认使用1个线程
       case SparkMasterRegex.LOCAL_N_REGEX(threads) => convertToInt(threads)
       case SparkMasterRegex.LOCAL_N_FAILURES_REGEX(threads, _) => convertToInt(threads)
       case _ => 0 // driver is not used for execution
@@ -2737,7 +2740,7 @@ object SparkContext extends Logging {
  * A collection of regexes for extracting information from the master string.
  */
 private object SparkMasterRegex {
-  // Regular expression used for local[N] and local[*] master formats
+  // Regular expression used for local[N] and local[*] master formats 获取本地方式启动时候的线程数,返回是整数或者*
   val LOCAL_N_REGEX = """local\[([0-9]+|\*)\]""".r
   // Regular expression for local[N, maxRetries], used in tests with failing tasks
   val LOCAL_N_FAILURES_REGEX = """local\[([0-9]+|\*)\s*,\s*([0-9]+)\]""".r

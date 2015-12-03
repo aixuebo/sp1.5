@@ -33,6 +33,7 @@ private[spark] class HashShuffleReader[K, C](
     mapOutputTracker: MapOutputTracker = SparkEnv.get.mapOutputTracker)
   extends ShuffleReader[K, C] with Logging {
 
+  //hash shuffle仅仅支持抓取一个partition
   require(endPartition == startPartition + 1,
     "Hash shuffle currently only supports fetching one partition")
 

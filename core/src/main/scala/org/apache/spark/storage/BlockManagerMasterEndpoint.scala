@@ -34,23 +34,24 @@ import org.apache.spark.util.{ThreadUtils, Utils}
 /**
  * BlockManagerMasterEndpoint is an [[ThreadSafeRpcEndpoint]] on the master node to track statuses
  * of all slaves' block managers.
- * 该类在master上执行,是一个线程安全的终端,用于跟踪所有slave上的数据块管理器的状态
+ * 该类在driver上执行,是一个线程安全的终端,用于跟踪所有slave上的数据块管理器的状态
  */
 private[spark]
 class BlockManagerMasterEndpoint(
-    override val rpcEnv: RpcEnv,
-    val isLocal: Boolean,
+    override val rpcEnv: RpcEnv,//driver所在的host和port组成对对象
+    val isLocal: Boolean,//true表示使用local方式启动的sparkContext
     conf: SparkConf,
     listenerBus: LiveListenerBus)
   extends ThreadSafeRpcEndpoint with Logging {
 
-  // Mapping from block manager id to the block manager's information.
-  private val blockManagerInfo = new mutable.HashMap[BlockManagerId, BlockManagerInfo]
-
-  // Mapping from executor ID to block manager ID.
+  // Mapping from executor ID to block manager ID.知道执行者ID就可以获取对应的BlockManagerId对象
   private val blockManagerIdByExecutor = new mutable.HashMap[String, BlockManagerId]
 
+  // Mapping from block manager id to the block manager's information.知道BlockManagerId对象,就可以获取对应的BlockManagerInfo对象
+  private val blockManagerInfo = new mutable.HashMap[BlockManagerId, BlockManagerInfo]
+  
   // Mapping from block id to the set of block managers that have the block.
+  //可以知道一个数据块,在哪些solve节点管理着
   private val blockLocations = new JHashMap[BlockId, mutable.HashSet[BlockManagerId]]
 
   private val askThreadPool = ThreadUtils.newDaemonCachedThreadPool("block-manager-ask-thread-pool")
@@ -58,27 +59,44 @@ class BlockManagerMasterEndpoint(
 
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
     case RegisterBlockManager(blockManagerId, maxMemSize, slaveEndpoint) =>
-      register(blockManagerId, maxMemSize, slaveEndpoint)
+      register(blockManagerId, maxMemSize, slaveEndpoint) //在slave节点注册了一个BlockManagerId,最多允许使用maxMemSize内存
       context.reply(true)
 
+      /**
+       * 更新一个数据块,并且更新该数据块对应的BlockManagerId集合,true表示更新成功,false表示更新失败
+       */
     case _updateBlockInfo @ UpdateBlockInfo(
       blockManagerId, blockId, storageLevel, deserializedSize, size, externalBlockStoreSize) =>
       context.reply(updateBlockInfo(
-        blockManagerId, blockId, storageLevel, deserializedSize, size, externalBlockStoreSize))
-      listenerBus.post(SparkListenerBlockUpdated(BlockUpdatedInfo(_updateBlockInfo)))
+        blockManagerId, blockId, storageLevel, deserializedSize, size, externalBlockStoreSize)) 
+      listenerBus.post(SparkListenerBlockUpdated(BlockUpdatedInfo(_updateBlockInfo))) 
 
     case GetLocations(blockId) =>
-      context.reply(getLocations(blockId))
+      context.reply(getLocations(blockId)) //获取该数据块对应存储在哪些节点上
 
+  /**
+   * 获取一组数据块的集合
+   * 参数 blockIds是等待获取数据块的集合数组
+   * 返回值 是IndexedSeq[Seq[BlockManagerId]],每一个元素是一个数据块对应的BlockManagerId集合,相当于一个二维数组
+   */
     case GetLocationsMultipleBlockIds(blockIds) =>
       context.reply(getLocationsMultipleBlockIds(blockIds))
 
+      /**
+       * 返回除了driver和自己之外的  BlockManagerId集合
+       */
     case GetPeers(blockManagerId) =>
       context.reply(getPeers(blockManagerId))
 
+      /**
+       * 返回一个执行者的rcp对应的host和port
+       */
     case GetRpcHostPortForExecutor(executorId) =>
       context.reply(getRpcHostPortForExecutor(executorId))
 
+      /**
+       * 返回所有的BlockManagerId,与之该BlockManagerId相关的最大内存和剩余内存,即Map[BlockManagerId, (Long, Long)]
+       */
     case GetMemoryStatus =>
       context.reply(memoryStatus)
 
@@ -134,15 +152,23 @@ class BlockManagerMasterEndpoint(
 
     // Find all blocks for the given RDD, remove the block from both blockLocations and
     // the blockManagerInfo that is tracking the blocks.
+    //过滤所有数据该rddid的数据块集合
     val blocks = blockLocations.keys.flatMap(_.asRDDId).filter(_.rddId == rddId)
+    /**
+     * 1.循环每一个rddid对应的数据块集合
+     * 2.定位该数据块在哪些BlockManagerId节点上
+     * 3.循环BlockManagerId节点,从内存上移除这些数据块所占用映射
+     * 4.删除该数据块所有映射
+     */
     blocks.foreach { blockId =>
-      val bms: mutable.HashSet[BlockManagerId] = blockLocations.get(blockId)
+      val bms: mutable.HashSet[BlockManagerId] = blockLocations.get(blockId) 
       bms.foreach(bm => blockManagerInfo.get(bm).foreach(_.removeBlock(blockId)))
       blockLocations.remove(blockId)
     }
 
     // Ask the slaves to remove the RDD, and put the result in a sequence of Futures.
     // The dispatcher is used as an implicit argument into the Future sequence construction.
+    //去每一个真正的节点删除该数据块的信息
     val removeMsg = RemoveRdd(rddId)
     Future.sequence(
       blockManagerInfo.values.map { bm =>
@@ -151,6 +177,7 @@ class BlockManagerMasterEndpoint(
     )
   }
 
+  //删除所有节点上shuffer信息
   private def removeShuffle(shuffleId: Int): Future[Seq[Boolean]] = {
     // Nothing to do in the BlockManagerMasterEndpoint data structures
     val removeMsg = RemoveShuffle(shuffleId)
@@ -235,12 +262,17 @@ class BlockManagerMasterEndpoint(
   }
 
   // Return a map from the block manager id to max memory and remaining memory.
+  //返回所有的BlockManagerId,与之该BlockManagerId相关的最大内存和剩余内存,即Map[BlockManagerId, (Long, Long)]
   private def memoryStatus: Map[BlockManagerId, (Long, Long)] = {
     blockManagerInfo.map { case(blockManagerId, info) =>
       (blockManagerId, (info.maxMem, info.remainingMem))
     }.toMap
   }
 
+  /**
+   * 1.循环HashMap[BlockManagerId, BlockManagerInfo]
+   * 2.每一个BlockManagerId对应一个StorageStatus被返回,因此返回的是 Array[StorageStatus]数组
+   */
   private def storageStatus: Array[StorageStatus] = {
     blockManagerInfo.map { case (blockManagerId, info) =>
       new StorageStatus(blockManagerId, info.maxMem, info.blocks)
@@ -250,10 +282,11 @@ class BlockManagerMasterEndpoint(
   /**
    * Return the block's status for all block managers, if any. NOTE: This is a
    * potentially expensive operation and should only be used for testing.
-   *
+   * 注意,这个是一个很耗时的操作,仅仅用于测试
    * If askSlaves is true, the master queries each block manager for the most updated block
    * statuses. This is useful when the master is not informed of the given block by all block
    * managers.
+   * 返回该数据块在每一个BlockManagerId节点上的状态集合,格式即Map[BlockManagerId, Future[Option[BlockStatus]]]
    */
   private def blockStatus(
       blockId: BlockId,
@@ -300,9 +333,10 @@ class BlockManagerMasterEndpoint(
     ).map(_.flatten.toSeq)
   }
 
+  //在slave节点注册了一个BlockManagerId,最多允许使用maxMemSize内存
   private def register(id: BlockManagerId, maxMemSize: Long, slaveEndpoint: RpcEndpointRef) {
     val time = System.currentTimeMillis()
-    if (!blockManagerInfo.contains(id)) {
+    if (!blockManagerInfo.contains(id)) {//说明我们还不知道该BlockManagerId
       blockManagerIdByExecutor.get(id.executorId) match {
         case Some(oldId) =>
           // A block manager of the same executor already exists, so remove it (assumed dead)
@@ -322,6 +356,7 @@ class BlockManagerMasterEndpoint(
     listenerBus.post(SparkListenerBlockManagerAdded(time, id, maxMemSize))
   }
 
+  //更新一个数据块,并且更新该数据块对应的BlockManagerId集合,true表示更新成功,false表示更新失败
   private def updateBlockInfo(
       blockManagerId: BlockManagerId,
       blockId: BlockId,
@@ -348,6 +383,7 @@ class BlockManagerMasterEndpoint(
     blockManagerInfo(blockManagerId).updateBlockInfo(
       blockId, storageLevel, memSize, diskSize, externalBlockStoreSize)
 
+      //更新该数据块对应的BlockManagerId集合
     var locations: mutable.HashSet[BlockManagerId] = null
     if (blockLocations.containsKey(blockId)) {
       locations = blockLocations.get(blockId)
@@ -369,16 +405,24 @@ class BlockManagerMasterEndpoint(
     true
   }
 
+  //获取该数据块对应存储在哪些节点上
   private def getLocations(blockId: BlockId): Seq[BlockManagerId] = {
     if (blockLocations.containsKey(blockId)) blockLocations.get(blockId).toSeq else Seq.empty
   }
 
+  /**
+   * 获取一组数据块的集合
+   * 参数 blockIds是等待获取数据块的集合数组
+   * 返回值 是IndexedSeq[Seq[BlockManagerId]],每一个元素是一个数据块对应的BlockManagerId集合,相当于一个二维数组
+   */
   private def getLocationsMultipleBlockIds(
       blockIds: Array[BlockId]): IndexedSeq[Seq[BlockManagerId]] = {
     blockIds.map(blockId => getLocations(blockId))
   }
 
-  /** Get the list of the peers of the given block manager */
+  /** Get the list of the peers of the given block manager
+   * 返回除了driver和自己之外的  BlockManagerId集合
+   **/
   private def getPeers(blockManagerId: BlockManagerId): Seq[BlockManagerId] = {
     val blockManagerIds = blockManagerInfo.keySet
     if (blockManagerIds.contains(blockManagerId)) {
@@ -391,6 +435,7 @@ class BlockManagerMasterEndpoint(
   /**
    * Returns the hostname and port of an executor, based on the [[RpcEnv]] address of its
    * [[BlockManagerSlaveEndpoint]].
+   * 返回一个执行者的rcp对应的host和port
    */
   private def getRpcHostPortForExecutor(executorId: String): Option[(String, Int)] = {
     for (
@@ -408,10 +453,12 @@ class BlockManagerMasterEndpoint(
 
 @DeveloperApi
 case class BlockStatus(
-    storageLevel: StorageLevel,
-    memSize: Long,
-    diskSize: Long,
-    externalBlockStoreSize: Long) {
+    storageLevel: StorageLevel,//该数据块的存储级别
+    memSize: Long,//该数据块的内存使用
+    diskSize: Long,//该数据块的磁盘使用
+    externalBlockStoreSize: Long) {//该数据块的外部存储使用
+  
+  //true表示有数据,则就要去缓存
   def isCached: Boolean = memSize + diskSize + externalBlockStoreSize > 0
 }
 
@@ -421,56 +468,60 @@ object BlockStatus {
 }
 
 private[spark] class BlockManagerInfo(
-    val blockManagerId: BlockManagerId,
-    timeMs: Long,
-    val maxMem: Long,
-    val slaveEndpoint: RpcEndpointRef)
+    val blockManagerId: BlockManagerId,//确定哪个执行者在哪个节点上的管理器
+    timeMs: Long,//创建时间
+    val maxMem: Long,//最多允许使用内存
+    val slaveEndpoint: RpcEndpointRef) //与该slove节点进行通信的客户端
   extends Logging {
 
-  private var _lastSeenMs: Long = timeMs
-  private var _remainingMem: Long = maxMem
+  private var _lastSeenMs: Long = timeMs //最后访问时间
+  private var _remainingMem: Long = maxMem //剩余可用内存
 
-  // Mapping from block id to its status.
+  // Mapping from block id to its status.映射该BlockManagerId上存储的数据块以及数据块状态
   private val _blocks = new JHashMap[BlockId, BlockStatus]
 
   // Cached blocks held by this BlockManager. This does not include broadcast blocks.
   private val _cachedBlocks = new mutable.HashSet[BlockId]
 
+  //获取给定的BlockId对应的状态
   def getStatus(blockId: BlockId): Option[BlockStatus] = Option(_blocks.get(blockId))
 
+  //更新最后访问时间
   def updateLastSeenMs() {
     _lastSeenMs = System.currentTimeMillis()
   }
 
+  //更新一个数据块
   def updateBlockInfo(
-      blockId: BlockId,
-      storageLevel: StorageLevel,
-      memSize: Long,
-      diskSize: Long,
-      externalBlockStoreSize: Long) {
+      blockId: BlockId, //数据块ID
+      storageLevel: StorageLevel,//该数据块的存储级别
+      memSize: Long, //该数据块使用内存大小
+      diskSize: Long,//该数据块使用磁盘大小
+      externalBlockStoreSize: Long) {//该数据块使用外部存储大小
 
-    updateLastSeenMs()
+    updateLastSeenMs() //更新最后访问时间
 
-    if (_blocks.containsKey(blockId)) {
+    if (_blocks.containsKey(blockId)) { //更新该数据块的状态
       // The block exists on the slave already.
       val blockStatus: BlockStatus = _blocks.get(blockId)
-      val originalLevel: StorageLevel = blockStatus.storageLevel
-      val originalMemSize: Long = blockStatus.memSize
+      val originalLevel: StorageLevel = blockStatus.storageLevel //原始存储级别
+      val originalMemSize: Long = blockStatus.memSize //原始内存使用量
 
       if (originalLevel.useMemory) {
-        _remainingMem += originalMemSize
+        _remainingMem += originalMemSize //先释放内存,因为后续会添加内存
       }
     }
 
     if (storageLevel.isValid) {
       /* isValid means it is either stored in-memory, on-disk or on-externalBlockStore.
-       * The memSize here indicates the data size in or dropped from memory,
-       * externalBlockStoreSize here indicates the data size in or dropped from externalBlockStore,
-       * and the diskSize here indicates the data size in or dropped to disk.
+       * 合法意味着他是in-memory, on-disk or on-externalBlockStore.三者之一存储方式
+       * The memSize here indicates the data size in or dropped from memory,memSize值指代着是内存
+       * externalBlockStoreSize here indicates the data size in or dropped from externalBlockStore,externalBlockStoreSize值指代着是外部存储
+       * and the diskSize here indicates the data size in or dropped to disk.disk值指代着是磁盘存储
        * They can be both larger than 0, when a block is dropped from memory to disk.
        * Therefore, a safe way to set BlockStatus is to set its info in accurate modes. */
       var blockStatus: BlockStatus = null
-      if (storageLevel.useMemory) {
+      if (storageLevel.useMemory) {//减少内存内存使用量
         blockStatus = BlockStatus(storageLevel, memSize, 0, 0)
         _blocks.put(blockId, blockStatus)
         _remainingMem -= memSize
@@ -515,9 +566,10 @@ private[spark] class BlockManagerInfo(
     }
   }
 
+  //移除一个数据块
   def removeBlock(blockId: BlockId) {
     if (_blocks.containsKey(blockId)) {
-      _remainingMem += _blocks.get(blockId).memSize
+      _remainingMem += _blocks.get(blockId).memSize //还原内存
       _blocks.remove(blockId)
     }
     _cachedBlocks -= blockId

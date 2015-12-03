@@ -50,6 +50,24 @@ import org.apache.spark.util.random.StratifiedSamplingUtils
 
 /**
  * Extra functions available on RDDs of (key, value) pairs through an implicit conversion.
+ * 
+ * 
+ * 1.reduceByKey 其实真正执行的逻辑就是combineByKey,只是特别的是reduce进行merge合并操作的时候,产生的结果依然是K-V中的V
+ * 2.combineByKey 是原始输入K-V,返回值是K-U,会变换返回值
+ * 3.lookup(key: K): Seq[V] 返回该key对应的所有value值的集合,返回值是ArrayBuffer[V]
+ * 4.mapValues[U](f: V => U): RDD[(K, U)],将RDD[K-V]转换成RDD[k,f[V=>U]] = RDD[k,U]操作,相当于对value进行Map操作
+ * 5.saveAsHadoopFile 将RDD的内容保存在HDFS上
+ * 6.collectAsMap(): Map[K, V] 将RDD处理的所有结果,调用collect方法,返回的是K-V键值对的信息,将其存储在Map中返回
+ * 7. flatMapValues[U](f: V => TraversableOnce[U]): RDD[(K, U)],针对RDD[(k,v)] 将其转换成RDD[(K, U)]
+ * 过程:
+ * a.针对每一个v调用函数f,将其一个v转化成迭代器U,即一个v可以转换成一组数据
+ * b.针对迭代器U,调用map方法,转换成k-U
+ * 总结,一个v转换成一组U,从而等式为一个key-value,转换成一组K-U的过程
+ * 8.join[W](other: RDD[(K, W)]): RDD[(K, (V, W))] 
+ * 将两个RDD,组装成新的RDD.返回一个新的RDD,仅将两个RDD都包含的key进行组装成新的RDD
+ * 返回值RDD[(K, (V, W))],表示是相同的key做为key,value是元组,表示第一个RDD的value和第二个RDD的value组成的元组
+ * 
+ * 
  */
 class PairRDDFunctions[K, V](self: RDD[(K, V)])
     (implicit kt: ClassTag[K], vt: ClassTag[V], ord: Ordering[K] = null)
@@ -294,6 +312,8 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * Merge the values for each key using an associative reduce function, but return the results
    * immediately to the master as a Map. This will also perform the merging locally on each mapper
    * before sending results to a reducer, similarly to a "combiner" in MapReduce.
+   * 在一个partition节点上,使用reduce函数,合并每一个key相同的value值,在每一个mapper上本地进行merge合并操作,然后在发送结果到reducer节点上,类似于mapreduce中的combiner操作
+   * 参数:func,表示如果key存在,则将存在的value值以及新的value值分别为两个函数,调用f,返回新的值
    */
   def reduceByKeyLocally(func: (V, V) => V): Map[K, V] = self.withScope {
     val cleanedF = self.sparkContext.clean(func)
@@ -302,8 +322,14 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       throw new SparkException("reduceByKeyLocally() does not support array keys")
     }
 
+    //迭代每一个原始RDD的k-v键值对.返回新的key-value值,key还是原来的key,value经过func计算的value值
     val reducePartition = (iter: Iterator[(K, V)]) => {
       val map = new JHashMap[K, V]
+      
+      /**
+       * 如果key不存在,则将ket-value添加到Map中
+       * 如果key存在,则将存在的value值以及新的value值分别为两个函数,调用f,返回新的值
+       */
       iter.foreach { pair =>
         val old = map.get(pair._1)
         map.put(pair._1, if (old == null) pair._2 else cleanedF(old, pair._2))
@@ -311,6 +337,11 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       Iterator(map)
     } : Iterator[JHashMap[K, V]]
 
+      /**
+       * 合并多个partition结果
+       * 如果key不存在,则将ket-value添加到Map中
+       * 如果key存在,则将存在的value值以及新的value值分别为两个函数,调用f,返回新的值
+       */
     val mergeMaps = (m1: JHashMap[K, V], m2: JHashMap[K, V]) => {
       m2.foreach { pair =>
         val old = m1.get(pair._1)
@@ -505,6 +536,8 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * Return an RDD containing all pairs of elements with matching keys in `this` and `other`. Each
    * pair of elements will be returned as a (k, (v1, v2)) tuple, where (k, v1) is in `this` and
    * (k, v2) is in `other`. Uses the given Partitioner to partition the output RDD.
+   * 将两个RDD,组装成新的RDD.返回一个新的RDD,仅将两个RDD都包含的key进行组装成新的RDD
+   * 返回值RDD[(K, (V, W))],表示是相同的key做为key,value是元组,表示第一个RDD的value和第二个RDD的value组成的元组
    */
   def join[W](other: RDD[(K, W)], partitioner: Partitioner): RDD[(K, (V, W))] = self.withScope {
     this.cogroup(other, partitioner).flatMapValues( pair =>
@@ -591,6 +624,8 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * Return an RDD containing all pairs of elements with matching keys in `this` and `other`. Each
    * pair of elements will be returned as a (k, (v1, v2)) tuple, where (k, v1) is in `this` and
    * (k, v2) is in `other`. Performs a hash join across the cluster.
+   * 将两个RDD,组装成新的RDD.返回一个新的RDD,仅将两个RDD都包含的key进行组装成新的RDD
+   * 返回值RDD[(K, (V, W))],表示是相同的key做为key,value是元组,表示第一个RDD的value和第二个RDD的value组成的元组
    */
   def join[W](other: RDD[(K, W)]): RDD[(K, (V, W))] = self.withScope {
     join(other, defaultPartitioner(self, other))
@@ -600,6 +635,8 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * Return an RDD containing all pairs of elements with matching keys in `this` and `other`. Each
    * pair of elements will be returned as a (k, (v1, v2)) tuple, where (k, v1) is in `this` and
    * (k, v2) is in `other`. Performs a hash join across the cluster.
+   * 将两个RDD,组装成新的RDD.返回一个新的RDD,仅将两个RDD都包含的key进行组装成新的RDD
+   * 返回值RDD[(K, (V, W))],表示是相同的key做为key,value是元组,表示第一个RDD的value和第二个RDD的value组成的元组
    */
   def join[W](other: RDD[(K, W)], numPartitions: Int): RDD[(K, (V, W))] = self.withScope {
     join(other, new HashPartitioner(numPartitions))
@@ -681,6 +718,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    *
    * Warning: this doesn't return a multimap (so if you have multiple values to the same key, only
    *          one value per key is preserved in the map returned)
+   * 将RDD处理的所有结果,调用collect方法,返回的是K-V键值对的信息,将其存储在Map中返回
    */
   def collectAsMap(): Map[K, V] = self.withScope {
     val data = self.collect()
@@ -693,6 +731,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   /**
    * Pass each value in the key-value pair RDD through a map function without changing the keys;
    * this also retains the original RDD's partitioning.
+   * 将RDD[K-V]转换成RDD[k,f[V=>U]] = RDD[k,U]操作 
    */
   def mapValues[U](f: V => U): RDD[(K, U)] = self.withScope {
     val cleanF = self.context.clean(f)
@@ -704,6 +743,11 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   /**
    * Pass each value in the key-value pair RDD through a flatMap function without changing the
    * keys; this also retains the original RDD's partitioning.
+   * 针对RDD[(k,v)] 将其转换成RDD[(K, U)]
+   * 过程:
+   * a.针对每一个v调用函数f,将其一个v转化成迭代器U,即一个v可以转换成一组数据
+   * b.针对迭代器U,调用map方法,转换成k-U
+   * 总结,一个v转换成一组U,从而等式为一个key-value,转换成一组K-U的过程
    */
   def flatMapValues[U](f: V => TraversableOnce[U]): RDD[(K, U)] = self.withScope {
     val cleanF = self.context.clean(f)
@@ -718,6 +762,8 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * For each key k in `this` or `other1` or `other2` or `other3`,
    * return a resulting RDD that contains a tuple with the list of values
    * for that key in `this`, `other1`, `other2` and `other3`.
+   * RDD与三个RDD进行group by key,按照key去关联
+   * 返回值是RDD[(K, (Iterable[V], Iterable[W1], Iterable[W2], Iterable[W3]))],即key与三个RDD对应的迭代器组成的元组作为value返回
    */
   def cogroup[W1, W2, W3](other1: RDD[(K, W1)],
       other2: RDD[(K, W2)],
@@ -899,6 +945,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   /**
    * Output the RDD to any Hadoop-supported file system, using a Hadoop `OutputFormat` class
    * supporting the key and value types K and V in this RDD.
+   * 输出RDD的内容到Hadoop系统中,存储在path上,存储的类型就是OutputFormat[K, V]对应的key与value类型
    */
   def saveAsHadoopFile[F <: OutputFormat[K, V]](
       path: String)(implicit fm: ClassTag[F]): Unit = self.withScope {
@@ -909,6 +956,8 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * Output the RDD to any Hadoop-supported file system, using a Hadoop `OutputFormat` class
    * supporting the key and value types K and V in this RDD. Compress the result with the
    * supplied codec.
+   * 输出RDD的内容到Hadoop系统中,存储在path上,存储的类型就是OutputFormat[K, V]对应的key与value类型
+   * 该函数支持对存储的结果进行编码处理
    */
   def saveAsHadoopFile[F <: OutputFormat[K, V]](
       path: String,
@@ -949,6 +998,8 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   /**
    * Output the RDD to any Hadoop-supported file system, using a Hadoop `OutputFormat` class
    * supporting the key and value types K and V in this RDD. Compress with the supplied codec.
+   * 输出RDD的内容到Hadoop系统中,存储在path上,存储的类型就是OutputFormat[K, V]对应的key与value类型
+   * 该函数支持对存储的结果进行编码处理
    */
   def saveAsHadoopFile(
       path: String,
@@ -963,6 +1014,8 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   /**
    * Output the RDD to any Hadoop-supported file system, using a Hadoop `OutputFormat` class
    * supporting the key and value types K and V in this RDD.
+   * 输出RDD的内容到Hadoop系统中,存储在path上,存储的类型就是OutputFormat[K, V]对应的key与value类型
+   * 该函数支持对存储的结果进行编码处理
    */
   def saveAsHadoopFile(
       path: String,
@@ -1069,6 +1122,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * that storage system. The JobConf should set an OutputFormat and any output paths required
    * (e.g. a table name to write to) in the same way as it would be configured for a Hadoop
    * MapReduce job.
+   * 真正去执行hadoop存储,所有的环境都已经存储在conf环境配置中了
    */
   def saveAsHadoopDataset(conf: JobConf): Unit = self.withScope {
     // Rename this as hadoopConf internally to avoid shadowing (see SPARK-2038).
@@ -1110,7 +1164,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
 
       writer.setup(context.stageId, context.partitionId, taskAttemptId)
       writer.open()
-      var recordsWritten = 0L
+      var recordsWritten = 0L //总记录数
 
       Utils.tryWithSafeFinally {
         while (iter.hasNext) {

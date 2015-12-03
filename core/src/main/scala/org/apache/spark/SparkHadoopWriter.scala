@@ -32,9 +32,10 @@ import org.apache.spark.util.SerializableJobConf
 
 /**
  * Internal helper class that saves an RDD using a Hadoop OutputFormat.
- *
+ * 内部的帮助类,去保存RDD文件到hadoop操作系统中
  * Saves the RDD using a JobConf, which should contain an output key class, an output value class,
  * a filename to write to, etc, exactly like in a Hadoop MapReduce job.
+ * 参数是jobConf,里面已经设置好了保存的key=value类型,以及输出目录等等其他属性
  */
 private[spark]
 class SparkHadoopWriter(@transient jobConf: JobConf)
@@ -72,13 +73,14 @@ class SparkHadoopWriter(@transient jobConf: JobConf)
       jobid, splitID, attemptID, conf.value)
   }
 
+  //创建一个输出文件流
   def open() {
     val numfmt = NumberFormat.getInstance()
     numfmt.setMinimumIntegerDigits(5)
     numfmt.setGroupingUsed(false)
 
-    val outputName = "part-"  + numfmt.format(splitID)
-    val path = FileOutputFormat.getOutputPath(conf.value)
+    val outputName = "part-"  + numfmt.format(splitID) //设置输出文件名
+    val path = FileOutputFormat.getOutputPath(conf.value) //获取输出目录
     val fs: FileSystem = {
       if (path != null) {
         path.getFileSystem(conf.value)
@@ -91,6 +93,7 @@ class SparkHadoopWriter(@transient jobConf: JobConf)
     writer = getOutputFormat().getRecordWriter(fs, conf.value, outputName, Reporter.NULL)
   }
 
+  //向输出流中写入key-value
   def write(key: AnyRef, value: AnyRef) {
     if (writer != null) {
       writer.write(key, value)
@@ -103,10 +106,12 @@ class SparkHadoopWriter(@transient jobConf: JobConf)
     writer.close(Reporter.NULL)
   }
 
+  //提交该任务
   def commit() {
     SparkHadoopMapRedUtil.commitTask(getOutputCommitter(), getTaskContext(), jobID, splitID)
   }
 
+  //提交该job
   def commitJob() {
     val cmtr = getOutputCommitter()
     cmtr.commitJob(getJobContext())
@@ -156,12 +161,14 @@ class SparkHadoopWriter(@transient jobConf: JobConf)
 
 private[spark]
 object SparkHadoopWriter {
+  //根据时间戳创建JobId
   def createJobID(time: Date, id: Int): JobID = {
     val formatter = new SimpleDateFormat("yyyyMMddHHmm")
     val jobtrackerID = formatter.format(time)
     new JobID(jobtrackerID, id)
   }
 
+  //创建输出的路径
   def createPathFromString(path: String, conf: JobConf): Path = {
     if (path == null) {
       throw new IllegalArgumentException("Output path is null")
