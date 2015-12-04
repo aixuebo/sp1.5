@@ -101,6 +101,7 @@ case class SparkListenerExecutorAdded(time: Long, executorId: String, executorIn
 case class SparkListenerExecutorRemoved(time: Long, executorId: String, reason: String)
   extends SparkListenerEvent
 
+//存储一个数据块在一个数据块管理着(block manager)里面的状态信息,用于org.apache.spark.scheduler.SparkListener里面监听SparkListenerBlockUpdated事件,用于更新数据块
 @DeveloperApi
 case class SparkListenerBlockUpdated(blockUpdatedInfo: BlockUpdatedInfo) extends SparkListenerEvent
 

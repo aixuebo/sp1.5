@@ -29,16 +29,16 @@ import org.apache.spark.util.Utils
  * A class for writing JVM objects directly to a file on disk. This class allows data to be appended
  * to an existing block and can guarantee atomicity in the case of faults as it allows the caller to
  * revert partial writes.
- *
+ * 能够担保元组操作
  * This class does not support concurrent writes. Also, once the writer has been opened it cannot be
  * reopened again.
  */
 private[spark] class DiskBlockObjectWriter(
     val blockId: BlockId,
-    file: File,
-    serializerInstance: SerializerInstance,
+    file: File,//向该文件写入数据
+    serializerInstance: SerializerInstance,//写入数据的时候的序列化方式
     bufferSize: Int,
-    compressStream: OutputStream => OutputStream,
+    compressStream: OutputStream => OutputStream,//写入数据的时候的压缩方式
     syncWrites: Boolean,
     // These write metrics concurrently shared with other active DiskBlockObjectWriters who
     // are themselves performing writes. All updates must be relative.
@@ -72,7 +72,7 @@ private[spark] class DiskBlockObjectWriter(
    * xxxxx: Existing contents of the file.
    */
   private val initialPosition = file.length()
-  private var finalPosition: Long = -1
+  private var finalPosition: Long = -1 //文件写入的最后一个字节位置
   private var reportedPosition = initialPosition
 
   /**
@@ -118,6 +118,7 @@ private[spark] class DiskBlockObjectWriter(
     }
   }
 
+  //true表示该文件正在被写入
   def isOpen: Boolean = objOut != null
 
   /**

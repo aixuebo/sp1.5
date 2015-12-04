@@ -17,6 +17,7 @@
 
 package org.apache.spark.storage
 
+//指示哪个数据块出现的异常
 private[spark]
 case class BlockException(blockId: BlockId, message: String) extends Exception(message)
 

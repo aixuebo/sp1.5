@@ -55,7 +55,7 @@ private[spark] class BlockResult(
 /**
  * Manager running on every node (driver and executors) which provides interfaces for putting and
  * retrieving blocks both locally and remotely into various stores (memory, disk, and off-heap).
- *
+ * 运行在每一个node上,每一个driver and executors都有一个该对象,管理属于该driver and executors的数据块信息,包括存储数据块和获取数据块,存储方式内存、磁盘、外部存储都可以
  * Note that #initialize() must be called before the BlockManager is usable.
  */
 private[spark] class BlockManager(
@@ -82,10 +82,11 @@ private[spark] class BlockManager(
     ThreadUtils.newDaemonCachedThreadPool("block-manager-future", 128))
 
   // Actual storage of where blocks are kept
-  private var externalBlockStoreInitialized = false
+  private var externalBlockStoreInitialized = false //true表示外部存储器已经初始化完成
   private[spark] val memoryStore = new MemoryStore(this, maxMemory)
   private[spark] val diskStore = new DiskStore(this, diskBlockManager)
-  private[spark] lazy val externalBlockStore: ExternalBlockStore = {
+  
+  private[spark] lazy val externalBlockStore: ExternalBlockStore = { //外部存储器,懒加载模式,一般情况下不会被启动
     externalBlockStoreInitialized = true
     new ExternalBlockStore(this, executorId)
   }

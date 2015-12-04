@@ -42,12 +42,13 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
   extends BlockStore(blockManager) {
 
   private val conf = blockManager.conf
-  //每一个数据块对应一个内存实体
+  //每一个数据块对应一个内存实体,key是blockId,value是该数据块对应的实体
   private val entries = new LinkedHashMap[BlockId, MemoryEntry](32, 0.75f, true)
 
   @volatile private var currentMemory = 0L //当前已经使用的内存量
 
   // Ensure only one thread is putting, and if necessary, dropping blocks at any given time
+  //锁对象,确保仅有一个线程可以存放数据
   private val accountingLock = new Object
 
   // A mapping from taskAttemptId to amount of memory used for unrolling a block (in bytes)

@@ -32,6 +32,7 @@ import org.apache.spark.util.{ShutdownHookManager, Utils}
  *
  * Block files are hashed among the directories listed in spark.local.dir (or in
  * SPARK_LOCAL_DIRS, if it's set).
+ * 磁盘数据块管理,该对象仅仅是管理数据块存储的File之间的关系,并不会真的产生写入文件操作
  */
 private[spark] class DiskBlockManager(blockManager: BlockManager, conf: SparkConf)
   extends Logging {
@@ -85,6 +86,7 @@ private[spark] class DiskBlockManager(blockManager: BlockManager, conf: SparkCon
     new File(subDir, filename)
   }
 
+  //返回该数据块应该存储的路径
   def getFile(blockId: BlockId): File = getFile(blockId.name)
 
   /** Check if disk block manager has a block.判断文件是否真的存在*/
@@ -112,22 +114,22 @@ private[spark] class DiskBlockManager(blockManager: BlockManager, conf: SparkCon
   }
 
   /** Produces a unique block id and File suitable for storing local intermediate results.
-   *  创建临时数据块
-   *   */
+   *  创建临时数据块,返回被创建的临时数据块对象以及该对象要存储在什么路径下
+   **/
   def createTempLocalBlock(): (TempLocalBlockId, File) = {
     var blockId = new TempLocalBlockId(UUID.randomUUID())
-    while (getFile(blockId).exists()) {
+    while (getFile(blockId).exists()) {//直到找到不存在的临时数据块ID
       blockId = new TempLocalBlockId(UUID.randomUUID())
     }
     (blockId, getFile(blockId))
   }
 
   /** Produces a unique block id and File suitable for storing shuffled intermediate results.
-   *  创建临时数据块
-   *   */
+   *  创建临时数据块,返回被创建的临时数据块对象以及该对象要存储在什么路径下
+   **/
   def createTempShuffleBlock(): (TempShuffleBlockId, File) = {
     var blockId = new TempShuffleBlockId(UUID.randomUUID())
-    while (getFile(blockId).exists()) {
+    while (getFile(blockId).exists()) {//直到找到不存在的临时数据块ID
       blockId = new TempShuffleBlockId(UUID.randomUUID())
     }
     (blockId, getFile(blockId))

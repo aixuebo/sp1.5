@@ -21,6 +21,7 @@ import scala.collection.mutable
 
 import org.apache.spark.scheduler._
 
+//用于在UI上展示该数据块的详细信息
 private[spark] case class BlockUIData(
     blockId: BlockId,
     location: String,
@@ -31,11 +32,12 @@ private[spark] case class BlockUIData(
 
 /**
  * The aggregated status of stream blocks in an executor
+ * 获取所有的数据块状态信息,即该数据块管理者属于在哪个host:port上的执行者
  */
 private[spark] case class ExecutorStreamBlockStatus(
-    executorId: String,
-    location: String,
-    blocks: Seq[BlockUIData]) {
+    executorId: String,//哪个执行者
+    location: String,//host:port
+    blocks: Seq[BlockUIData]) {//该执行者管理的数据块集合
 
   def totalMemSize: Long = blocks.map(_.memSize).sum
 
@@ -43,15 +45,17 @@ private[spark] case class ExecutorStreamBlockStatus(
 
   def totalExternalBlockStoreSize: Long = blocks.map(_.externalBlockStoreSize).sum
 
-  def numStreamBlocks: Int = blocks.size
+  def numStreamBlocks: Int = blocks.size //管理的数据块数量
 
 }
 
 private[spark] class BlockStatusListener extends SparkListener {
 
+  //存储每一个BlockManagerId对应的数据块集合HashMap[BlockId, BlockUIData]
   private val blockManagers =
     new mutable.HashMap[BlockManagerId, mutable.HashMap[BlockId, BlockUIData]]
 
+  //更新一个数据块信息
   override def onBlockUpdated(blockUpdated: SparkListenerBlockUpdated): Unit = {
     val blockId = blockUpdated.blockUpdatedInfo.blockId
     if (!blockId.isInstanceOf[StreamBlockId]) {
@@ -85,17 +89,20 @@ private[spark] class BlockStatusListener extends SparkListener {
     }
   }
 
+  //增加一个数据块manager
   override def onBlockManagerAdded(blockManagerAdded: SparkListenerBlockManagerAdded): Unit = {
     synchronized {
       blockManagers.put(blockManagerAdded.blockManagerId, mutable.HashMap())
     }
   }
 
+  //减少一个数据块manager
   override def onBlockManagerRemoved(
       blockManagerRemoved: SparkListenerBlockManagerRemoved): Unit = synchronized {
     blockManagers -= blockManagerRemoved.blockManagerId
   }
 
+  //获取所有的数据块状态信息,即该数据块管理者属于在哪个host:port上的执行者
   def allExecutorStreamBlockStatus: Seq[ExecutorStreamBlockStatus] = synchronized {
     blockManagers.map { case (blockManagerId, blocks) =>
       ExecutorStreamBlockStatus(

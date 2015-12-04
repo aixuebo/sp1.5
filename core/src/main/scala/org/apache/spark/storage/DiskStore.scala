@@ -47,8 +47,8 @@ private[spark] class DiskStore(blockManager: BlockManager, diskManager: DiskBloc
     val bytes = _bytes.duplicate()
     logDebug(s"Attempting to put block $blockId")
     val startTime = System.currentTimeMillis
-    val file = diskManager.getFile(blockId)
-    val channel = new FileOutputStream(file).getChannel
+    val file = diskManager.getFile(blockId) //获取该数据块要存储的File对象
+    val channel = new FileOutputStream(file).getChannel //对File对象进行写入数据
     Utils.tryWithSafeFinally {
       while (bytes.remaining > 0) {
         channel.write(bytes)

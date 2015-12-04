@@ -31,7 +31,9 @@ import org.apache.spark.util.Utils
  * The first 2 constructors of this class is made private to ensure that BlockManagerId objects
  * can be created only using the apply method in the companion object. This allows de-duplication
  * of ID objects. Also, constructor parameters are private to ensure that parameters cannot be
- * modified from outside this class.
+ * modified from outside this class.、
+ * 
+ * 一个执行者和所在的host-port组成一个数据块管理器,该管理器管理着自己执行环境的内存信息
  */
 @DeveloperApi
 class BlockManagerId private (

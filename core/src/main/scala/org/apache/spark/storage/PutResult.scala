@@ -21,12 +21,13 @@ import java.nio.ByteBuffer
 
 /**
  * Result of adding a block into a BlockStore. This case class contains a few things:
- *   (1) The estimated size of the put,
+ * 结果是添加数据块到存储器之后的结果,主要有三个时期
+ *   (1) The estimated size of the put,估算put存放的数据块总大小
  *   (2) The values put if the caller asked for them to be returned (e.g. for chaining
- *       replication), and
+ *       replication), and 返回的集体内容,是具体文件内容 或者是迭代器内容
  *   (3) A list of blocks dropped as a result of this put. This is always empty for DiskStore.
  */
 private[spark] case class PutResult(
     size: Long,//文件大小
-    data: Either[Iterator[_], ByteBuffer],//文件的具体内容
+    data: Either[Iterator[_], ByteBuffer],//文件的具体内容,要么是迭代器,要么是具体的内容组成的ByteBuffer数组
     droppedBlocks: Seq[(BlockId, BlockStatus)] = Seq.empty)
