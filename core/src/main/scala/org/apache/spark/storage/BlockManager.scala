@@ -72,7 +72,7 @@ private[spark] class BlockManager(
     numUsableCores: Int)
   extends BlockDataManager with Logging {
 
-  val diskBlockManager = new DiskBlockManager(this, conf)
+  val diskBlockManager = new DiskBlockManager(this, conf) //磁盘存储管理者
 
   //key是BlockId,value是BlockInfo和存储该映射关系时候的时间戳
   private val blockInfo = new TimeStampedHashMap[BlockId, BlockInfo]
@@ -83,8 +83,8 @@ private[spark] class BlockManager(
 
   // Actual storage of where blocks are kept
   private var externalBlockStoreInitialized = false //true表示外部存储器已经初始化完成
-  private[spark] val memoryStore = new MemoryStore(this, maxMemory)
-  private[spark] val diskStore = new DiskStore(this, diskBlockManager)
+  private[spark] val memoryStore = new MemoryStore(this, maxMemory) //内存存储
+  private[spark] val diskStore = new DiskStore(this, diskBlockManager) //真正意义去执行磁盘存储
   
   private[spark] lazy val externalBlockStore: ExternalBlockStore = { //外部存储器,懒加载模式,一般情况下不会被启动
     externalBlockStoreInitialized = true
@@ -1002,6 +1002,7 @@ private[spark] class BlockManager(
     putIterator(blockId, Iterator(value), level, tellMaster)
   }
 
+  //释放该数据块ID与之对应的数据内容,返回数据块的状态
   def dropFromMemory(
       blockId: BlockId,
       data: Either[Array[Any], ByteBuffer]): Option[BlockStatus] = {
@@ -1220,7 +1221,7 @@ private[spark] class BlockManager(
       blockId: BlockId,
       bytes: ByteBuffer,
       serializer: Serializer = defaultSerializer): Iterator[Any] = {
-    bytes.rewind()
+    bytes.rewind() //将bytes的position设置为0,limit不更改,即表示可以去从头读取数据了
     dataDeserializeStream(blockId, new ByteBufferInputStream(bytes, true), serializer)
   }
 
@@ -1228,6 +1229,7 @@ private[spark] class BlockManager(
    * Deserializes a InputStream into an iterator of values and disposes of it when the end of
    * the iterator is reached.
    * 将blockId对应的文件内容bytes,进行反序列化成一组数据
+   * blockId的目的是确定是什么数据,比如是RDD还是shufflee,从而确定输入流是否是压缩文件,因此进行解压缩处理
    */
   def dataDeserializeStream(
       blockId: BlockId,

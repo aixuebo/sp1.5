@@ -42,7 +42,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
   extends BlockStore(blockManager) {
 
   private val conf = blockManager.conf
-  //每一个数据块对应一个内存实体,key是blockId,value是该数据块对应的实体
+  //每一个数据块对应一个内存实体,key是blockId,value是该数据块对应的实体,先进先出队列
   private val entries = new LinkedHashMap[BlockId, MemoryEntry](32, 0.75f, true)
 
   @volatile private var currentMemory = 0L //当前已经使用的内存量
@@ -53,6 +53,10 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
 
   // A mapping from taskAttemptId to amount of memory used for unrolling a block (in bytes)
   // All accesses of this map are assumed to have manually synchronized on `accountingLock`
+  /**
+   * 存储当前该taskId已经被占用的用于unrolling blocks的内存大小
+   * key是尝试任务ID,value是占用unrolling blocks的内存大小
+   */
   private val unrollMemoryMap = mutable.HashMap[Long, Long]()
   // Same as `unrollMemoryMap`, but for pending unroll memory as defined below.
   // Pending unroll memory refers to the intermediate memory occupied by a task
@@ -94,14 +98,24 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
     }
   }
 
+  /**
+   * 将blockId对应的字节内容_bytes
+   * 注意
+   * 1.该字节内容可以是压缩文件,因此需要解压缩处理
+   * 2.该字节内容可能需要反序列化处理
+   */
   override def putBytes(blockId: BlockId, _bytes: ByteBuffer, level: StorageLevel): PutResult = {
     // Work on a duplicate - since the original input might be used elsewhere.
+    //去做一个深度拷贝,因为原始的输入byte可能被其他地方使用
+    /**
+     * duplicate()方法用于创建一个与原始缓冲区共享内容的新缓冲区。新缓冲区的position，limit，mark和capacity都初始化为原始缓冲区的索引值，然而，它们的这些值是相互独立的。
+     */
     val bytes = _bytes.duplicate()
-    bytes.rewind()
-    if (level.deserialized) {
-      val values = blockManager.dataDeserialize(blockId, bytes)
+    bytes.rewind() //将bytes的position设置为0,limit不更改,即表示可以去从头读取数据了
+    if (level.deserialized) {//存储级别需要反序列化
+      val values = blockManager.dataDeserialize(blockId, bytes)//对bytes进行反序列化处理,返回一个一个对象的迭代器
       putIterator(blockId, values, level, returnValues = true)
-    } else {
+    } else {//没有经过反序列化处理
       val putAttempt = tryToPut(blockId, bytes, bytes.limit, deserialized = false)
       PutResult(bytes.limit(), Right(bytes.duplicate()), putAttempt.droppedBlocks)
     }
@@ -217,7 +231,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
     }
   }
 
-  //删除一个数据块,并且同步删除内存
+  //删除内存映射,并且恢复当前内存使用量
   override def remove(blockId: BlockId): Boolean = {
     entries.synchronized {
       val entry = entries.remove(blockId)
@@ -421,7 +435,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
    * either the block is bigger than our memory or it would require replacing another block
    * from the same RDD (which leads to a wasteful cyclic replacement pattern for RDDs that
    * don't fit into memory that we want to avoid).
-   *
+   * 尝试去空出来一定内存空间,去存储参数BlockId,但是也能失败,例如当数据块太大,没有足够内存可以被释放
    * Assume that `accountingLock` is held by the caller to ensure only one thread is dropping
    * blocks. Otherwise, the freed space may fill up before the caller puts in their new value.
    *
@@ -429,12 +443,15 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
    * 确保有足够空间
    * @space 表示要添加的数据块所需要的字节大小
    * @blockIdToAdd 表示要添加的数据块
+   * 
    */
   private def ensureFreeSpace(
       blockIdToAdd: BlockId,
       space: Long): ResultWithDroppedBlocks = {
+    //记录日志,当前需要多少内存,当前内存以及总内存
     logInfo(s"ensureFreeSpace($space) called with curMem=$currentMemory, maxMem=$maxMemory")
 
+    //释放的数据块集合
     val droppedBlocks = new ArrayBuffer[(BlockId, BlockStatus)]
 
     //大过了内存限制,要抛异常
@@ -446,33 +463,36 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
     // Take into account the amount of memory currently occupied by unrolling blocks
     // and minus the pending unroll memory for that block on current thread.
     val taskAttemptId = currentTaskAttemptId()
+    //当前剩余内存 - 当前所有任务中 被unrolling blocks操作占用的总内存空间 + 当前该任务等待的内存使用量
     val actualFreeMemory = freeMemory - currentUnrollMemory +
       pendingUnrollMemoryMap.getOrElse(taskAttemptId, 0L)
 
-    if (actualFreeMemory < space) {
-      val rddToAdd = getRddId(blockIdToAdd)
-      val selectedBlocks = new ArrayBuffer[BlockId]
-      var selectedMemory = 0L
+    if (actualFreeMemory < space) { //空间不足
+      val rddToAdd = getRddId(blockIdToAdd) //获取RDDid
+      val selectedBlocks = new ArrayBuffer[BlockId] //选择释放的数据块ID
+      var selectedMemory = 0L //选择释放的数据块ID的内存集合
 
       // This is synchronized to ensure that the set of entries is not changed
       // (because of getValue or getBytes) while traversing the iterator, as that
       // can lead to exceptions.
       entries.synchronized {
         val iterator = entries.entrySet().iterator()
-        while (actualFreeMemory + selectedMemory < space && iterator.hasNext) {
-          val pair = iterator.next()
+        while (actualFreeMemory + selectedMemory < space && iterator.hasNext) {//如果内存仍然不足,则继续释放内存
+          val pair = iterator.next() //每一个数据块对应一个内存实体,key是blockId,value是该数据块对应的实体
           val blockId = pair.getKey
+          //如果rddToAdd是空,说明该要添加的数据块不是RDD,因此可以删除队列第一个元素
+          //如果rddToAdd不是空,但是不是要添加的RDD对应的数据块,因此也可以删除队列的第一个元素
           if (rddToAdd.isEmpty || rddToAdd != getRddId(blockId)) {
-            selectedBlocks += blockId
-            selectedMemory += pair.getValue.size
+            selectedBlocks += blockId //累加要释放的数据块ID
+            selectedMemory += pair.getValue.size //累加数据块释放的内存
           }
         }
       }
 
-      if (actualFreeMemory + selectedMemory >= space) {
-        logInfo(s"${selectedBlocks.size} blocks selected for dropping")
-        for (blockId <- selectedBlocks) {
-          val entry = entries.synchronized { entries.get(blockId) }
+      if (actualFreeMemory + selectedMemory >= space) { //有空间可以去释放,并且释放后可以满足存储数据块
+        logInfo(s"${selectedBlocks.size} blocks selected for dropping") //打印日志,多少个数据块要被释放掉
+        for (blockId <- selectedBlocks) { //循环每一个释放的数据块
+          val entry = entries.synchronized { entries.get(blockId) } //要释放的实体 BlockId, MemoryEntry
           // This should never be null as only one task should be dropping
           // blocks and removing entries. However the check is still here for
           // future safety.
@@ -482,12 +502,12 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
             } else {
               Right(entry.value.asInstanceOf[ByteBuffer].duplicate())
             }
-            val droppedBlockStatus = blockManager.dropFromMemory(blockId, data)
+            val droppedBlockStatus = blockManager.dropFromMemory(blockId, data) //释放该数据块ID与之对应的数据内容,返回数据块的状态
             droppedBlockStatus.foreach { status => droppedBlocks += ((blockId, status)) }
           }
         }
         return ResultWithDroppedBlocks(success = true, droppedBlocks)
-      } else {
+      } else {//打印日志,说明不能释放该空间.因此无法添加该数据块到内存
         logInfo(s"Will not store $blockIdToAdd as it would require dropping another block " +
           "from the same RDD")
         return ResultWithDroppedBlocks(success = false, droppedBlocks)
@@ -501,6 +521,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
     entries.synchronized { entries.containsKey(blockId) }
   }
 
+  //获取当前执行任务的ID
   private def currentTaskAttemptId(): Long = {
     // In case this is called on the driver, return an invalid task attempt id.
     Option(TaskContext.get()).map(_.taskAttemptId()).getOrElse(-1L)
@@ -564,6 +585,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
 
   /**
    * Return the amount of memory currently occupied for unrolling blocks across all tasks.
+   * 返回当前所有任务中 被unrolling blocks操作占用的总内存空间
    */
   def currentUnrollMemory: Long = accountingLock.synchronized {
     unrollMemoryMap.values.sum + pendingUnrollMemoryMap.values.sum
@@ -571,6 +593,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
 
   /**
    * Return the amount of memory currently occupied for unrolling blocks by this task.
+   * 返回当前该taskId已经被占用的用于unrolling blocks的内存大小
    */
   def currentUnrollMemoryForThisTask: Long = accountingLock.synchronized {
     unrollMemoryMap.getOrElse(currentTaskAttemptId(), 0L)
@@ -578,6 +601,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
 
   /**
    * Return the number of tasks currently unrolling blocks.
+   * 返回用于unrolling blocks的任务总数
    */
   def numTasksUnrolling: Int = accountingLock.synchronized { unrollMemoryMap.keys.size }
 
@@ -585,8 +609,8 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
    * Log information about current memory usage.
    */
   def logMemoryUsage(): Unit = {
-    val blocksMemory = currentMemory
-    val unrollMemory = currentUnrollMemory
+    val blocksMemory = currentMemory //当前使用内存量
+    val unrollMemory = currentUnrollMemory // 返回当前所有任务中 被unrolling blocks操作占用的总内存空间
     val totalMemory = blocksMemory + unrollMemory
     logInfo(
       s"Memory use = ${Utils.bytesToString(blocksMemory)} (blocks) + " +
