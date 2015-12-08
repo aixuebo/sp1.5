@@ -27,6 +27,7 @@ private[spark]
  * identifier (i.e. map, reduce, and shuffle). Implementations may use files or file segments to
  * encapsulate shuffle data. This is used by the BlockStore to abstract over different shuffle
  * implementations when shuffle data is retrieved.
+ * 该trait表示如何去抓取一个shuffle数据块
  */
 trait ShuffleBlockResolver {
   type ShuffleId = Int

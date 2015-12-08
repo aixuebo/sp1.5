@@ -26,6 +26,9 @@ import org.apache.spark.{Logging, SparkConf, SparkException}
 import org.apache.spark.storage.BlockManagerMessages._
 import org.apache.spark.util.{ThreadUtils, RpcUtils}
 
+/**
+ * 该类表示driver的一个客户端节点,该节点可以向driver发送请求
+ */
 private[spark]
 class BlockManagerMaster(
     var driverEndpoint: RpcEndpointRef,//该引用是ref,表示客户端

@@ -35,8 +35,8 @@ import IndexShuffleBlockResolver.NOOP_REDUCE_ID
  * The offsets of the data blocks in the data file are stored in a separate index file.
  *
  * We use the name of the shuffle data's shuffleBlockId with reduce ID set to 0 and add ".data"
- * as the filename postfix for data file, and ".index" as the filename postfix for index file.
- *
+ * as the filename postfix for data file, and ".index" as the filename postfix for index file.、
+ * 可以读取一个数据块的真实内容
  */
 // Note: Changes to the format in this file should be kept in sync with
 // org.apache.spark.network.shuffle.ExternalShuffleBlockResolver#getSortBasedShuffleBlockData().
@@ -46,16 +46,23 @@ private[spark] class IndexShuffleBlockResolver(conf: SparkConf) extends ShuffleB
 
   private val transportConf = SparkTransportConf.fromSparkConf(conf)
 
+  /**
+   * 获取某偶一个shuffleId下某一个map的数据文件
+   */
   def getDataFile(shuffleId: Int, mapId: Int): File = {
     blockManager.diskBlockManager.getFile(ShuffleDataBlockId(shuffleId, mapId, NOOP_REDUCE_ID))
   }
 
+  /**
+   * 获取某偶一个shuffleId下某一个map的索引文件
+   */
   private def getIndexFile(shuffleId: Int, mapId: Int): File = {
     blockManager.diskBlockManager.getFile(ShuffleIndexBlockId(shuffleId, mapId, NOOP_REDUCE_ID))
   }
 
   /**
    * Remove data file and index file that contain the output data from one map.
+   * 删除某一个shuffle下某一个map上所有的数据,包括索引文件
    * */
   def removeDataByMap(shuffleId: Int, mapId: Int): Unit = {
     var file = getDataFile(shuffleId, mapId)
@@ -73,6 +80,7 @@ private[spark] class IndexShuffleBlockResolver(conf: SparkConf) extends ShuffleB
    * Write an index file with the offsets of each block, plus a final offset at the end for the
    * end of the output file. This will be used by getBlockData to figure out where each block
    * begins and ends.
+   * 写入索引文件,将每一个数据块的开始位置写入到索引文件中
    * */
   def writeIndexFile(shuffleId: Int, mapId: Int, lengths: Array[Long]): Unit = {
     val indexFile = getIndexFile(shuffleId, mapId)
@@ -90,16 +98,21 @@ private[spark] class IndexShuffleBlockResolver(conf: SparkConf) extends ShuffleB
     }
   }
 
+  //读取某一个数据块的信息字节流
   override def getBlockData(blockId: ShuffleBlockId): ManagedBuffer = {
     // The block is actually going to be a range of a single map output file for this map, so
     // find out the consolidated file, then the offset within that from our index
+    //获取该shuffle文件的map对应的索引文件
     val indexFile = getIndexFile(blockId.shuffleId, blockId.mapId)
 
+    //读取索引文件
     val in = new DataInputStream(new FileInputStream(indexFile))
     try {
-      ByteStreams.skipFully(in, blockId.reduceId * 8)
-      val offset = in.readLong()
-      val nextOffset = in.readLong()
+      ByteStreams.skipFully(in, blockId.reduceId * 8) //跳过reduce对应的数据块的开始位置
+      val offset = in.readLong() //获取该数据块所在数据块位置
+      val nextOffset = in.readLong() //读取数据块长度
+      
+      //返回值就是可以读取所属的数据信息
       new FileSegmentManagedBuffer(
         transportConf,
         getDataFile(blockId.shuffleId, blockId.mapId),

@@ -25,7 +25,10 @@ import org.apache.spark.shuffle.hash.HashShuffleReader
 
 private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager {
 
+  //可以读取一个数据块的真实内容
   private val indexShuffleBlockResolver = new IndexShuffleBlockResolver(conf)
+  
+  //key是shuffle的ID,value是该shuffle有多少个map组成
   private val shuffleMapNumber = new ConcurrentHashMap[Int, Int]()
 
   /**
@@ -61,7 +64,11 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
       shuffleBlockResolver, baseShuffleHandle, mapId, context)
   }
 
-  /** Remove a shuffle's metadata from the ShuffleManager. */
+  /** Remove a shuffle's metadata from the ShuffleManager. 
+   * 移除该shuffle内容
+   * 1.先移除内存映射,该shffle由多少个map组成
+   * 2.去真正删除该shffle中每一个map存储内容  
+   **/
   override def unregisterShuffle(shuffleId: Int): Boolean = {
     if (shuffleMapNumber.containsKey(shuffleId)) {
       val numMaps = shuffleMapNumber.remove(shuffleId)

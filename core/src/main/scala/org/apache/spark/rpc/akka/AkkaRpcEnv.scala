@@ -43,6 +43,7 @@ import org.apache.spark.util.{ActorLogReceive, AkkaUtils, ThreadUtils}
  * @param actorSystem 服务器真实绑定的host以及提供的服务
  * @param conf
  * @param boundPort 服务器真实绑定的port
+ * 代表一个服务器
  */
 private[spark] class AkkaRpcEnv private[akka] (
     val actorSystem: ActorSystem, conf: SparkConf, boundPort: Int)
