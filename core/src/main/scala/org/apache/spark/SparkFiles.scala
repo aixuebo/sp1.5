@@ -26,12 +26,15 @@ object SparkFiles {
 
   /**
    * Get the absolute path of a file added through `SparkContext.addFile()`.
+   * 参数是spark的文件路径
+   * return是根目录+该路径,即最终存储路径
    */
   def get(filename: String): String =
     new File(getRootDirectory(), filename).getAbsolutePath()
 
   /**
    * Get the root directory that contains files added through `SparkContext.addFile()`.
+   * spark的根目录
    */
   def getRootDirectory(): String =
     SparkEnv.get.sparkFilesDir

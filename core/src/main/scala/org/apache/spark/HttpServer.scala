@@ -58,6 +58,7 @@ private[spark] class HttpServer(
       throw new ServerStateException("Server is already started")
     } else {
       logInfo("Starting HTTP Server")
+      //创建一个服务
       val (actualServer, actualPort) =
         Utils.startServiceOnPort[Server](requestedPort, doStart, conf, serverName)
       server = actualServer

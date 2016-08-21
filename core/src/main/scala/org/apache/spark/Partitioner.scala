@@ -76,6 +76,7 @@ object Partitioner {
  * Java arrays have hashCodes that are based on the arrays' identities rather than their contents,
  * so attempting to partition an RDD[Array[_]] or RDD[(Array[_], _)] using a HashPartitioner will
  * produce an unexpected or incorrect result.
+ * 对key进行hash,然后取模即可
  */
 class HashPartitioner(partitions: Int) extends Partitioner {
   require(partitions >= 0, s"Number of partitions ($partitions) cannot be negative.")
