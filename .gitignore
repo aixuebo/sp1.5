@@ -25,5 +25,6 @@
 /network/yarn/.settings
 /target
 /.idea
-/spark-parent_2.10.iml
 /bin/
+*.iml
+*.bak
