@@ -41,12 +41,13 @@ import org.apache.spark.util.Utils
  */
 private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, String] = sys.env)
   extends SparkSubmitArgumentsParser {
-  var master: String = null
-  var deployMode: String = null//cluster或者client两者之一
+  var master: String = null//是在yarn、local、spark提供的队列、mesos队列上管理
+  var deployMode: String = null//cluster或者client两者之一,client模式,直接启动应用的main类,比如spark_shell脚本,就是客户端模式,不用再集群上执行
+
   var executorMemory: String = null
   var executorCores: String = null
   var totalExecutorCores: String = null
-  var propertiesFile: String = null //参数设置的属性配置文件路径
+  var propertiesFile: String = null //参数设置的属性配置文件路径,可以设置多个配置文件,每个文件一行即可
   var driverMemory: String = null
   var driverExtraClassPath: String = null
   var driverExtraLibraryPath: String = null
@@ -55,23 +56,33 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
   var numExecutors: String = null
   var files: String = null
   var archives: String = null
-  var mainClass: String = null
-  var primaryResource: String = null
-  var name: String = null
+
+  var mainClass: String = null //运行的main函数类
+  var primaryResource: String = null //原始资源,可以是spark_shell这样的,也可以是自定义的jar包全路径,该jar包最后要加载到classpath下
+
+  var name: String = null //app的名字
+
   var childArgs: ArrayBuffer[String] = new ArrayBuffer[String]() //额外没有解析的参数集合
   var jars: String = null //返回值是path的url形式用逗号分割的字符串,可以是HDFS格式的
-  var packages: String = null
-  var repositories: String = null //maven资源集合
-  var ivyRepoPath: String = null //本地的maven仓库位置
-  var packagesExclusions: String = null
+
+  //需要maven的jar包记录
+  var packages: String = null// 按照,拆分,每一组是一个maven坐标,分别用:或者/进行拆分,例如redis.clients:jedis:2.5.1,mysql/mysql-connector-java/5.1.29,表示需要的maven上的jar包
+  var repositories: String = null //maven资源集合,eg:http://10.1.5.102:8081/nexus/content/groups/public/,http://repo2.maven.org/maven2/从两个资源中下载数据
+  var ivyRepoPath: String = null //本地的maven仓库位置,本地存储从maven上下载下来的数据的目录,该目录不是maven的目录,是用ivygo工具下载后存储的目录
+  var packagesExclusions: String = null //存储不需要的包,多个包用逗号拆分,该内容是maven的group组成的集合即可
+
   var verbose: Boolean = false //true表示要打印详细信息
-  var isPython: Boolean = false
-  var pyFiles: String = null
-  var isR: Boolean = false
+
+  var isPython: Boolean = false //python程序
+  var pyFiles: String = null //python程序对应的文件
+  var isR: Boolean = false //是R程序
+
   var action: SparkSubmitAction = null //SUBMIT, KILL, REQUEST_STATUS,命令的行为,三者之一
+
   //--conf PROP=VALUE   .配置任意的spark配置信息,一次仅能设置一个键值对
   //存储spark的属性信息
   val sparkProperties: HashMap[String, String] = new HashMap[String, String]()
+
   var proxyUser: String = null
   var principal: String = null
   var keytab: String = null
@@ -90,7 +101,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
     val defaultProperties = new HashMap[String, String]()
     // scalastyle:off println
     if (verbose) SparkSubmit.printStream.println(s"Using properties file: $propertiesFile")
-    //读取配置文件
+    //读取配置文件,该配置文件可以是多个文件,每个文件一行即可
     Option(propertiesFile).foreach { filename =>
     Utils.getPropertiesFromFile(filename).foreach { case (k, v) =>
         defaultProperties(k) = v
@@ -124,10 +135,11 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
    */
   private def mergeDefaultSparkProperties(): Unit = {
     // Use common defaults file, if not specified by user
+    //默认配置文件$SPARK_CONF_DIR/conf//spark-defaults.conf文件 或者$SPARK_HOME/conf/spark-defaults.conf的路径
     propertiesFile = Option(propertiesFile).getOrElse(Utils.getDefaultPropertiesFile(env))
     // Honor --conf before the defaults file
     defaultSparkProperties.foreach { case (k, v) =>
-      if (!sparkProperties.contains(k)) {
+      if (!sparkProperties.contains(k)) {//默认值优先级低,不会覆盖现存在的值
         sparkProperties(k) = v
       }
     }

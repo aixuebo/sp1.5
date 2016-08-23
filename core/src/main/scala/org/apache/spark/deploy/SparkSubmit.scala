@@ -65,19 +65,21 @@ private[deploy] object SparkSubmitAction extends Enumeration {
 object SparkSubmit {
 
   // Cluster managers
-  private val YARN = 1
-  private val STANDALONE = 2
-  private val MESOS = 4
-  private val LOCAL = 8
-  private val ALL_CLUSTER_MGRS = YARN | STANDALONE | MESOS | LOCAL //值是15
+  //master参数以什么开头的
+  private val YARN = 1 //以yarn开头
+  private val STANDALONE = 2 //以spark开头
+  private val MESOS = 4 //以mesos开头
+  private val LOCAL = 8 //以local开头
+  private val ALL_CLUSTER_MGRS = YARN | STANDALONE | MESOS | LOCAL //值是15,所有的模式,即上面的四种之一
 
   // Deploy modes
-  private val CLIENT = 1
+  private val CLIENT = 1 //客户端模式,直接启动应用的main类,比如spark_shell脚本,就是客户端模式,不用再集群上执行
   private val CLUSTER = 2
   private val ALL_DEPLOY_MODES = CLIENT | CLUSTER //值是3
 
   // A special jar name that indicates the class being run is inside of Spark itself, and therefore
   // no user jar is needed.
+  //特别的jar包的名字,说明该运行的class是spark自己内部的类,因此不需要指定jar包
   private val SPARK_INTERNAL = "spark-internal"
 
   // Special primary resource names that represent shells rather than application jars.
@@ -230,7 +232,7 @@ object SparkSubmit {
       : (Seq[String], Seq[String], Map[String, String], String) = {
     // Return values 四个返回值
     val childArgs = new ArrayBuffer[String]()
-    val childClasspath = new ArrayBuffer[String]()
+    val childClasspath = new ArrayBuffer[String]()//classPath的全路径
     val sysProps = new HashMap[String, String]()
     var childMainClass = ""
 
@@ -244,8 +246,9 @@ object SparkSubmit {
     }
 
     // Set the deploy mode; default is client mode
+    //cluster或者client两者之一
     var deployMode: Int = args.deployMode match {
-      case "client" | null => CLIENT
+      case "client" | null => CLIENT //默认是clinet模式
       case "cluster" => CLUSTER
       case _ => printErrorAndExit("Deploy mode must be either client or cluster"); -1
     }
@@ -263,9 +266,9 @@ object SparkSubmit {
         case ("yarn-cluster", null) =>
           deployMode = CLUSTER
         case ("yarn-cluster", "client") =>
-          printErrorAndExit("Client deploy mode is not compatible with master \"yarn-cluster\"")
+          printErrorAndExit("Client deploy mode is not compatible with master \"yarn-cluster\"") //说明配置有问题,客户端模式与集群模式不匹配
         case ("yarn-client", "cluster") =>
-          printErrorAndExit("Cluster deploy mode is not compatible with master \"yarn-client\"")
+          printErrorAndExit("Cluster deploy mode is not compatible with master \"yarn-client\"") //说明配置有问题,客户端模式与集群模式不匹配
         case (_, mode) =>
           args.master = "yarn-" + Option(mode).getOrElse("client")
       }
@@ -279,17 +282,20 @@ object SparkSubmit {
     }
 
     // Update args.deployMode if it is null. It will be passed down as a Spark property later.
+    //如果参数中模式没有设置,即为null,则这块设置client/cluster
     (args.deployMode, deployMode) match {
       case (null, CLIENT) => args.deployMode = "client"
       case (null, CLUSTER) => args.deployMode = "cluster"
       case _ =>
     }
+
+    //是yarn队列还是mesos队列管理资源
     val isYarnCluster = clusterManager == YARN && deployMode == CLUSTER
     val isMesosCluster = clusterManager == MESOS && deployMode == CLUSTER
 
     // Resolve maven dependencies if there are any and add classpath to jars. Add them to py-files
     // too for packages that include Python code
-    //不需要的jar包
+    //不需要的jar包,内容就是maven的group集合,用逗号拆分即可
     val exclusions: Seq[String] =
       if (!StringUtils.isBlank(args.packagesExclusions)) {
         args.packagesExclusions.split(",")
@@ -297,11 +303,15 @@ object SparkSubmit {
         Nil
       }
     
-    //返回用逗号拆分的最终需要的maven坐标集合,包括的依赖的jar包       
+    //返回用逗号拆分的最终需要的maven坐标集合,包括的依赖的jar包,并且去下载该jar包
+    /**
+    参数是要下载的maven坐标集合,maven资源集合,下载后存储在什么地方,要刨除哪些group的包不去下载
+    返回:是一个路径集合,集合用逗号拆分,这些集合是已经下载下来的jar包
+    **/
     val resolvedMavenCoordinates = SparkSubmitUtils.resolveMavenCoordinates(args.packages,
       Option(args.repositories), Option(args.ivyRepoPath), exclusions = exclusions)
-    if (!StringUtils.isBlank(resolvedMavenCoordinates)) {//存在需要的jar包集合,该jar包都在maven里面
-      args.jars = mergeFileLists(args.jars, resolvedMavenCoordinates)
+    if (!StringUtils.isBlank(resolvedMavenCoordinates)) {//说明下载到了jar包集合,要进行合并
+      args.jars = mergeFileLists(args.jars, resolvedMavenCoordinates)//合并后本地的jar包集合就多了一部分,这一部分就是从maven上下载的集合
       if (args.isPython) {
         args.pyFiles = mergeFileLists(args.pyFiles, resolvedMavenCoordinates)
       }
@@ -419,6 +429,7 @@ object SparkSubmit {
 
     // A list of rules to map each argument to system properties or command-line options in
     // each deploy mode; we iterate through these below
+    //一个规则集合,每一个规则属性值对应从命令行或者系统属性中获取对应的值,并且要校验master和mode是否符合标准
     val options = List[OptionAssigner](
 
       // All cluster managers
@@ -478,14 +489,14 @@ object SparkSubmit {
       OptionAssigner(args.ivyRepoPath, STANDALONE, CLUSTER, sysProp = "spark.jars.ivy")
     )
 
-    // In client mode, launch the application main class directly
-    // In addition, add the main application jar and any added jars (if any) to the classpath
+    // In client mode, launch the application main class directly 客户端模式,直接启动应用的main类
+    // In addition, add the main application jar and any added jars (if any) to the classpath 如果主类是用户自定义的,因此要有jar包要添加到classpath下
     if (deployMode == CLIENT) {
       childMainClass = args.mainClass
-      if (isUserJar(args.primaryResource)) {
-        childClasspath += args.primaryResource
+      if (isUserJar(args.primaryResource)) {//true表示是用户自定义资源
+        childClasspath += args.primaryResource //追加该jar包到classpath下
       }
-      if (args.jars != null) { childClasspath ++= args.jars.split(",") }
+      if (args.jars != null) { childClasspath ++= args.jars.split(",") }//追加本地的classPath
       if (args.childArgs != null) { childArgs ++= args.childArgs }
     }
 
@@ -493,7 +504,7 @@ object SparkSubmit {
     for (opt <- options) {
       if (opt.value != null &&
           (deployMode & opt.deployMode) != 0 &&
-          (clusterManager & opt.clusterManager) != 0) {
+          (clusterManager & opt.clusterManager) != 0) {//校验每一个属性是否符合master和mode的配置
         if (opt.clOption != null) { childArgs += (opt.clOption, opt.value) }
         if (opt.sysProp != null) { sysProps.put(opt.sysProp, opt.value) }
       }
@@ -777,8 +788,10 @@ object SparkSubmit {
    * Merge a sequence of comma-separated file lists, some of which may be null to indicate
    * no files, into a single comma-separated string.
    * 参数是一个集合,集合的每一个元素都可以用逗号拆分的字符串
+   * 目的是合并两个集合,例如第一个集合是本地拥有的jar包集合,第二个参数是从maven上下载的jar包集合路径
+   * 作用是将两个路径集合,合并成一个大的路径集合字符串
    * 返回:
-   * 1.null表示没有任何文件
+   * 1.null表示没有任何文件,要进行过滤掉
    * 2.非null,表示每一个元素按照逗号拆分后,然后合并,然后最终形成一个总的按照逗号拆分的字符串
    */
   private def mergeFileLists(lists: String*): String = {
@@ -814,6 +827,9 @@ private[spark] object SparkSubmitUtils {
  * 1.按照逗号拆分
  * 2.将坐标中/转换成:
  * 3.按照:拆分成3部分
+ *
+ * 参数字符串按照,拆分,每一组是一个maven坐标,分别用:或者/进行拆分
+ * 例如redis.clients:jedis:2.5.1,mysql/mysql-connector-java/5.1.29
  */
   def extractMavenCoordinates(coordinates: String): Seq[MavenCoordinate] = {
     coordinates.split(",").map { p =>
@@ -907,6 +923,7 @@ private[spark] object SparkSubmitUtils {
    * @param artifacts Sequence of dependencies that were resolved and retrieved
    * @param cacheDirectory directory where jars are cached
    * @return a comma-delimited list of paths for the dependencies
+   * 输出是一个路径集合,集合用逗号拆分,这些集合是已经下载下来的jar包
    */
   def resolveDependencyPaths(
       artifacts: Array[AnyRef],
@@ -971,12 +988,13 @@ private[spark] object SparkSubmitUtils {
    * @return The comma-delimited path to the jars of the given maven artifacts including their
    *         transitive dependencies
    *  返回用逗号拆分的最终需要的maven坐标集合,包括的依赖的jar包
+   *  真正去下载这些jar包,返回是一个路径集合,集合用逗号拆分,这些集合是已经下载下来的jar包
    */
   def resolveMavenCoordinates(
-      coordinates: String,
-      remoteRepos: Option[String],
-      ivyPath: Option[String],
-      exclusions: Seq[String] = Nil,
+      coordinates: String,//需要的jar包的maven坐标集合
+      remoteRepos: Option[String],//远程仓库集合
+      ivyPath: Option[String],//本地maven仓库的资源位置
+      exclusions: Seq[String] = Nil,//不需要的jar包集合
       isTest: Boolean = false): String = {
     if (coordinates == null || coordinates.trim.isEmpty) {//不需要任何maven依赖的jar包,因此返回空
       ""
@@ -992,14 +1010,14 @@ private[spark] object SparkSubmitUtils {
         val ivySettings: IvySettings = new IvySettings
         // Directories for caching downloads through ivy and storing the jars when maven coordinates
         // are supplied to spark-submit
-        val alternateIvyCache = ivyPath.getOrElse("")//本地maven资源库
+        val alternateIvyCache = ivyPath.getOrElse("")//本地maven资源库的位置
         val packagesDirectory: File =
           if (alternateIvyCache == null || alternateIvyCache.trim.isEmpty) {
-            new File(ivySettings.getDefaultIvyUserDir, "jars")
+            new File(ivySettings.getDefaultIvyUserDir, "jars")//设置默认路径C:\Users\Lenovo\.ivy2\jars
           } else {
-            ivySettings.setDefaultIvyUserDir(new File(alternateIvyCache))
+            ivySettings.setDefaultIvyUserDir(new File(alternateIvyCache))//设置资源路径
             ivySettings.setDefaultCache(new File(alternateIvyCache, "cache"))
-            new File(alternateIvyCache, "jars")
+            new File(alternateIvyCache, "jars")//设置maven的资源路径/jar
           }
         // scalastyle:off println
         printStream.println(
@@ -1081,10 +1099,11 @@ private[spark] object SparkSubmitUtils {
 /**
  * Provides an indirection layer for passing arguments as system properties or flags to
  * the user's driver program or to downstream launcher tools.
+ * 定义个规则
  */
 private case class OptionAssigner(
-    value: String,
-    clusterManager: Int,
-    deployMode: Int,
-    clOption: String = null,
-    sysProp: String = null)
+    value: String,//具体的属性值
+    clusterManager: Int,//该属性应该匹配的集群队列master什么是合法的
+    deployMode: Int,//该属性应该匹配的集群队列mode什么是合法的
+    clOption: String = null,//该属性从命令行中获取对应的值,该命令行的key是什么
+    sysProp: String = null)//该属性从环境中获取对应的值,该环境的key是什么

@@ -117,7 +117,7 @@ private[deploy] class ClientArguments(args: Array[String]) {
       |   -m MEMORY, --memory MEMORY     Megabytes of memory to request (default: $DEFAULT_MEMORY)
       |   -s, --supervise                Whether to restart the driver on failure 是否重新开启失败的driver
       |                                  (default: $DEFAULT_SUPERVISE)
-      |   -v, --verbose                  Print more debugging output
+      |   -v, --verbose                  Print more debugging output 表示输出更多的日志
      """.stripMargin
     // scalastyle:off println
     System.err.println(usage)
@@ -129,7 +129,7 @@ private[deploy] class ClientArguments(args: Array[String]) {
 private[deploy] object ClientArguments {
   val DEFAULT_CORES = 1 //默认CPU数
   val DEFAULT_MEMORY = Utils.DEFAULT_DRIVER_MEM_MB // MB 默认内存
-  val DEFAULT_SUPERVISE = false
+  val DEFAULT_SUPERVISE = false //在失败的时候,是否重启driver
 
   //true表示启动的jar包存在
   def isValidJarUrl(s: String): Boolean = {

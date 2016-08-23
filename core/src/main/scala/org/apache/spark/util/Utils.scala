@@ -1931,7 +1931,7 @@ private[spark] object Utils extends Logging {
   }
 
   /** Return the path of the default Spark properties file. 
-   *  寻找$SPARK_CONF_DIR/spark-defaults.conf文件 或者$SPARK_HOME/conf/spark-defaults.conf的路径
+   *  寻找$SPARK_CONF_DIR/conf//spark-defaults.conf文件 或者$SPARK_HOME/conf/spark-defaults.conf的路径
    **/
   def getDefaultPropertiesFile(env: Map[String, String] = sys.env): String = {
     env.get("SPARK_CONF_DIR") //对应的配置文件所在文件夹

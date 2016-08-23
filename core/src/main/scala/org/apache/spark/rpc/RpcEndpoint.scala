@@ -48,13 +48,16 @@ private[spark] trait ThreadSafeRpcEndpoint extends RpcEndpoint
  * An end point for the RPC that defines what functions to trigger given a message.
  *
  * It is guaranteed that `onStart`, `receive` and `onStop` will be called in sequence.
+ * onStart receive onStop将会按照顺序执行
  *
- * The life-cycle of an endpoint is:
+ * The life-cycle of an endpoint is:生命周期是:
  *
  * constructor -> onStart -> receive* -> onStop
+ * 首先构造函数--开始--接收--停止
  *
  * Note: `receive` can be called concurrently. If you want `receive` to be thread-safe, please use
  * [[ThreadSafeRpcEndpoint]]
+ * 注意:接收烦烦噶是并发被调用的,如果你想要线程安全的接收,则要使用线程安全类
  *
  * If any error is thrown from one of [[RpcEndpoint]] methods except `onError`, `onError` will be
  * invoked with the cause. If `onError` throws an error, [[RpcEnv]] will ignore it.

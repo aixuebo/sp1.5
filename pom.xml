@@ -320,6 +320,13 @@
       <artifactId>scalatest_${scala.binary.version}</artifactId>
       <scope>test</scope>
     </dependency>
+
+	<dependency>
+		<groupId>org.apache.spark</groupId>
+		<artifactId>spark-yarn_2.10</artifactId>
+		<version>1.6.1</version>
+	</dependency>
+
   </dependencies>
   <dependencyManagement>
     <dependencies>
@@ -1740,6 +1747,7 @@
           </exclusion>
         </exclusions>
       </dependency>
+
     </dependencies>
   </dependencyManagement>
 
