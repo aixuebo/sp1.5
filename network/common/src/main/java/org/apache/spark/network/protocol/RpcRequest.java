@@ -49,6 +49,7 @@ public final class RpcRequest implements RequestMessage {
   }
 
   //将requestId和字节内容都编码到buf中
+  //序列化
   @Override
   public void encode(ByteBuf buf) {
     buf.writeLong(requestId);
@@ -56,6 +57,7 @@ public final class RpcRequest implements RequestMessage {
   }
 
   //从buf中解码请求类型和信息
+  //反序列化
   public static RpcRequest decode(ByteBuf buf) {
     long requestId = buf.readLong();
     byte[] message = Encoders.ByteArrays.decode(buf);

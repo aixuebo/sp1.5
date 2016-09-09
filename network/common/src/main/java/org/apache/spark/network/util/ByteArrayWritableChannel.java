@@ -48,11 +48,13 @@ public class ByteArrayWritableChannel implements WritableByteChannel {
 
   /**
    * Reads from the given buffer into the internal byte array.
+   * 将src的内容读取到全局属性data中
    */
   @Override
   public int write(ByteBuffer src) {
 	  //将src中的内容写入到data内存数组中
     int toTransfer = Math.min(src.remaining(), data.length - offset);//最多写满data字节数组为止
+    //从src中读取数据,toTransfer个,存储到data数组中,从offset位置开始存储
     src.get(data, offset, toTransfer);//读取src的数据,读取toTransfer个数据,将读取的数据写入到data数组中
     offset += toTransfer;//因为写入了toTransfer数据,则offset移动toTransfer个位置
     return toTransfer;

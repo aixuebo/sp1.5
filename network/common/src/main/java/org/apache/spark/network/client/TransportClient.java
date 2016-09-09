@@ -43,11 +43,13 @@ import org.apache.spark.network.util.NettyUtils;
  * Client for fetching consecutive chunks of a pre-negotiated stream. This API is intended to allow
  * efficient transfer of a large amount of data, broken up into chunks with size ranging from
  * hundreds of KB to a few MB.
+ * 客户端连续抓去数据块流,这个api允许有效的传输一个大的数据,将大数据拆分成若干连续的块
  *
  * Note that while this client deals with the fetching of chunks from a stream (i.e., data plane),
  * the actual setup of the streams is done outside the scope of the transport layer. The convenience
  * method "sendRPC" is provided to enable control plane communication between the client and server
  * to perform this setup.
+ *
  *
  * For example, a typical workflow might be:
  * client.sendRPC(new OpenFile("/foo")) --&gt; returns StreamId = 100
@@ -146,6 +148,7 @@ public class TransportClient implements Closeable {
    * Sends an opaque message to the RpcHandler on the server-side. The callback will be invoked
    * with the server's response or upon any failure.
    * 向channel对应的服务器发送信息message,完成后回调callback函数
+   * 该方法是异步的发送数据,一旦方法结束后,会像对应的callback类写入内容
    */
   public void sendRpc(byte[] message, final RpcResponseCallback callback) {
     final String serverAddr = NettyUtils.getRemoteAddress(channel);//channel的服务器地址
@@ -155,6 +158,7 @@ public class TransportClient implements Closeable {
     final long requestId = Math.abs(UUID.randomUUID().getLeastSignificantBits());//随机产生一个请求ID
     handler.addRpcRequest(requestId, callback);
 
+      //像该渠道发送请求,请求包含请求id和信息,同时添加监听,当请求完成的时候,确定是成功完成还是失败完成
     channel.writeAndFlush(new RpcRequest(requestId, message)).addListener(
       new ChannelFutureListener() {
         @Override
@@ -167,8 +171,8 @@ public class TransportClient implements Closeable {
             String errorMsg = String.format("Failed to send RPC %s to %s: %s", requestId,
               serverAddr, future.cause());
             logger.error(errorMsg, future.cause());
-            handler.removeRpcRequest(requestId);
-            channel.close();
+            handler.removeRpcRequest(requestId);//失败完成则移除该请求正在等待的回复
+            channel.close();//关闭与服务器的通道
             try {
               //失败,则打印异常日志
               callback.onFailure(new IOException(errorMsg, future.cause()));
@@ -183,10 +187,12 @@ public class TransportClient implements Closeable {
   /**
    * Synchronously sends an opaque message to the RpcHandler on the server-side, waiting for up to
    * a specified timeout for a response.
+   * 同步发送一个信息到服务器,同时在timeout时间后要返回数据
    */
   public byte[] sendRpcSync(byte[] message, long timeoutMs) {
     final SettableFuture<byte[]> result = SettableFuture.create();
 
+      //异步发送数据
     sendRpc(message, new RpcResponseCallback() {
       @Override
       public void onSuccess(byte[] response) {
@@ -199,6 +205,7 @@ public class TransportClient implements Closeable {
       }
     });
 
+      //获取返回结果,该方法是同步方法,在超市时间内必须获取到返回值,如果超时还为获取返回值,则返回null
     try {
       return result.get(timeoutMs, TimeUnit.MILLISECONDS);
     } catch (ExecutionException e) {
@@ -211,7 +218,7 @@ public class TransportClient implements Closeable {
   @Override
   public void close() {
     // close is a local operation and should finish with milliseconds; timeout just to be safe
-    channel.close().awaitUninterruptibly(10, TimeUnit.SECONDS);
+    channel.close().awaitUninterruptibly(10, TimeUnit.SECONDS);//关闭与服务器的通道
   }
 
   @Override

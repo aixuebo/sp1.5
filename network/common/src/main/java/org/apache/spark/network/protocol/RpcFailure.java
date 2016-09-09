@@ -22,6 +22,7 @@ import io.netty.buffer.ByteBuf;
 
 /** Response to {@link RpcRequest} for a failed RPC.
  * RPC失败
+ * 作为RPC的返回值,仅仅返回请求ID和失败的回复信息
  **/
 public final class RpcFailure implements ResponseMessage {
   public final long requestId;//针对某个请求产生的RPC失败
@@ -41,14 +42,14 @@ public final class RpcFailure implements ResponseMessage {
     return 8 + Encoders.Strings.encodedLength(errorString);
   }
 
-  //编码
+  //编码--序列化
   @Override
   public void encode(ByteBuf buf) {
     buf.writeLong(requestId);
     Encoders.Strings.encode(buf, errorString);
   }
 
-  //解码
+  //解码--反序列化
   public static RpcFailure decode(ByteBuf buf) {
     long requestId = buf.readLong();
     String errorString = Encoders.Strings.decode(buf);

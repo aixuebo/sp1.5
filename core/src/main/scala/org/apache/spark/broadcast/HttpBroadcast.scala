@@ -167,14 +167,15 @@ private[broadcast] object HttpBroadcast extends Logging {
     logInfo("Broadcast server started at " + serverUri)
   }
 
-  //从服务上获取该广播变量文件
+
   def getFile(id: Long): File = new File(broadcastDir, BroadcastBlockId(id).name)
 
-  //将value对象序列化到文件中
+  //将服务器上的文件读取成流,发送给客户端
   private def write(id: Long, value: Any) {
     val file = getFile(id)
-    val fileOutputStream = new FileOutputStream(file)
+    val fileOutputStream = new FileOutputStream(file) //原始文件的输出流
     Utils.tryWithSafeFinally {
+      //对原始文件输出流进行包装
       val out: OutputStream = {
         if (compress) {
           compressionCodec.compressedOutputStream(fileOutputStream)
@@ -182,10 +183,12 @@ private[broadcast] object HttpBroadcast extends Logging {
           new BufferedOutputStream(fileOutputStream, bufferSize)
         }
       }
+
+      //序列化对象
       val ser = SparkEnv.get.serializer.newInstance()
       val serOut = ser.serializeStream(out)
       Utils.tryWithSafeFinally {
-        serOut.writeObject(value)
+        serOut.writeObject(value) //将value对象写入到序列化的流中
       } {
         serOut.close()
       }
@@ -215,7 +218,7 @@ private[broadcast] object HttpBroadcast extends Logging {
     Utils.setupSecureURLConnection(uc, securityManager)
 
     //从输入流中反序列化对象
-    val in = {
+    val in = {//对流进行包装
       uc.setReadTimeout(httpReadTimeout)
       val inputStream = uc.getInputStream
       if (compress) {
@@ -224,10 +227,12 @@ private[broadcast] object HttpBroadcast extends Logging {
         new BufferedInputStream(inputStream, bufferSize)
       }
     }
+
+    //反序列化类包装器
     val ser = SparkEnv.get.serializer.newInstance()
     val serIn = ser.deserializeStream(in)
     Utils.tryWithSafeFinally {
-      serIn.readObject[T]()
+      serIn.readObject[T]() //真正的反序列化成对象
     } {
       serIn.close()
     }

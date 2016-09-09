@@ -17,6 +17,7 @@
 
 package org.apache.spark.network.nio
 
+//每一个host、port、唯一id组成的对象
 private[nio] case class ConnectionId(connectionManagerId: ConnectionManagerId, uniqId: Int) {
   override def toString: String = {
     connectionManagerId.host + "_" + connectionManagerId.port + "_" + uniqId
@@ -25,6 +26,7 @@ private[nio] case class ConnectionId(connectionManagerId: ConnectionManagerId, u
 
 private[nio] object ConnectionId {
 
+  //host_port_uniqId组成的字符串
   def createConnectionIdFromString(connectionIdString: String): ConnectionId = {
     val res = connectionIdString.split("_").map(_.trim())
     if (res.size != 3) {

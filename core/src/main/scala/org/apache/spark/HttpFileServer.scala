@@ -23,11 +23,11 @@ import com.google.common.io.Files
 
 import org.apache.spark.util.Utils
 
-//将本地文件copy到baseDir目录下
+//将本地文件copy到baseDir目录下,方便其他节点来该节点下载文件和jar包
 private[spark] class HttpFileServer(
     conf: SparkConf,
     securityManager: SecurityManager,
-    requestedPort: Int = 0)
+    requestedPort: Int = 0)//该服务在本节点上哪个端口开启
   extends Logging {
 
   var baseDir : File = null

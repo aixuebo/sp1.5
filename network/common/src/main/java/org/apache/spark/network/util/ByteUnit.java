@@ -16,7 +16,7 @@
  */
 package org.apache.spark.network.util;
 
-//字节单位
+//字节单位转换
 public enum ByteUnit {
   BYTE (1),
   KiB (1024L),

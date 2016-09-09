@@ -81,7 +81,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   // The call site where this SparkContext was constructed.根据堆栈信息,返回SparkContext在什么类什么情况下被创建的
   private val creationSite: CallSite = Utils.getCallSite()
 
-  // If true, log warnings instead of throwing exceptions when multiple SparkContexts are active
+  // If true, log warnings instead of throwing exceptions when multiple SparkCo你ntexts are active
   private val allowMultipleContexts: Boolean =
     config.getBoolean("spark.driver.allowMultipleContexts", false)
 
@@ -1633,7 +1633,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * Adds a JAR dependency for all tasks to be executed on this SparkContext in the future.
    * The `path` passed can be either a local file, a file in HDFS (or other Hadoop-supported
    * filesystems), an HTTP, HTTPS or FTP URI, or local:/path for a file on every worker node.
-   * 每一个jar包调用该方法
+   * 每一个jar包调用该方法,将jar包添加到该服务器的下载目录中.目的是为了其他服务器可以到该服务器上下载jar包资源
    */
   def addJar(path: String) {
     if (path == null) {

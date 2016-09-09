@@ -38,6 +38,7 @@ trait SparkHadoopMapRedUtil {
     //创建class
     val klass = firstAvailableClass("org.apache.hadoop.mapred.JobContextImpl",
       "org.apache.hadoop.mapred.JobContext")
+    //构造函数需要两个参数
     val ctor = klass.getDeclaredConstructor(classOf[JobConf],
       classOf[org.apache.hadoop.mapreduce.JobID])
     // In Hadoop 1.0.x, JobContext is an interface, and JobContextImpl is package private.
@@ -88,6 +89,7 @@ object SparkHadoopMapRedUtil extends Logging {
    * task attempt might be racing to commit the same output partition. Therefore, coordinate with
    * the driver in order to determine whether this attempt can commit (please see SPARK-4879 for
    * details).
+   * 提交一个任务的输出之前,我们需要知道是否有其他尝试任务在竞争提交相同的输出,因此决定哪个输出为准
    *
    * Output commit coordinator is only contacted when the following two configurations are both set
    * to `true`:

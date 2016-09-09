@@ -27,6 +27,7 @@ import io.netty.buffer.Unpooled;
 
 /**
  * A {@link ManagedBuffer} backed by {@link ByteBuffer}.
+ * nio的方式读取数据
  */
 public final class NioManagedBuffer extends ManagedBuffer {
   private final ByteBuffer buf;
@@ -35,16 +36,19 @@ public final class NioManagedBuffer extends ManagedBuffer {
     this.buf = buf;
   }
 
+  //剩余文件大小
   @Override
   public long size() {
     return buf.remaining();
   }
 
+  //产生新的buffer缓冲
   @Override
   public ByteBuffer nioByteBuffer() throws IOException {
     return buf.duplicate();
   }
 
+  //用io流方式返回信息
   @Override
   public InputStream createInputStream() throws IOException {
     return new ByteBufInputStream(Unpooled.wrappedBuffer(buf));
@@ -60,6 +64,7 @@ public final class NioManagedBuffer extends ManagedBuffer {
     return this;
   }
 
+  //转换成netty方式读取数据
   @Override
   public Object convertToNetty() throws IOException {
     return Unpooled.wrappedBuffer(buf);

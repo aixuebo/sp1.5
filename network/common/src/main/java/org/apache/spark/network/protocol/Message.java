@@ -22,7 +22,7 @@ import io.netty.buffer.ByteBuf;
 /** An on-the-wire transmittable message. */
 public interface Message extends Encodable {
   /** Used to identify this request type. */
-  Type type();
+  Type type();//信息类型
 
   /** Preceding every serialized Message is its type, which allows us to deserialize it. */
   public static enum Type implements Encodable {

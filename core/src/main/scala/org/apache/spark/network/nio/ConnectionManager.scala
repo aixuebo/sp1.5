@@ -42,10 +42,10 @@ import scala.util.Try
 import scala.util.control.NonFatal
 
 private[nio] class ConnectionManager(
-    port: Int,
+    port: Int,//在哪个端口上作为服务端
     conf: SparkConf,
     securityManager: SecurityManager,
-    name: String = "Connection manager")
+    name: String = "Connection manager")//描述信息
   extends Logging {
 
   /**
@@ -98,15 +98,16 @@ private[nio] class ConnectionManager(
   private val connectThreadCount = conf.getInt("spark.core.connection.connect.threads.min", 1)
 
   private val handleMessageExecutor = new ThreadPoolExecutor(
-    handlerThreadCount,
-    handlerThreadCount,
-    conf.getInt("spark.core.connection.handler.threads.keepalive", 60), TimeUnit.SECONDS,
-    new LinkedBlockingDeque[Runnable](),
-    ThreadUtils.namedThreadFactory("handle-message-executor")) {
+    handlerThreadCount,//最小线程数量
+    handlerThreadCount,//最大线程数量
+    conf.getInt("spark.core.connection.handler.threads.keepalive", 60), TimeUnit.SECONDS,//超过60s后,就会压缩线程数量,将闲置的线程取消掉,恢复到最小线程数即可
+    new LinkedBlockingDeque[Runnable](),//队列,存储线程要去执行的任务集合
+    ThreadUtils.namedThreadFactory("handle-message-executor")) {//线程创建工厂
 
+    //线程执行完成后,调用该函数
     override def afterExecute(r: Runnable, t: Throwable): Unit = {
-      super.afterExecute(r, t)
-      if (t != null && NonFatal(t)) {
+      super.afterExecute(r, t) //正常调用线程池内的方法
+      if (t != null && NonFatal(t)) {//打印日志
         logError("Error in handleMessageExecutor is not handled properly", t)
       }
     }
@@ -144,7 +145,7 @@ private[nio] class ConnectionManager(
     }
   }
 
-  private val serverChannel = ServerSocketChannel.open()
+  private val serverChannel = ServerSocketChannel.open() //创建服务器对象
   // used to track the SendingConnections waiting to do SASL negotiation
   private val connectionsAwaitingSasl = new HashMap[ConnectionId, SendingConnection]
     with SynchronizedMap[ConnectionId, SendingConnection]
@@ -167,17 +168,24 @@ private[nio] class ConnectionManager(
 
   private val authEnabled = securityManager.isAuthenticationEnabled()
 
-  serverChannel.configureBlocking(false)
+  //设置服务器属性
+  serverChannel.configureBlocking(false) //设置非阻塞服务器,因为selected模式只能用非阻塞模式
   serverChannel.socket.setReuseAddress(true)
   serverChannel.socket.setReceiveBufferSize(256 * 1024)
 
+  //返回服务器对象和在该服务器上绑定的端口号
   private def startService(port: Int): (ServerSocketChannel, Int) = {
     serverChannel.socket.bind(new InetSocketAddress(port))
     (serverChannel, serverChannel.socket.getLocalPort)
   }
+
+  //在该端口上开启服务
   Utils.startServiceOnPort[ServerSocketChannel](port, startService, conf, name)
+
+  //在服务器上注册监听.接收客户端的连接
   serverChannel.register(selector, SelectionKey.OP_ACCEPT)
 
+  //创建服务器的host_port对象
   val id = new ConnectionManagerId(Utils.localHostName, serverChannel.socket.getLocalPort)
   logInfo("Bound socket to port " + serverChannel.socket.getLocalPort() + " with id = " + id)
 
@@ -189,6 +197,8 @@ private[nio] class ConnectionManager(
   private val readRunnableStarted: HashSet[SelectionKey] = new HashSet[SelectionKey]()
 
   @volatile private var isActive = true
+
+  //开启线程
   private val selectorThread = new Thread("connection-manager-thread") {
     override def run(): Unit = ConnectionManager.this.run()
   }

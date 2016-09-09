@@ -22,7 +22,9 @@ import java.util.Arrays;
 import com.google.common.base.Objects;
 import io.netty.buffer.ByteBuf;
 
-/** Response to {@link RpcRequest} for a successful RPC. */
+/** Response to {@link RpcRequest} for a successful RPC.
+ * 作为RPC的返回值,仅仅返回请求ID和成功的回复信息
+ **/
 public final class RpcResponse implements ResponseMessage {
   public final long requestId;//针对请求requestId的Response
   public final byte[] response;//回复的内容信息
@@ -39,14 +41,14 @@ public final class RpcResponse implements ResponseMessage {
   @Override
   public int encodedLength() { return 8 + Encoders.ByteArrays.encodedLength(response); }
 
-  //编码
+  //编码--序列化
   @Override
   public void encode(ByteBuf buf) {
-    buf.writeLong(requestId);
-    Encoders.ByteArrays.encode(buf, response);
+    buf.writeLong(requestId);//写入id
+    Encoders.ByteArrays.encode(buf, response);//写入输出值
   }
 
-  //解码
+  //解码--反序列化
   public static RpcResponse decode(ByteBuf buf) {
     long requestId = buf.readLong();
     byte[] response = Encoders.ByteArrays.decode(buf);

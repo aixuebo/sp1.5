@@ -53,8 +53,8 @@ public final class MessageEncoder extends MessageToMessageEncoder<Message> {
     if (in instanceof ChunkFetchSuccess) {//body正文
       ChunkFetchSuccess resp = (ChunkFetchSuccess) in;
       try {
-        bodyLength = resp.buffer.size();
-        body = resp.buffer.convertToNetty();
+        bodyLength = resp.buffer.size();//具体数据块字节大小
+        body = resp.buffer.convertToNetty();//将数据块转换成Netty方式读取数据
       } catch (Exception e) {
         // Re-encode this message as BlockFetchFailure.
         logger.error(String.format("Error opening block %s for client %s",
@@ -66,16 +66,17 @@ public final class MessageEncoder extends MessageToMessageEncoder<Message> {
 
     Message.Type msgType = in.type();
     // All messages have the frame length, message type, and message itself.
+      //header+body的字节大小总数、type类型字节数、message信息字节数
     int headerLength = 8 + msgType.encodedLength() + in.encodedLength();//头字节数,8表示frameLength传输的总字节数,即头字节+body字节总数,+信息分类标示+header头内容总和
     long frameLength = headerLength + bodyLength;//传输的总字节数,即头字节+body字节总数
     
     //分配头空间,写入头信息
-    ByteBuf header = ctx.alloc().heapBuffer(headerLength);
-    header.writeLong(frameLength);
-    msgType.encode(header);
-    in.encode(header);
+    ByteBuf header = ctx.alloc().heapBuffer(headerLength);//创建header头对象字节大小缓冲区
+    header.writeLong(frameLength);//设置多少个字节数
+    msgType.encode(header);//将type序列化
+    in.encode(header);//将header的具体内容序列化
     
-    assert header.writableBytes() == 0;
+    assert header.writableBytes() == 0;//确保header头已经都写完了
 
     //如果body不是空,则添加到out中
     if (body != null && bodyLength > 0) {

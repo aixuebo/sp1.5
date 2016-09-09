@@ -44,6 +44,8 @@ sealed abstract class BlockId {
 
   override def toString: String = name
   override def hashCode: Int = name.hashCode
+
+  //数据块的name必须相同
   override def equals(other: Any): Boolean = other match {
     case o: BlockId => getClass == o.getClass && name.equals(o.name)
     case _ => false
@@ -118,7 +120,10 @@ object BlockId {
   val TEST = "test_(.*)".r
 
   /** Converts a BlockId "name" String back into a BlockId.
-   **/
+    * RDD和SHUFFLE都是上面定义的正则表达式匹配模式
+    *
+    * 参数是字符串,不是整数
+    */
   def apply(id: String): BlockId = id match {
     case RDD(rddId, splitIndex) =>
       RDDBlockId(rddId.toInt, splitIndex.toInt)

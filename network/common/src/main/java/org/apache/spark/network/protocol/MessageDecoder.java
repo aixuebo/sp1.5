@@ -36,7 +36,7 @@ public final class MessageDecoder extends MessageToMessageDecoder<ByteBuf> {
 
   private final Logger logger = LoggerFactory.getLogger(MessageDecoder.class);
   
-  //解析
+  //解析--反序列化
   @Override
   public void decode(ChannelHandlerContext ctx, ByteBuf in, List<Object> out) {
     Message.Type msgType = Message.Type.decode(in);//获取消息类型
@@ -46,6 +46,7 @@ public final class MessageDecoder extends MessageToMessageDecoder<ByteBuf> {
     out.add(decoded);
   }
 
+    //解析具体类型下的具体信息
   private Message decode(Message.Type msgType, ByteBuf in) {
     switch (msgType) {
       case ChunkFetchRequest:

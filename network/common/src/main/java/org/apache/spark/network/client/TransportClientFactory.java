@@ -62,10 +62,13 @@ public class TransportClientFactory implements Closeable {
   /** A simple data structure to track the pool of clients between two peer nodes. 
    * 一个简单的线程池,每一个ip:port对应一个该线程池
    * 线程池的size数量由conf.numConnectionsPerPeer()决定
+   *
+   * 即该节点发送任何的服务器,都对应一个该对象,每一个服务器对应一个该对象
+   * 该对象包含连接到该服务器的若干个客户端
    **/
   private static class ClientPool {
-    TransportClient[] clients;
-    Object[] locks;
+    TransportClient[] clients;//若干个客户端,任何一个客户端都可以连接到该服务器
+    Object[] locks;//每一个客户端持有一个锁,用于共享操作
 
     public ClientPool(int size) {
       clients = new TransportClient[size];
@@ -80,7 +83,7 @@ public class TransportClientFactory implements Closeable {
 
   private final TransportContext context;
   private final TransportConf conf;
-  private final List<TransportClientBootstrap> clientBootstraps;
+  private final List<TransportClientBootstrap> clientBootstraps;//拦截器集合,当客户端创建成功后,依次处理这些拦截器
   //每一个ip:port对应一个线程池,key是ip:port value是线程池ClientPool
   private final ConcurrentHashMap<SocketAddress, ClientPool> connectionPool;
 
@@ -189,12 +192,13 @@ public class TransportClientFactory implements Closeable {
     final AtomicReference<TransportClient> clientRef = new AtomicReference<TransportClient>();
     final AtomicReference<Channel> channelRef = new AtomicReference<Channel>();
 
+    //当连接到服务器的通道成功后,则调用该方法
     bootstrap.handler(new ChannelInitializer<SocketChannel>() {
       @Override
-      public void initChannel(SocketChannel ch) {
+      public void initChannel(SocketChannel ch) {//连接到服务器的通道
         TransportChannelHandler clientHandler = context.initializePipeline(ch);
-        clientRef.set(clientHandler.getClient());
-        channelRef.set(ch);
+        clientRef.set(clientHandler.getClient());//设置连接到服务器的客户端
+        channelRef.set(ch);//设置连接到服务器的通道
       }
     });
 
@@ -208,10 +212,11 @@ public class TransportClientFactory implements Closeable {
       throw new IOException(String.format("Failed to connect to %s", address), cf.cause());
     }
 
-    TransportClient client = clientRef.get();
-    Channel channel = channelRef.get();
+    TransportClient client = clientRef.get();//获取客户端对象
+    Channel channel = channelRef.get();//获取连接服务器后的通道对象
     assert client != null : "Channel future completed successfully with null client";
 
+    //依次执行每一个拦截器
     // Execute any client bootstraps synchronously before marking the Client as successful.
     long preBootstrap = System.nanoTime();
     logger.debug("Connection to {} successful, running bootstraps...", address);

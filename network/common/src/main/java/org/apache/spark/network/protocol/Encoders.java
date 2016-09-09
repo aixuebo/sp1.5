@@ -37,14 +37,14 @@ public class Encoders {
       return 4 + s.getBytes(Charsets.UTF_8).length;
     }
 
-    //编码
+    //编码--序列化
     public static void encode(ByteBuf buf, String s) {
-      byte[] bytes = s.getBytes(Charsets.UTF_8);
-      buf.writeInt(bytes.length);
-      buf.writeBytes(bytes);
+      byte[] bytes = s.getBytes(Charsets.UTF_8);//将字符串转换成字节数组
+      buf.writeInt(bytes.length);//发送字节数组长度
+      buf.writeBytes(bytes);//发送字节数组
     }
 
-    //解码
+    //解码--反序列化
     public static String decode(ByteBuf buf) {
       int length = buf.readInt();
       byte[] bytes = new byte[length];
@@ -64,13 +64,13 @@ public class Encoders {
       return 4 + arr.length;
     }
 
-    //编码
+    //编码--序列化
     public static void encode(ByteBuf buf, byte[] arr) {
-      buf.writeInt(arr.length);
-      buf.writeBytes(arr);
+      buf.writeInt(arr.length);//发送字节数组长度
+      buf.writeBytes(arr);//发送字节数组
     }
 
-    //解码
+    //解码--反序列化
     public static byte[] decode(ByteBuf buf) {
       int length = buf.readInt();
       byte[] bytes = new byte[length];
@@ -94,15 +94,15 @@ public class Encoders {
       return totalLength;
     }
 
-    //编码
+    //编码--序列化
     public static void encode(ByteBuf buf, String[] strings) {
-      buf.writeInt(strings.length);
+      buf.writeInt(strings.length);//发送有多少个字节数组
       for (String s : strings) {
-        Strings.encode(buf, s);
+        Strings.encode(buf, s);//写入每一个字节数组
       }
     }
 
-    //解码
+    //解码--反序列化
     public static String[] decode(ByteBuf buf) {
       int numStrings = buf.readInt();
       String[] strings = new String[numStrings];

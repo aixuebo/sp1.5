@@ -20,6 +20,7 @@ package org.apache.spark.network.client;
 /**
  * Callback for the result of a single RPC. This will be invoked once with either success or
  * failure.
+ * 回调函数,当执行成功或者失败后,会调用该函数,该函数是TransportClient产生的一个函数,发送到服务端,服务端处理完后,执行该回调函数
  */
 public interface RpcResponseCallback {
   /** Successful serialized result from server. RPC请求成功返回,并且有返回值*/

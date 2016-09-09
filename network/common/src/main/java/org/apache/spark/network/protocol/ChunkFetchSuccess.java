@@ -49,7 +49,7 @@ public final class ChunkFetchSuccess implements ResponseMessage {
   }
 
   /** Encoding does NOT include 'buffer' itself. See {@link MessageEncoder}.
-   * 编码
+   * 编码--序列化
    **/
   @Override
   public void encode(ByteBuf buf) {
@@ -57,10 +57,10 @@ public final class ChunkFetchSuccess implements ResponseMessage {
   }
 
   /** Decoding uses the given ByteBuf as our data, and will retain() it. 
-   * 解码 
+   * 解码---反序列化
    **/
   public static ChunkFetchSuccess decode(ByteBuf buf) {
-    StreamChunkId streamChunkId = StreamChunkId.decode(buf);
+    StreamChunkId streamChunkId = StreamChunkId.decode(buf);//从buffer中读取12个字节,即StreamChunkId对象
     buf.retain();
     NettyManagedBuffer managedBuf = new NettyManagedBuffer(buf.duplicate());
     return new ChunkFetchSuccess(streamChunkId, managedBuf);

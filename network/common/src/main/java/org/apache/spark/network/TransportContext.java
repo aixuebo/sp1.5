@@ -100,6 +100,7 @@ public class TransportContext {
     return createServer(0, Lists.<TransportServerBootstrap>newArrayList());
   }
 
+  //参数是连接到服务器后的通道,即与服务器交互的通道
   public TransportChannelHandler initializePipeline(SocketChannel channel) {
     return initializePipeline(channel, rpcHandler);
   }

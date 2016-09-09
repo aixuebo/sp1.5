@@ -36,6 +36,7 @@ class MessageWithHeader extends AbstractReferenceCounted implements FileRegion {
 
   private final ByteBuf header;//header头所包含的字节数组
   private final int headerLength;//header头的字节长度
+
   private final Object body;//body正文所包含的字节数组
   private final long bodyLength;//body正文的字节长度
   
@@ -67,6 +68,7 @@ class MessageWithHeader extends AbstractReferenceCounted implements FileRegion {
     return 0;
   }
 
+  //已经发送了多少个字节
   @Override
   public long transfered() {
     return totalBytesTransferred;
@@ -89,7 +91,7 @@ class MessageWithHeader extends AbstractReferenceCounted implements FileRegion {
     if (header.readableBytes() > 0) {
       writtenHeader = copyByteBuf(header, target);//传输的字节数
       totalBytesTransferred += writtenHeader;//记录传输的总字节数
-      if (header.readableBytes() > 0) {
+      if (header.readableBytes() > 0) {//说明header还有数据没有传送完
         return writtenHeader;//返回已经传输了多少个字节
       }
     }
@@ -97,7 +99,7 @@ class MessageWithHeader extends AbstractReferenceCounted implements FileRegion {
     // Bytes written for body in this call.写入body内容到target中
     long writtenBody = 0;
     if (body instanceof FileRegion) {
-      writtenBody = ((FileRegion) body).transferTo(target, totalBytesTransferred - headerLength);
+      writtenBody = ((FileRegion) body).transferTo(target, totalBytesTransferred - headerLength);//totalBytesTransferred - headerLength 表示现在已经抓去的字节数 - header头的字节数 ,即body读取了多少字节,从这个位置开始继续读
     } else if (body instanceof ByteBuf) {
       writtenBody = copyByteBuf((ByteBuf) body, target);
     }

@@ -32,6 +32,8 @@ import io.netty.channel.Channel;
 public interface TransportClientBootstrap {
   /** Performs the bootstrapping operation, throwing an exception on failure.
    *  在返回给用户一个TransportClient使用之前,对TransportClient和交流的渠道Channel进行拦截处理程序引导
+   *  参数client 表示刚刚产生的连接的客户端
+   *  参数channel 表示与服务器连接的通道
    **/
   void doBootstrap(TransportClient client, Channel channel) throws RuntimeException;
 }

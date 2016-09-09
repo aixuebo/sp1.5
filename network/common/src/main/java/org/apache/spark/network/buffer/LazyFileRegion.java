@@ -35,6 +35,7 @@ import org.apache.spark.network.util.JavaUtils;
  * 
  * This is mostly copied from DefaultFileRegion implementation in Netty. In the future, we
  * should push this into Netty so the native Epoll transport can support this feature.
+ * 读取一个file文件,将文件的内容发送到流中,该类会设置要读取什么文件,以及从该文件的什么位置开始读取,读取多少个字节
  */
 public final class LazyFileRegion extends AbstractReferenceCounted implements FileRegion {
 
@@ -44,7 +45,7 @@ public final class LazyFileRegion extends AbstractReferenceCounted implements Fi
 
   private FileChannel channel;
 
-  private long numBytesTransferred = 0L;
+  private long numBytesTransferred = 0L;//表示已经真正发送了多少个字节
 
   /**
    * @param file file to transfer.
@@ -67,6 +68,7 @@ public final class LazyFileRegion extends AbstractReferenceCounted implements Fi
     return position;
   }
 
+  //已经发送了多少个字节
   @Override
   public long transfered() {
     return numBytesTransferred;
@@ -77,6 +79,12 @@ public final class LazyFileRegion extends AbstractReferenceCounted implements Fi
     return count;
   }
 
+    /**
+     * 将file文件的内容发送到target流中
+     *  该position是相对位置,在该文件的position和position+count之间。
+     比如要读取该文件,从position位置是100开始读取,读取count=1000,说明要读取该文件的100-1100之间的数据。
+     如果该参数position是300,则说明本次要从开始位置100+300位置开始读取,因此就是从400开始读取,读取最多就不是1000个字节了，而是1000-400个字节
+     */
   @Override
   public long transferTo(WritableByteChannel target, long position) throws IOException {
     if (channel == null) {
@@ -93,7 +101,8 @@ public final class LazyFileRegion extends AbstractReferenceCounted implements Fi
       return 0L;
     }
 
-    long written = channel.transferTo(this.position + position, count, target);
+      //将channel的内容发送到target中,从channel的position+position位置开始读取,最多读取count字节
+    long written = channel.transferTo(this.position + position, count, target);//返回真正发送了多少个字节
     if (written > 0) {
       numBytesTransferred += written;
     }

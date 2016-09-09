@@ -40,13 +40,13 @@ public final class ChunkFetchRequest implements RequestMessage {
     return streamChunkId.encodedLength();
   }
 
-  //编码
+  //编码--序列化
   @Override
   public void encode(ByteBuf buf) {
     streamChunkId.encode(buf);
   }
 
-  //解码
+  //解码--反序列化
   public static ChunkFetchRequest decode(ByteBuf buf) {
     return new ChunkFetchRequest(StreamChunkId.decode(buf));
   }

@@ -41,14 +41,14 @@ public final class ChunkFetchFailure implements ResponseMessage {
     return streamChunkId.encodedLength() + Encoders.Strings.encodedLength(errorString);
   }
 
-  //编码
+  //编码--序列化
   @Override
   public void encode(ByteBuf buf) {
     streamChunkId.encode(buf);
     Encoders.Strings.encode(buf, errorString);
   }
 
-  //解码
+  //解码--反序列化
   public static ChunkFetchFailure decode(ByteBuf buf) {
     StreamChunkId streamChunkId = StreamChunkId.decode(buf);
     String errorString = Encoders.Strings.decode(buf);

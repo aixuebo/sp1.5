@@ -48,12 +48,13 @@ public class TransportServer implements Closeable {
 
   private final TransportContext context;
   private final TransportConf conf;
-  private final RpcHandler appRpcHandler;
-  private final List<TransportServerBootstrap> bootstraps;
+
+  private final RpcHandler appRpcHandler;//第一个hadnler
+  private final List<TransportServerBootstrap> bootstraps;//初始化,以此执行该集合的初始化过程,属于拦截器
 
   private ServerBootstrap bootstrap;
-  private ChannelFuture channelFuture;
-  private int port = -1;
+  private ChannelFuture channelFuture;//服务的流
+  private int port = -1;//服务的端口
 
   /** Creates a TransportServer that binds to the given port, or to any available if 0. */
   public TransportServer(
@@ -81,6 +82,7 @@ public class TransportServer implements Closeable {
     return port;
   }
 
+    //在该端口上进行打开服务
   private void init(int portToBind) {
 
     IOMode ioMode = IOMode.valueOf(conf.ioMode());
@@ -109,6 +111,7 @@ public class TransportServer implements Closeable {
       bootstrap.childOption(ChannelOption.SO_SNDBUF, conf.sendBuf());
     }
 
+      //创建连接后调用该事件
     bootstrap.childHandler(new ChannelInitializer<SocketChannel>() {
       @Override
       protected void initChannel(SocketChannel ch) throws Exception {

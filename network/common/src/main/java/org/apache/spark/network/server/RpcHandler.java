@@ -22,25 +22,28 @@ import org.apache.spark.network.client.TransportClient;
 
 /**
  * Handler for sendRPC() messages sent by {@link org.apache.spark.network.client.TransportClient}s.
+ * 处理TransportClient发送过来的rpc请求
  */
 public abstract class RpcHandler {
   /**
    * Receive a single RPC message. Any exception thrown while in this method will be sent back to
    * the client in string form as a standard RPC failure.
+   * 接收一个prc信息,在这个方法中任何异常都要发送回客户端中,以流的方式返回给客户端
    *
    * This method will not be called in parallel for a single TransportClient (i.e., channel).
+   * 该方法对于同一个客户端,不能并行被调用,即对于同一个客户端来说,请求服务器是一个请求接着一个请求进行的
    *
    * @param client A channel client which enables the handler to make requests back to the sender
-   *               of this RPC. This will always be the exact same object for a particular channel.
-   * @param message The serialized bytes of the RPC.
+   *               of this RPC. This will always be the exact same object for a particular channel.客户端是哪个流
+   * @param message The serialized bytes of the RPC.客户端请求的序列化的信息
    * @param callback Callback which should be invoked exactly once upon success or failure of the
    *                 RPC.
    * 接收client客户端传来的命令,并且回调信息写入RpcResponseCallback中    
    */
   public abstract void receive(
-      TransportClient client,
-      byte[] message,
-      RpcResponseCallback callback);
+      TransportClient client,//对应的客户端
+      byte[] message,//客户端请求的序列化的信息
+      RpcResponseCallback callback);//回调函数,当成功或者失败的时候,返回客户端信息
 
   /**
    * Returns the StreamManager which contains the state about which streams are currently being

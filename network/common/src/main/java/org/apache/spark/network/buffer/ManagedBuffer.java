@@ -37,12 +37,13 @@ import java.nio.ByteBuffer;
  */
 public abstract class ManagedBuffer {
 
-  /** Number of bytes of the data.缓存的数据大小 */
+  /** Number of bytes of the data.要读取的数据大小 */
   public abstract long size();
 
   /**
    * Exposes this buffer's data as an NIO ByteBuffer. Changing the position and limit of the
    * returned ByteBuffer should not affect the content of this buffer.
+   * 用nio的方式读取数据
    */
   // TODO: Deprecate this, usage may require expensive memory mapping or allocation.
   public abstract ByteBuffer nioByteBuffer() throws IOException;
@@ -51,7 +52,7 @@ public abstract class ManagedBuffer {
    * Exposes this buffer's data as an InputStream. The underlying implementation does not
    * necessarily check for the length of bytes read, so the caller is responsible for making sure
    * it does not go over the limit.
-   * 以流的形式获取数据
+   * 用正常io流的方式读取数据
    */
   public abstract InputStream createInputStream() throws IOException;
 
@@ -70,7 +71,7 @@ public abstract class ManagedBuffer {
 
   /**
    * Convert the buffer into an Netty object, used to write the data out.
-   * 将数据转换成Netty
+   * 将数据转换成Netty方式读取数据
    */
   public abstract Object convertToNetty() throws IOException;
 }
