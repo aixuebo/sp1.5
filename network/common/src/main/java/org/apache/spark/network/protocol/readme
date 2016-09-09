@@ -1,0 +1,20 @@
+一、序列化和反序列化
+都是基于ByteBuf存储的
+1.序列化,将有用的信息存储到参数ByteBuf中
+2.反序列化,从参数ByteBuf中获取有用的数据
+
+二、哪些类型信息
+1.请求信息
+a.RpcRequest 代表一个RPC请求,发送一个请求ID和要发送的字节数组信息
+b.ChunkFetchRequest 仅仅发送一个StreamChunkId对象,其中包含哪个数据流的第几个数据块
+
+2.返回信息
+a.RpcResponse 正常的RPC返回信息,返回请求ID和成功的返回信息字节数组
+b.RpcFailure 返回RPC的错误信息,返回请求ID和失败的返回信息字符串
+c.ChunkFetchSuccess 代表抓去某一个数据块成功
+  返回StreamChunkId对象,其中包含哪个数据流的第几个数据块
+  ManagedBuffer 具体的数据块信息流
+d.ChunkFetchFailure 代表抓去某一个数据块失败
+  返回StreamChunkId对象,其中包含哪个数据流的第几个数据块
+  String类型的错误信息
+

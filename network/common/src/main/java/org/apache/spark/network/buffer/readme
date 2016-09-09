@@ -1,0 +1,10 @@
+该包下是如何读取文件的方式
+主要有三种方式缓存数据
+1.正常file文件存储数据
+2.使用nio的bytebuffer对象存储数据
+3.使用netty的方式存储数据
+
+ManagedBuffer是一个接口,他可以使数据以三种方式对外开放,
+1.正常的IO流
+2.nio流的byteBuffer
+3.netty方式
