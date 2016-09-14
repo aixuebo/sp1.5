@@ -37,14 +37,14 @@ private[spark] class DiskStore(blockManager: BlockManager, diskManager: DiskBloc
 
   //获取文件大小
   override def getSize(blockId: BlockId): Long = {
-    diskManager.getFile(blockId.name).length
+    diskManager.getFile(blockId.name).length//找到该数据块的对应的文件,获取文件大小
   }
 
   //将_bytes内容写入BlockId对应的文件中
   override def putBytes(blockId: BlockId, _bytes: ByteBuffer, level: StorageLevel): PutResult = {
     // So that we do not modify the input offsets !
     // duplicate does not copy buffer, so inexpensive
-    val bytes = _bytes.duplicate()
+    val bytes = _bytes.duplicate()//不是真正的copy,但是也算是复制一份
     logDebug(s"Attempting to put block $blockId")
     val startTime = System.currentTimeMillis
     val file = diskManager.getFile(blockId) //获取该数据块要存储的File对象
@@ -75,20 +75,22 @@ private[spark] class DiskStore(blockManager: BlockManager, diskManager: DiskBloc
       blockId: BlockId,
       values: Iterator[Any],
       level: StorageLevel,
-      returnValues: Boolean): PutResult = {
+      returnValues: Boolean) //是否需要返回存储的内容buffer
+      : PutResult = {
 
     logDebug(s"Attempting to write values for block $blockId")
     val startTime = System.currentTimeMillis
-    val file = diskManager.getFile(blockId)
-    val outputStream = new FileOutputStream(file)
+    val file = diskManager.getFile(blockId)//获取该数据块要存储在什么位置上
+    val outputStream = new FileOutputStream(file)//打开该文件的输出流
     try {
       Utils.tryWithSafeFinally {
-        blockManager.dataSerializeStream(blockId, outputStream, values)
+        blockManager.dataSerializeStream(blockId, outputStream, values)//将value写入到输出流中,使用默认的序列化对象写入
       } {
         // Close outputStream here because it should be closed before file is deleted.
         outputStream.close()
       }
     } catch {
+      //如果出现异常,则将文件删除,并且抛异常
       case e: Throwable =>
         if (file.exists()) {
           file.delete()
@@ -96,37 +98,41 @@ private[spark] class DiskStore(blockManager: BlockManager, diskManager: DiskBloc
         throw e
     }
 
+    //说明文件已经写入成功,计算文件写入多少个字节
     val length = file.length
 
+    //计算写入过程消耗的时间
     val timeTaken = System.currentTimeMillis - startTime
+
+    //记录日志,存储数据块XXX,一共存储多少个字节,花费多少时间
     logDebug("Block %s stored as %s file on disk in %d ms".format(
       file.getName, Utils.bytesToString(length), timeTaken))
 
-    if (returnValues) {
+    if (returnValues) {//创建返回值对象
       // Return a byte buffer for the contents of the file
-      val buffer = getBytes(blockId).get
-      PutResult(length, Right(buffer))
+      val buffer = getBytes(blockId).get //获取该存储文件的buffer对象
+      PutResult(length, Right(buffer))//Right(buffer)表示buffer对象存储的文件内容
     } else {
       PutResult(length, null)
     }
   }
 
-  //返回file中指定的一段内容
+  //返回file中指定的一段内容,返回的buffer对象就是可以读取的信息对象,即已经将文件的内容存储到buffer返回值中了
   private def getBytes(file: File, offset: Long, length: Long): Option[ByteBuffer] = {
     val channel = new RandomAccessFile(file, "r").getChannel
     Utils.tryWithSafeFinally {
       // For small files, directly read rather than memory map 如果是小文件,直接读取到内存中
       if (length < minMemoryMapBytes) {
         val buf = ByteBuffer.allocate(length.toInt)
-        channel.position(offset)
-        while (buf.remaining() != 0) {
-          if (channel.read(buf) == -1) {
+        channel.position(offset)//移动渠道到读取的开始位置
+        while (buf.remaining() != 0) {//如果buffer缓冲区还有地方存储数据
+          if (channel.read(buf) == -1) {//渠道信息读取到buffer中
             throw new IOException("Reached EOF before filling buffer\n" +
               s"offset=$offset\nfile=${file.getAbsolutePath}\nbuf.remaining=${buf.remaining}")
           }
         }
-        buf.flip()
-        Some(buf)
+        buf.flip()//写模式切换到读模式
+        Some(buf)//返回可以读的buffer对象
       } else {//readOnly的方式内存映射该文件的一段内容
         Some(channel.map(MapMode.READ_ONLY, offset, length))
       }
@@ -162,12 +168,13 @@ private[spark] class DiskStore(blockManager: BlockManager, diskManager: DiskBloc
     getBytes(blockId).map(bytes => blockManager.dataDeserialize(blockId, bytes, serializer))
   }
 
-  //删除BlockId文件
+  //删除BlockId对应的物理文件
   override def remove(blockId: BlockId): Boolean = {
-    val file = diskManager.getFile(blockId.name)
+    val file = diskManager.getFile(blockId.name)//找到该数据块对应的文件
     // If consolidation mode is used With HashShuffleMananger, the physical filename for the block
     // is different from blockId.name. So the file returns here will not be exist, thus we avoid to
     // delete the whole consolidated file by mistake.
+    //删除该文件
     if (file.exists()) {
       file.delete()
     } else {

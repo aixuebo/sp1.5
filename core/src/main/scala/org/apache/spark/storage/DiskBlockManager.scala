@@ -46,10 +46,13 @@ private[spark] class DiskBlockManager(blockManager: BlockManager, conf: SparkCon
    *path/blockmgr目录数组 
    **/
   private[spark] val localDirs: Array[File] = createLocalDirs(conf)
+
+  //如果没有存储的本地目录,则打印日志后,停止程序运行
   if (localDirs.isEmpty) {
     logError("Failed to create any local dir.")
     System.exit(ExecutorExitCode.DISK_STORE_FAILED_TO_CREATE_DIR)
   }
+
   // The content of subDirs is immutable but the content of subDirs(i) is mutable. And the content
   // of subDirs(i) is protected by the lock of subDirs(i)
   //每一个root目录下有64个子目录,Array[Array[File]] 第一级数组表示根磁盘,第二级目录是真正存储目录
@@ -70,12 +73,12 @@ private[spark] class DiskBlockManager(blockManager: BlockManager, conf: SparkCon
 
     // Create the subdirectory if it doesn't already exist 获取或者创建子目录
     val subDir = subDirs(dirId).synchronized {
-      val old = subDirs(dirId)(subDirId)
-      if (old != null) {
-        old
+      val old = subDirs(dirId)(subDirId)//先看看该目录是否有内容
+      if (old != null) {//说明有内容
+        old//返回老的内容
       } else {
         val newDir = new File(localDirs(dirId), "%02x".format(subDirId)) //%02x 表示将整数转换成16进制数
-        if (!newDir.exists() && !newDir.mkdir()) {
+        if (!newDir.exists() && !newDir.mkdir()) {//创建新目录
           throw new IOException(s"Failed to create local dir in $newDir.")
         }
         subDirs(dirId)(subDirId) = newDir
@@ -83,6 +86,7 @@ private[spark] class DiskBlockManager(blockManager: BlockManager, conf: SparkCon
       }
     }
 
+    //在目录下创建文件名的文件
     new File(subDir, filename)
   }
 

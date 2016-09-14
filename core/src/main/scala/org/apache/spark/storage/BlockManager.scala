@@ -63,7 +63,7 @@ private[spark] class BlockManager(
     rpcEnv: RpcEnv,
     val master: BlockManagerMaster,
     defaultSerializer: Serializer,
-    maxMemory: Long,
+    maxMemory: Long,//最大使用多少内存,存储数据块信息
     val conf: SparkConf,
     mapOutputTracker: MapOutputTracker,
     shuffleManager: ShuffleManager,
@@ -1193,10 +1193,10 @@ private[spark] class BlockManager(
    *  序列化数据到输出流中,该输出流是blockId的输出流
    **/
   def dataSerializeStream(
-      blockId: BlockId,
-      outputStream: OutputStream,
-      values: Iterator[Any],
-      serializer: Serializer = defaultSerializer): Unit = {
+      blockId: BlockId,//该输出流属于哪个数据块的
+      outputStream: OutputStream,//写入的输出流
+      values: Iterator[Any],//要向输出流中写入的内容数组迭代器
+      serializer: Serializer = defaultSerializer): Unit = {//输出过程中如何序列化
     val byteStream = new BufferedOutputStream(outputStream)
     val ser = serializer.newInstance()
     ser.serializeStream(wrapForCompression(blockId, byteStream)).writeAll(values).close()

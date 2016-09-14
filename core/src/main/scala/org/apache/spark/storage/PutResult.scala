@@ -30,4 +30,4 @@ import java.nio.ByteBuffer
 private[spark] case class PutResult(
     size: Long,//文件大小
     data: Either[Iterator[_], ByteBuffer],//文件的具体内容,要么是迭代器,要么是具体的内容组成的ByteBuffer数组
-    droppedBlocks: Seq[(BlockId, BlockStatus)] = Seq.empty)
+    droppedBlocks: Seq[(BlockId, BlockStatus)] = Seq.empty)//数据块ID和该数据块状态组成的集合

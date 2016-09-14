@@ -29,6 +29,7 @@ import org.apache.spark.util.collection.SizeTrackingVector
 
 //每一个数据块对应一个内存实体
 //存储的内容包括:具体对象,内容大小,是否使用反序列化
+//该对象相当于DiskStore中的file文件存储的数据,只是这个是在内存存储,所以第一个对象大多数情况下是buffer
 private case class MemoryEntry(value: Any, size: Long, deserialized: Boolean)
 
 /**
@@ -36,7 +37,7 @@ private case class MemoryEntry(value: Any, size: Long, deserialized: Boolean)
  * serialized ByteBuffers.
  * 将数据块信息存储到内存里
  * 
- * @maxMemory 表示内存的最大使用量
+ * @maxMemory 表示内存的最大使用量,即所有的数据块存储最多使用的内存资源
  */
 private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
   extends BlockStore(blockManager) {
@@ -77,15 +78,18 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
   }
 
   // Initial memory to request before unrolling any block
+  //为每一个数据块都预先分配一部分空间
   private val unrollMemoryThreshold: Long =
     conf.getLong("spark.storage.unrollMemoryThreshold", 1024 * 1024)
 
+  //最大存储内存量 肯定比初始化的大,这部分应该不会发生
   if (maxMemory < unrollMemoryThreshold) {
     logWarning(s"Max memory ${Utils.bytesToString(maxMemory)} is less than the initial memory " +
       s"threshold ${Utils.bytesToString(unrollMemoryThreshold)} needed to store a block in " +
       s"memory. Please configure Spark with more memory.")
   }
 
+  //打印此时我们设置的内存存储资源的总大小是多少
   logInfo("MemoryStore started with capacity %s".format(Utils.bytesToString(maxMemory)))
 
   /** Free memory not occupied by existing blocks. Note that this does not include unroll memory. */
@@ -290,17 +294,17 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
     // Underlying vector for unrolling the block
     var vector = new SizeTrackingVector[Any]
 
-    // Request enough memory to begin unrolling
+    // Request enough memory to begin unrolling预定一部分空间,返回值是boolean类型的,true表示预定内存成功
     keepUnrolling = reserveUnrollMemoryForThisTask(initialMemoryThreshold)
 
-    if (!keepUnrolling) {
+    if (!keepUnrolling) {//说明预定内存失败,打印日志
       logWarning(s"Failed to reserve initial memory threshold of " +
         s"${Utils.bytesToString(initialMemoryThreshold)} for computing block $blockId in memory.")
     }
 
     // Unroll this block safely, checking whether we have exceeded our threshold periodically
     try {
-      while (values.hasNext && keepUnrolling) {
+      while (values.hasNext && keepUnrolling) {//说明预定的内存是足够的
         vector += values.next()
         if (elementsUnrolled % memoryCheckPeriod == 0) {
           // If our vector's size has exceeded the threshold, request more memory
@@ -530,6 +534,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
   /**
    * Reserve additional memory for unrolling blocks used by this task.
    * Return whether the request is granted.
+   * 设置当前线程一部分内存空间,属于预定空间
    */
   def reserveUnrollMemoryForThisTask(memory: Long): Boolean = {
     accountingLock.synchronized {
@@ -545,6 +550,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
   /**
    * Release memory used by this task for unrolling blocks.
    * If the amount is not specified, remove the current task's allocation altogether.
+   * 对当前任务释放一部分内存
    */
   def releaseUnrollMemoryForThisTask(memory: Long = -1L): Unit = {
     val taskAttemptId = currentTaskAttemptId()

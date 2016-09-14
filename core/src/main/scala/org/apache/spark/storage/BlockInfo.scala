@@ -24,7 +24,7 @@ private[storage] class BlockInfo(val level: StorageLevel, val tellMaster: Boolea
   @volatile var size: Long = BlockInfo.BLOCK_PENDING //最终数据块大小
   private def pending: Boolean = size == BlockInfo.BLOCK_PENDING //true表示是等待状态
   private def failed: Boolean = size == BlockInfo.BLOCK_FAILED //true表示是已经失败状态
-  private def initThread: Thread = BlockInfo.blockInfoInitThreads.get(this)
+  private def initThread: Thread = BlockInfo.blockInfoInitThreads.get(this)//持有该数据块的线程
 
   setInitThread()
 
@@ -68,10 +68,13 @@ private[storage] class BlockInfo(val level: StorageLevel, val tellMaster: Boolea
     }
   }
 
-  /** Mark this BlockInfo as ready but failed */
+  /** Mark this BlockInfo as ready but failed
+    *
+    * 标志该数据块已经失败
+    **/
   def markFailure() {
-    assert(pending)
-    size = BlockInfo.BLOCK_FAILED
+    assert(pending)//断言此时状态一定是等待状态
+    size = BlockInfo.BLOCK_FAILED//设置为失败状态
     BlockInfo.blockInfoInitThreads.remove(this) //数据块从等待的队列中移除
     synchronized {//通知waitForReady方法返回true
       this.notifyAll()

@@ -64,7 +64,7 @@ class BlockManagerId private (
 
   def port: Int = port_
 
-  //是否是driver
+  //是否是driver或者<driver>
   def isDriver: Boolean = {
     executorId == SparkContext.DRIVER_IDENTIFIER ||
       executorId == SparkContext.LEGACY_DRIVER_IDENTIFIER
