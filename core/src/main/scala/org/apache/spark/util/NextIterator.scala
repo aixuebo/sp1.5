@@ -17,13 +17,15 @@
 
 package org.apache.spark.util
 
-/** Provides a basic/boilerplate Iterator implementation. */
+/** Provides a basic/boilerplate Iterator implementation.
+  * 迭代器的基类
+  **/
 private[spark] abstract class NextIterator[U] extends Iterator[U] {
 
-  private var gotNext = false
-  private var nextValue: U = _
+  private var gotNext = false //true表示已经调用了next方法,获取到了下一个对象了
+  private var nextValue: U = _ //调用next方法后,返回的下一个对象
   private var closed = false
-  protected var finished = false
+  protected var finished = false //true表示完成了迭代
 
   /**
    * Method for subclasses to implement to provide the next element.

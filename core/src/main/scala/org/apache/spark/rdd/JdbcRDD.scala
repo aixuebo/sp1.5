@@ -55,7 +55,7 @@ private[spark] class JdbcPartition(idx: Int, val lower: Long, val upper: Long) e
 class JdbcRDD[T: ClassTag](
     sc: SparkContext,
     getConnection: () => Connection,//无参数,返回一个连接
-    sql: String,//等待查询的sql
+    sql: String,//等待查询的sql,该sql存在limit 语法,并且具体的值是?,即预编译方式
     lowerBound: Long,//最小值
     upperBound: Long,//最大值
     numPartitions: Int,//最终拆分成多少个partition
@@ -67,7 +67,7 @@ class JdbcRDD[T: ClassTag](
     // bounds are inclusive, hence the + 1 here and - 1 on end
     val length = BigInt(1) + upperBound - lowerBound //一共要查询多少条记录
     (0 until numPartitions).map(i => {
-      val start = lowerBound + ((i * length) / numPartitions)
+      val start = lowerBound + ((i * length) / numPartitions) //可以理解成 i * (length/numPartitions)
       val end = lowerBound + (((i + 1) * length) / numPartitions) - 1
       new JdbcPartition(i, start.toLong, end.toLong)
     }).toArray
