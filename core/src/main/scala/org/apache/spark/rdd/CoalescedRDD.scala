@@ -33,6 +33,7 @@ import org.apache.spark.util.Utils
  * @param rdd which it belongs to
  * @param parentsIndices list of indices in the parent that have been coalesced into this partition
  * @param preferredLocation the preferred location for this partition
+ * 合并RDD
  */
 private[spark] case class CoalescedRDDPartition(
     index: Int,
