@@ -95,7 +95,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       mapSideCombine: Boolean = true,
       serializer: Serializer = null): RDD[(K, C)] = self.withScope {
     require(mergeCombiners != null, "mergeCombiners must be defined") // required as of Spark 0.9.0
-    if (keyClass.isArray) {
+    if (keyClass.isArray) {//校验key是数组的时候,该如何处理
       if (mapSideCombine) {
         throw new SparkException("Cannot use map-side combining with array keys.")
       }
@@ -293,6 +293,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * Merge the values for each key using an associative reduce function. This will also perform
    * the merging locally on each mapper before sending results to a reducer, similarly to a
    * "combiner" in MapReduce. Output will be hash-partitioned with numPartitions partitions.
+   * 返回值是RDD[(K, V)],其中key按照partition分组到任意一个Partitions中,函数func表示相同的key该如何处理,v和v表示连续两个相同的key对应的value
    */
   def reduceByKey(func: (V, V) => V, numPartitions: Int): RDD[(K, V)] = self.withScope {
     reduceByKey(new HashPartitioner(numPartitions), func)

@@ -388,11 +388,13 @@ abstract class RDD[T: ClassTag](
 
   /**
    * Return a new RDD containing the distinct elements in this RDD.
-   * 1.RDD -> MapPartitionsRDD[U, T]
-   * 2.
+   * 1.RDD -> MapPartitionsRDD[U, T]  即x--转换成x null的key-value形式RDD
+   * 2.key-value的RDD 隐式转换--PairRDDFunctions,并且调用reduceByKey方法,返回RDD[(K, V)]
+   reduceByKey参数(x, y) => x  表示输入x和y的内容,即连续两个value,返回任意一个value即可    numPartitions表示最终的结果要输出到几个partition中
+   * 3.获取最终的RDD[Key]即可
    */
   def distinct(numPartitions: Int)(implicit ord: Ordering[T] = null): RDD[T] = withScope {
-    map(x => (x, null)).reduceByKey((x, y) => x, numPartitions).map(_._1)
+    map(x => (x, null)).reduceByKey((x, y) => x, numPartitions).map(_._1)//其实函数可以固定成任意字符,也是可以的,因为是过滤key,与value无关
   }
 
   /**
