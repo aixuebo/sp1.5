@@ -44,7 +44,7 @@ private[spark] class ZippedPartitionsPartition(
 
 private[spark] abstract class ZippedPartitionsBaseRDD[V: ClassTag](
     sc: SparkContext,
-    var rdds: Seq[RDD[_]],
+    var rdds: Seq[RDD[_]],//要合并的一组partition集合
     preservesPartitioning: Boolean = false)
   extends RDD[V](sc, rdds.map(x => new OneToOneDependency(x))) {
 
@@ -52,14 +52,14 @@ private[spark] abstract class ZippedPartitionsBaseRDD[V: ClassTag](
     if (preservesPartitioning) firstParent[Any].partitioner else None
 
   override def getPartitions: Array[Partition] = {
-    val numParts = rdds.head.partitions.length
-    if (!rdds.forall(rdd => rdd.partitions.length == numParts)) {
+    val numParts = rdds.head.partitions.length//计算第一个RDD的partition数量
+    if (!rdds.forall(rdd => rdd.partitions.length == numParts)) {//校验每一个RDD的partition数量是否相同
       throw new IllegalArgumentException("Can't zip RDDs with unequal numbers of partitions")
     }
     Array.tabulate[Partition](numParts) { i =>
       val prefs = rdds.map(rdd => rdd.preferredLocations(rdd.partitions(i)))
       // Check whether there are any hosts that match all RDDs; otherwise return the union
-      val exactMatchLocations = prefs.reduce((x, y) => x.intersect(y))
+    val exactMatchLocations = prefs.reduce((x, y) => x.intersect(y))
       val locs = if (!exactMatchLocations.isEmpty) exactMatchLocations else prefs.flatten.distinct
       new ZippedPartitionsPartition(i, rdds, locs)
     }
@@ -85,11 +85,12 @@ private[spark] abstract class ZippedPartitionsBaseRDD[V: ClassTag](
   }
 }
 
+//合并两个Partition
 private[spark] class ZippedPartitionsRDD2[A: ClassTag, B: ClassTag, V: ClassTag](
     sc: SparkContext,
     var f: (Iterator[A], Iterator[B]) => Iterator[V],
-    var rdd1: RDD[A],
-    var rdd2: RDD[B],
+    var rdd1: RDD[A],//第一个Partition
+    var rdd2: RDD[B],//第二个partition
     preservesPartitioning: Boolean = false)
   extends ZippedPartitionsBaseRDD[V](sc, List(rdd1, rdd2), preservesPartitioning) {
 

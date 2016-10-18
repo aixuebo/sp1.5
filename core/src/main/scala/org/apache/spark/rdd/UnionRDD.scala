@@ -36,10 +36,10 @@ import org.apache.spark.util.Utils
  *                                this partition refers to
  */
 private[spark] class UnionPartition[T: ClassTag](
-    idx: Int,
-    @transient rdd: RDD[T],
-    val parentRddIndex: Int,
-    @transient parentRddPartitionIndex: Int)
+    idx: Int,//该UnionPartition的index序号
+    @transient rdd: RDD[T],//这部分partition属于哪个RDD的partition
+    val parentRddIndex: Int,//该partition属于union第几个RDD
+    @transient parentRddPartitionIndex: Int)//该partition属于那一个RDD的第几个partition
   extends Partition {
 
   var parentPartition: Partition = rdd.partitions(parentRddPartitionIndex)
@@ -51,7 +51,7 @@ private[spark] class UnionPartition[T: ClassTag](
   @throws(classOf[IOException])
   private def writeObject(oos: ObjectOutputStream): Unit = Utils.tryOrIOException {
     // Update the reference to parent split at the time of task serialization
-    parentPartition = rdd.partitions(parentRddPartitionIndex)
+    parentPartition = rdd.partitions(parentRddPartitionIndex)//获取RDD对应的的index个partition对象
     oos.defaultWriteObject()
   }
 }
@@ -59,14 +59,15 @@ private[spark] class UnionPartition[T: ClassTag](
 @DeveloperApi
 class UnionRDD[T: ClassTag](
     sc: SparkContext,
-    var rdds: Seq[RDD[T]])
+    var rdds: Seq[RDD[T]])//要合并的一组RDD集合
   extends RDD[T](sc, Nil) {  // Nil since we implement getDependencies
 
+  //返回新的partition对象集合
   override def getPartitions: Array[Partition] = {
-    val array = new Array[Partition](rdds.map(_.partitions.length).sum)
-    var pos = 0
+    val array = new Array[Partition](rdds.map(_.partitions.length).sum)//计算所有的RDD集合中一共多少个分区,组成数组
+    var pos = 0//新的partition对象的序号
     for ((rdd, rddIndex) <- rdds.zipWithIndex; split <- rdd.partitions) {
-      array(pos) = new UnionPartition(pos, rdd, rddIndex, split.index)
+      array(pos) = new UnionPartition(pos, rdd, rddIndex, split.index) //组装成新的partition对象
       pos += 1
     }
     array

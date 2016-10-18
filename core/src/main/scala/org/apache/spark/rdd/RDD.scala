@@ -367,6 +367,11 @@ abstract class RDD[T: ClassTag](
    *  Return a new RDD by first applying a function to all elements of this
    *  RDD, and then flattening the results.
    *  参数f表示传入RDD的每一条记录,返回可以迭代U新的RDD的迭代器
+   *
+   *  每一个元素进行flatMap处理
+   *  与map类似，区别是原RDD中的元素经map处理后只能生成一个元素，而原RDD中的元素经flatmap处理后可生成多个元素来构建新RDD。
+举例：对原RDD中的每个元素x产生y个元素（从1到y，y为元素x的值）
+scala> val a = sc.parallelize(1 to 4, 2) scala> val b = a.flatMap(x => 1 to x) scala> b.collect res12: Array[Int] = Array(1, 1, 2, 1, 2, 3, 1, 2, 3, 4)
    */
   def flatMap[U: ClassTag](f: T => TraversableOnce[U]): RDD[U] = withScope {
     val cleanF = sc.clean(f)
@@ -573,6 +578,7 @@ abstract class RDD[T: ClassTag](
   /**
    * Return the union of this RDD and another one. Any identical elements will appear multiple
    * times (use `.distinct()` to eliminate them).
+   * 将两个RDD进行合并，不去重
    */
   def union(other: RDD[T]): RDD[T] = withScope {
     if (partitioner.isDefined && other.partitioner == partitioner) {
@@ -608,11 +614,12 @@ abstract class RDD[T: ClassTag](
    * elements, even if the input RDDs did.
    *
    * Note that this method performs a shuffle internally.
+   * 函数返回两个RDD的交集，并且去重。
    */
   def intersection(other: RDD[T]): RDD[T] = withScope {
-    this.map(v => (v, null)).cogroup(other.map(v => (v, null)))
-        .filter { case (_, (leftGroup, rightGroup)) => leftGroup.nonEmpty && rightGroup.nonEmpty }
-        .keys
+    this.map(v => (v, null)).cogroup(other.map(v => (v, null)))  //相同key--产生两个迭代器
+        .filter { case (_, (leftGroup, rightGroup)) => leftGroup.nonEmpty && rightGroup.nonEmpty } //过滤,_表示相同的key,如果两个集合都存在元素,则说明该key两个有交集,因此保留
+        .keys //返回所有有交集的key
   }
 
   /**
@@ -645,14 +652,17 @@ abstract class RDD[T: ClassTag](
 
   /**
    * Return an RDD created by coalescing all elements within each partition into an array.
+   * 每一个分区内所有元素都进入到一个数组中
+   * 函数是将RDD中每一个分区中类型为T的元素转换成Array[T]，这样每一个分区就只有一个数组元素。
    */
   def glom(): RDD[Array[T]] = withScope {
-    new MapPartitionsRDD[Array[T], T](this, (context, pid, iter) => Iterator(iter.toArray))
+    new MapPartitionsRDD[Array[T], T](this, (context, pid, iter) => Iterator(iter.toArray)) //每一个partition内元素转换成数组iter.toArray
   }
 
   /**
    * Return the Cartesian product of this RDD and another one, that is, the RDD of all pairs of
    * elements (a, b) where a is in `this` and b is in `other`.
+   * 对两个RDD进行笛卡尔计算,返回RDD[(T, U)],这个函数对内存消耗较大,使用时候需要谨慎
    */
   def cartesian[U: ClassTag](other: RDD[U]): RDD[(T, U)] = withScope {
     new CartesianRDD(sc, this, other)
@@ -666,6 +676,15 @@ abstract class RDD[T: ClassTag](
    * Note: This operation may be very expensive. If you are grouping in order to perform an
    * aggregation (such as a sum or average) over each key, using [[PairRDDFunctions.aggregateByKey]]
    * or [[PairRDDFunctions.reduceByKey]] will provide much better performance.
+   *
+   * function返回key，传入的RDD的各个元素根据这个key进行分组,value就是原始内容组成的集合
+   val a = sc.parallelize(1 to 9, 3)
+  groupBy(x => { if (x % 2 == 0) "even" else "odd" }).collect//分成两组
+  结果
+  Array(
+  (even,ArrayBuffer(2, 4, 6, 8)),
+  (odd,ArrayBuffer(1, 3, 5, 7, 9))
+  )
    */
   def groupBy[K](f: T => K)(implicit kt: ClassTag[K]): RDD[(K, Iterable[T])] = withScope {
     groupBy[K](f, defaultPartitioner(this))
@@ -698,7 +717,7 @@ abstract class RDD[T: ClassTag](
   def groupBy[K](f: T => K, p: Partitioner)(implicit kt: ClassTag[K], ord: Ordering[K] = null)
       : RDD[(K, Iterable[T])] = withScope {
     val cleanF = sc.clean(f)
-    this.map(t => (cleanF(t), t)).groupByKey(p)
+    this.map(t => (cleanF(t), t)).groupByKey(p) //map 将key转换成(value,key),然后按照value进行group by操作
   }
 
   /**
@@ -719,19 +738,21 @@ abstract class RDD[T: ClassTag](
    * Return an RDD created by piping elements to a forked external process.
    * The print behavior can be customized by providing two functions.
    *
-   * @param command command to run in forked process.
-   * @param env environment variables to set.
+   * @param command command to run in forked process.要运行的命令
+   * @param env environment variables to set.设置额外的环境变量信息
    * @param printPipeContext Before piping elements, this function is called as an opportunity
    *                         to pipe context data. Print line function (like out.println) will be
-   *                         passed as printPipeContext's parameter.
+   *                         passed as printPipeContext's parameter.在管道元素之前,这个函数有一次机会去管道上下文信息
    * @param printRDDElement Use this function to customize how to pipe elements. This function
    *                        will be called with each RDD element as the 1st parameter, and the
    *                        print line function (like out.println()) as the 2nd parameter.
    *                        An example of pipe the RDD data of groupBy() in a streaming way,
    *                        instead of constructing a huge String to concat all the elements:
-   *                        def printRDDElement(record:(String, Seq[String]), f:String=&gt;Unit) =
-   *                          for (e &lt;- record._2){f(e)}
-   * @param separateWorkingDir Use separate working directories for each task.
+   *                        def printRDDElement(record:(String, Seq[String]), f:String=>Unit) =
+   *                          for (e <- record._2){f(e)}
+   *                          使用这个函数去自定义如何管道元素,这个函数被调用的时候,第一个参数是每一个RDD元素,第二个元素是可以打印该RDD元素
+   *                          例如 循环每一个record.2这个集合,每一个元素进入f函数中作为参数,输出是无输出
+   * @param separateWorkingDir Use separate working directories for each task.每一个任务是否使用单独的工作目录,即是否要进行软连接copy
    * @return the result RDD
    */
   def pipe(
@@ -753,6 +774,8 @@ abstract class RDD[T: ClassTag](
    * should be `false` unless this is a pair RDD and the input function doesn't modify the keys.
    * 相当于Map操作
    * 参数f是传递每一个RDD上的实体T,转换成实体U
+   *
+   * mapPartitions是map的一个变种。map的输入函数是应用于RDD中每个元素，而mapPartitions的输入函数是应用于每个分区，也就是把每个分区中的内容作为整体来处理的。
    */
   def mapPartitions[U: ClassTag](
       f: Iterator[T] => Iterator[U],
@@ -814,6 +837,9 @@ abstract class RDD[T: ClassTag](
    * Maps f over this RDD, where f takes an additional parameter of type A.  This
    * additional parameter is produced by constructA, which is called in each
    * partition with the index of that partition.
+   *
+   * partition的index作为参数,传递给constructA,返回值是A
+   * 然后该partition分区的每一个元素,都进行map处理,f函数的参数是元素原始内容和A
    */
   @deprecated("use mapPartitionsWithIndex", "1.0.0")
   def mapWith[A, U: ClassTag]
@@ -822,7 +848,7 @@ abstract class RDD[T: ClassTag](
     val cleanF = sc.clean(f)
     val cleanA = sc.clean(constructA)
     mapPartitionsWithIndex((index, iter) => {
-      val a = cleanA(index)
+      val a = cleanA(index) //partition的index作为参数,传递给constructA,返回值是A
       iter.map(t => cleanF(t, a))
     }, preservesPartitioning)
   }
@@ -831,6 +857,9 @@ abstract class RDD[T: ClassTag](
    * FlatMaps f over this RDD, where f takes an additional parameter of type A.  This
    * additional parameter is produced by constructA, which is called in each
    * partition with the index of that partition.
+   *
+   *  partition的index作为参数,传递给constructA,返回值是A
+   * 然后该partition分区的每一个元素,都进行flatMap函数处理,f函数的参数是元素原始内容和A
    */
   @deprecated("use mapPartitionsWithIndex and flatMap", "1.0.0")
   def flatMapWith[A, U: ClassTag]
@@ -839,7 +868,7 @@ abstract class RDD[T: ClassTag](
     val cleanF = sc.clean(f)
     val cleanA = sc.clean(constructA)
     mapPartitionsWithIndex((index, iter) => {
-      val a = cleanA(index)
+      val a = cleanA(index) ////partition的index作为参数,传递给constructA,返回值是A
       iter.flatMap(t => cleanF(t, a))
     }, preservesPartitioning)
   }
@@ -879,15 +908,26 @@ abstract class RDD[T: ClassTag](
    * second element in each RDD, etc. Assumes that the two RDDs have the *same number of
    * partitions* and the *same number of elements in each partition* (e.g. one was made through
    * a map on the other).
+   *
+   * zip函数用于将两个RDD组合成Key/Value形式的RDD,这里默认两个RDD的partition数量以及元素数量都相同，否则会抛出异常。
+scala> var rdd1 = sc.makeRDD(1 to 5,2)
+rdd1: org.apache.spark.rdd.RDD[Int] = ParallelCollectionRDD[1] at makeRDD at :21
+
+scala> var rdd2 = sc.makeRDD(Seq("A","B","C","D","E"),2)
+rdd2: org.apache.spark.rdd.RDD[String] = ParallelCollectionRDD[2] at makeRDD at :21
+
+scala> rdd1.zip(rdd2).collect
+res0: Array[(Int, String)] = Array((1,A), (2,B), (3,C), (4,D), (5,E))
    */
   def zip[U: ClassTag](other: RDD[U]): RDD[(T, U)] = withScope {
+    //组合相同的partition中元素,按照元素顺序,两列组合
     zipPartitions(other, preservesPartitioning = false) { (thisIter, otherIter) =>
       new Iterator[(T, U)] {
         def hasNext: Boolean = (thisIter.hasNext, otherIter.hasNext) match {
-          case (true, true) => true
+          case (true, true) => true //必须都有下一个元素的时候才是true
           case (false, false) => false
           case _ => throw new SparkException("Can only zip RDDs with " +
-            "same number of elements in each partition")
+            "same number of elements in each partition") //说明同一个partition中元素数量不同
         }
         def next(): (T, U) = (thisIter.next(), otherIter.next())
       }
@@ -902,7 +942,7 @@ abstract class RDD[T: ClassTag](
    */
   def zipPartitions[B: ClassTag, V: ClassTag]
       (rdd2: RDD[B], preservesPartitioning: Boolean)
-      (f: (Iterator[T], Iterator[B]) => Iterator[V]): RDD[V] = withScope {
+      (f: (Iterator[T], Iterator[B]) => Iterator[V]): RDD[V] = withScope {//针对两个RDD T和B,分别对应后,输出最终结果V
     new ZippedPartitionsRDD2(sc, sc.clean(f), this, rdd2, preservesPartitioning)
   }
 
@@ -941,14 +981,16 @@ abstract class RDD[T: ClassTag](
 
   /**
    * Applies a function f to all elements of this RDD.
+   * RDD的每一个元素都作为参数,应用一次f函数,该函数是无输出的
    */
   def foreach(f: T => Unit): Unit = withScope {
     val cleanF = sc.clean(f)
-    sc.runJob(this, (iter: Iterator[T]) => iter.foreach(cleanF))
+    sc.runJob(this, (iter: Iterator[T]) => iter.foreach(cleanF))//迭代器每一个partition,每一个元素进行f函数处理
   }
 
   /**
    * Applies a function f to each partition of this RDD.
+   * 将rdd的每一个partition作为参数,给函数f
    */
   def foreachPartition(f: Iterator[T] => Unit): Unit = withScope {
     val cleanF = sc.clean(f)
@@ -960,7 +1002,7 @@ abstract class RDD[T: ClassTag](
    * 返回:Array[Array[T]],有多少个partition,就是多少个数组,每一个元素又是一个数组.表示一个partition内部返回的所有结果集
    */
   def collect(): Array[T] = withScope {
-    val results = sc.runJob(this, (iter: Iterator[T]) => iter.toArray)
+    val results = sc.runJob(this, (iter: Iterator[T]) => iter.toArray) //返回所有运行的结果集
     Array.concat(results: _*)
   }
 
@@ -982,6 +1024,7 @@ abstract class RDD[T: ClassTag](
 
   /**
    * Return an array that contains all of the elements in this RDD.
+   * 返回所有运行的结果集
    */
   @deprecated("use collect", "1.0.0")
   def toArray(): Array[T] = withScope {
@@ -1001,6 +1044,7 @@ abstract class RDD[T: ClassTag](
    *
    * Uses `this` partitioner/partition size, because even if `other` is huge, the resulting
    * RDD will be &lt;= us.
+   * 返回在RDD中出现，并且不在otherRDD中出现的元素，不去重
    */
   def subtract(other: RDD[T]): RDD[T] = withScope {
     subtract(other, partitioner.getOrElse(new HashPartitioner(partitions.length)))
@@ -1015,6 +1059,7 @@ abstract class RDD[T: ClassTag](
 
   /**
    * Return an RDD with the elements from `this` that are not in `other`.
+   * 返回在RDD中出现，并且不在otherRDD中出现的元素，不去重
    */
   def subtract(
       other: RDD[T],
@@ -1039,21 +1084,34 @@ abstract class RDD[T: ClassTag](
   /**
    * Reduces the elements of this RDD using the specified commutative and
    * associative binary operator.
+   * 连续两个元素进行f处理,最终转换成一个T元素
+   *
+   * reduce将RDD中元素两两传递给输入函数，同时产生一个新的值，新产生的值与RDD中下一个元素再被传递给输入函数直到最后只有一个值为止。
+举例
+scala> val c = sc.parallelize(1 to 10)
+scala> c.reduce((x, y) => x + y)
+res4: Int = 55
    */
   def reduce(f: (T, T) => T): T = withScope {
     val cleanF = sc.clean(f)
+
+    //即每一个partition返回一个元素T
+    //表示定义reducePartition方法,参数是 Iterator[T]  返回值是T, 实际上函数体是 iter =>...
     val reducePartition: Iterator[T] => Option[T] = iter => {
       if (iter.hasNext) {
-        Some(iter.reduceLeft(cleanF))
+        Some(iter.reduceLeft(cleanF)) //从左到右,连续两个元素,进行f处理,最终产生一个T元素
       } else {
         None
       }
     }
-    var jobResult: Option[T] = None
+
+
+    var jobResult: Option[T] = None //最终的结果
+    //合并每一个partition的结果集,参数是第几个partition,对应的结果集
     val mergeResult = (index: Int, taskResult: Option[T]) => {
       if (taskResult.isDefined) {
         jobResult = jobResult match {
-          case Some(value) => Some(f(value, taskResult.get))
+          case Some(value) => Some(f(value, taskResult.get))//将每一个结果集与总结果集运算
           case None => taskResult
         }
       }

@@ -24,14 +24,16 @@ import scala.reflect.ClassTag
 import org.apache.spark._
 import org.apache.spark.util.Utils
 
+//对两个RDD进行笛卡尔计算,返回RDD[(T, U)],这个函数对内存消耗较大,使用时候需要谨慎
 private[spark]
 class CartesianPartition(
-    idx: Int,
-    @transient rdd1: RDD[_],
-    @transient rdd2: RDD[_],
-    s1Index: Int,
-    s2Index: Int
+    idx: Int,//最终的第几个分区
+    @transient rdd1: RDD[_],//第一个RDD对象
+    @transient rdd2: RDD[_],//第二个RDD对象
+    s1Index: Int,//第一个rdd对象所在分区
+    s2Index: Int//第二个rdd对象所在分区
   ) extends Partition {
+  //分别获取两个RDD的partition内容
   var s1 = rdd1.partitions(s1Index)
   var s2 = rdd2.partitions(s2Index)
   override val index: Int = idx
@@ -45,21 +47,22 @@ class CartesianPartition(
   }
 }
 
+//对两个RDD进行笛卡尔计算,返回RDD[(T, U)],这个函数对内存消耗较大,使用时候需要谨慎
 private[spark]
 class CartesianRDD[T: ClassTag, U: ClassTag](
     sc: SparkContext,
-    var rdd1 : RDD[T],
-    var rdd2 : RDD[U])
-  extends RDD[Pair[T, U]](sc, Nil)
+    var rdd1 : RDD[T],//第一个RDD
+    var rdd2 : RDD[U])//第二个RDD
+  extends RDD[Pair[T, U]](sc, Nil)//产生新的RDD
   with Serializable {
 
-  val numPartitionsInRdd2 = rdd2.partitions.length
+  val numPartitionsInRdd2 = rdd2.partitions.length //rdd2的partition数量
 
   override def getPartitions: Array[Partition] = {
     // create the cross product split
-    val array = new Array[Partition](rdd1.partitions.length * rdd2.partitions.length)
-    for (s1 <- rdd1.partitions; s2 <- rdd2.partitions) {
-      val idx = s1.index * numPartitionsInRdd2 + s2.index
+    val array = new Array[Partition](rdd1.partitions.length * rdd2.partitions.length) //最终partition数量是两者乘积
+    for (s1 <- rdd1.partitions; s2 <- rdd2.partitions) {//两个for循环嵌套
+      val idx = s1.index * numPartitionsInRdd2 + s2.index //获取最终序号
       array(idx) = new CartesianPartition(idx, rdd1, rdd2, s1.index, s2.index)
     }
     array
