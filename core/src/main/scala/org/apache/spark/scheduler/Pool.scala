@@ -28,7 +28,6 @@ import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 /**
  * An Schedulable entity that represent collection of Pools or TaskSetManagers
  */
-
 private[spark] class Pool(
     val poolName: String,
     val schedulingMode: SchedulingMode,
@@ -43,7 +42,7 @@ private[spark] class Pool(
   val schedulableNameToSchedulable = new ConcurrentHashMap[String, Schedulable]
   var weight = initWeight
   var minShare = initMinShare
-  var runningTasks = 0 //该队列中正在运行的任务数量
+  var runningTasks = 0 //该队列的子子孙孙中正在运行的任务数量
   var priority = 0
 
   // A pool's stage id is used to break the tie in scheduling.
@@ -77,7 +76,7 @@ private[spark] class Pool(
     if (schedulableNameToSchedulable.containsKey(schedulableName)) {
       return schedulableNameToSchedulable.get(schedulableName)
     }
-    for (schedulable <- schedulableQueue) {
+    for (schedulable <- schedulableQueue) {//在每一个子队列中继续查找
       val sched = schedulable.getSchedulableByName(schedulableName)
       if (sched != null) {
         return sched
@@ -98,10 +97,11 @@ private[spark] class Pool(
     shouldRevive
   }
 
+  //获取排序后的TaskSetManager队列
   override def getSortedTaskSetQueue: ArrayBuffer[TaskSetManager] = {
     var sortedTaskSetQueue = new ArrayBuffer[TaskSetManager]
     val sortedSchedulableQueue =
-      schedulableQueue.toSeq.sortWith(taskSetSchedulingAlgorithm.comparator)
+      schedulableQueue.toSeq.sortWith(taskSetSchedulingAlgorithm.comparator) //所有调度任务进行排序
     for (schedulable <- sortedSchedulableQueue) {
       sortedTaskSetQueue ++= schedulable.getSortedTaskSetQueue
     }

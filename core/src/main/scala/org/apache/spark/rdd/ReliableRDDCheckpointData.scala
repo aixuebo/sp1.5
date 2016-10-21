@@ -56,13 +56,13 @@ private[spark] class ReliableRDDCheckpointData[T: ClassTag](@transient rdd: RDD[
   /**
    * Materialize this RDD and write its content to a reliable DFS.
    * This is called immediately after the first action invoked on this RDD has completed.
-   * 
+   * 真正去做checkPoint操作
    */
   protected override def doCheckpoint(): CheckpointRDD[T] = {
     // Create the output path for the checkpoint 创建RDD的输出目录
     val path = new Path(cpDir)
     val fs = path.getFileSystem(rdd.context.hadoopConfiguration)
-    if (!fs.mkdirs(path)) {
+    if (!fs.mkdirs(path)) {// 创建目录
       throw new SparkException(s"Failed to create checkpoint path $cpDir")
     }
 

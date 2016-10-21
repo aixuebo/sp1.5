@@ -87,12 +87,21 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    *
    * In addition, users can control the partitioning of the output RDD, and whether to perform
    * map-side aggregation (if a mapper can produce multiple items with the same key).
+   *
+   * 对key-value的数据进行聚合
+   * 规则是
+   * 1.循环每一个key-value,对value进行处理,转换成C对象,将key和c存储到map中
+   *   过程:先从map中查找key,获取对应的C,如果C没有,则说明第一次遇见该key,则将value转换成C,即createCombiner函数
+   *        如果从map中查获到key对应的c,则调用mergeValue函数,让C和新的V进行运算,生成C
+   * 2.合并过程,让每一个key-c进行合并,最终生成key-C对象
+   *
+   * 即对key相同的数据进行合并,产生一个新的对象C,最终返回key-c,每一个partition仅有一个key-c对象
    */
-  def combineByKey[C](createCombiner: V => C,
-      mergeValue: (C, V) => C,
-      mergeCombiners: (C, C) => C,
+  def combineByKey[C](createCombiner: V => C,//可以value转换成C的函数
+      mergeValue: (C, V) => C,//对每一个C与V交互生成C的函数
+      mergeCombiners: (C, C) => C,//将多个C进行合并的函数
       partitioner: Partitioner,
-      mapSideCombine: Boolean = true,
+      mapSideCombine: Boolean = true,//是否map端合并操作
       serializer: Serializer = null): RDD[(K, C)] = self.withScope {
     require(mergeCombiners != null, "mergeCombiners must be defined") // required as of Spark 0.9.0
     if (keyClass.isArray) {//校验key是数组的时候,该如何处理
@@ -103,14 +112,18 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
         throw new SparkException("Default partitioner cannot partition array keys.")
       }
     }
+
+    //创建聚合类
     val aggregator = new Aggregator[K, V, C](
       self.context.clean(createCombiner),
       self.context.clean(mergeValue),
       self.context.clean(mergeCombiners))
+
+
     if (self.partitioner == Some(partitioner)) {
       self.mapPartitions(iter => {
         val context = TaskContext.get()
-        new InterruptibleIterator(context, aggregator.combineValuesByKey(iter, context))
+        new InterruptibleIterator(context, aggregator.combineValuesByKey(iter, context))//对每一个partition进行合并,生成key-c对象
       }, preservesPartitioning = true)
     } else {
       new ShuffledRDD[K, V, C](self, partitioner)
@@ -138,11 +151,12 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * partition, and the latter is used for merging values between partitions. To avoid memory
    * allocation, both of these functions are allowed to modify and return their first argument
    * instead of creating a new U.
+   * 与combineByKey方法类似,只是第一次key出现的时候,value不需要转换成C,而是直接调用seqOp即可,其中seqOp的U就是初始化值zeroValue
    */
   def aggregateByKey[U: ClassTag](zeroValue: U, partitioner: Partitioner)(seqOp: (U, V) => U,
       combOp: (U, U) => U): RDD[(K, U)] = self.withScope {
     // Serialize the zero value to a byte array so that we can get a new clone of it on each key
-    val zeroBuffer = SparkEnv.get.serializer.newInstance().serialize(zeroValue)
+    val zeroBuffer = SparkEnv.get.serializer.newInstance().serialize(zeroValue)//初始化赋值
     val zeroArray = new Array[Byte](zeroBuffer.limit)
     zeroBuffer.get(zeroArray)
 
@@ -186,6 +200,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * Merge the values for each key using an associative function and a neutral "zero value" which
    * may be added to the result an arbitrary number of times, and must not change the result
    * (e.g., Nil for list concatenation, 0 for addition, or 1 for multiplication.).
+   * 与reduceByKey一样,都是对V进行处理,返回值还是V,只是区别在于.每一个key的第一个value,要与初始值一起参与F运算,而reduceByKey第一次出现的V就直接返回V
    */
   def foldByKey(
       zeroValue: V,
@@ -284,6 +299,15 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * Merge the values for each key using an associative reduce function. This will also perform
    * the merging locally on each mapper before sending results to a reducer, similarly to a
    * "combiner" in MapReduce.
+   *
+  顾名思义，reduceByKey就是对元素为KV对的RDD中Key相同的元素的Value进行reduce，因此，Key相同的多个元素的值被reduce为一个值，然后与原RDD中的Key组成一个新的KV对。
+
+举例:
+
+scala> val a = sc.parallelize(List((1,2),(3,4),(3,6)))
+scala> a.reduceByKey((x,y) => x + y).collect
+res7: Array[(Int, Int)] = Array((1,2), (3,10))
+上述例子中，对Key相同的元素的值求和，因此Key为3的两个元素被转为了(3,10)。
    */
   def reduceByKey(partitioner: Partitioner, func: (V, V) => V): RDD[(K, V)] = self.withScope {
     combineByKey[V]((v: V) => v, func, func, partitioner)
@@ -304,6 +328,8 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * the merging locally on each mapper before sending results to a reducer, similarly to a
    * "combiner" in MapReduce. Output will be hash-partitioned with the existing partitioner/
    * parallelism level.
+   *
+   * 相当于group by key,然后同一个key下面的value进行func函数处理,最终生成RDD[K,V]
    */
   def reduceByKey(func: (V, V) => V): RDD[(K, V)] = self.withScope {
     reduceByKey(defaultPartitioner(self), func)
@@ -323,7 +349,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       throw new SparkException("reduceByKeyLocally() does not support array keys")
     }
 
-    //迭代每一个原始RDD的k-v键值对.返回新的key-value值,key还是原来的key,value经过func计算的value值
+    //迭代每一个partition的k-v键值对.返回新的key-value值,key还是原来的key,value经过func计算的value值
     val reducePartition = (iter: Iterator[(K, V)]) => {
       val map = new JHashMap[K, V]
       
@@ -332,10 +358,10 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
        * 如果key存在,则将存在的value值以及新的value值分别为两个函数,调用f,返回新的值
        */
       iter.foreach { pair =>
-        val old = map.get(pair._1)
-        map.put(pair._1, if (old == null) pair._2 else cleanedF(old, pair._2))
+        val old = map.get(pair._1)//查找key对应的value
+        map.put(pair._1, if (old == null) pair._2 else cleanedF(old, pair._2))//如果value已经存在,则要新老value进行运算
       }
-      Iterator(map)
+      Iterator(map)//最终返回该partition上运算后的key-value
     } : Iterator[JHashMap[K, V]]
 
       /**
@@ -351,6 +377,10 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       m1
     } : JHashMap[K, V]
 
+        /**
+         * 1.先计算每一个partition,生成key-value
+         * 2.合并每一个partition的值
+         */
     self.mapPartitions(reducePartition).reduce(mergeMaps)
   }
 
@@ -367,6 +397,11 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * the whole thing is loaded into the driver's memory.
    * To handle very large results, consider using rdd.mapValues(_ => 1L).reduceByKey(_ + _), which
    * returns an RDD[T, Long] instead of a map.
+   *
+   * 1.先将RDD[K,V] 转换成RDD[K,1]
+   * 2.对相同的key的value进行_ + _c处理,返回RDD[K,V],其中key不变,value就是相同key出现的次数
+   * 3.将结果集抓去到本地,转换成Map
+   * 返回值[key,key相同的元素的次数]
    */
   def countByKey(): Map[K, Long] = self.withScope {
     self.mapValues(_ => 1L).reduceByKey(_ + _).collect().toMap
@@ -490,14 +525,15 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    *
    * Note: As currently implemented, groupByKey must be able to hold all the key-value pairs for any
    * key in memory. If a key has too many values, it can result in an [[OutOfMemoryError]].
+   * 按照key进行分组,value是相同key组成的集合迭代器
    */
   def groupByKey(partitioner: Partitioner): RDD[(K, Iterable[V])] = self.withScope {
     // groupByKey shouldn't use map side combine because map side combine does not
     // reduce the amount of data shuffled and requires all map side data be inserted
     // into a hash table, leading to more objects in the old gen.
-    val createCombiner = (v: V) => CompactBuffer(v)
-    val mergeValue = (buf: CompactBuffer[V], v: V) => buf += v
-    val mergeCombiners = (c1: CompactBuffer[V], c2: CompactBuffer[V]) => c1 ++= c2
+    val createCombiner = (v: V) => CompactBuffer(v) //第一次出现key的时候,创建一个队列
+    val mergeValue = (buf: CompactBuffer[V], v: V) => buf += v //将value添加到队列中
+    val mergeCombiners = (c1: CompactBuffer[V], c2: CompactBuffer[V]) => c1 ++= c2 //合并key相同的队列
     val bufs = combineByKey[CompactBuffer[V]](
       createCombiner, mergeValue, mergeCombiners, partitioner, mapSideCombine = false)
     bufs.asInstanceOf[RDD[(K, Iterable[V])]]
@@ -521,6 +557,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
 
   /**
    * Return a copy of the RDD partitioned using the specified partitioner.
+   * 重新对RDD进行partition分组
    */
   def partitionBy(partitioner: Partitioner): RDD[(K, V)] = self.withScope {
     if (keyClass.isArray && partitioner.isInstanceOf[HashPartitioner]) {
@@ -541,8 +578,9 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * 返回值RDD[(K, (V, W))],表示是相同的key做为key,value是元组,表示第一个RDD的value和第二个RDD的value组成的元组
    */
   def join[W](other: RDD[(K, W)], partitioner: Partitioner): RDD[(K, (V, W))] = self.withScope {
+    //this.cogroup返回RDD[(K, (Iterable[V], Iterable[W]))]
     this.cogroup(other, partitioner).flatMapValues( pair =>
-      for (v <- pair._1.iterator; w <- pair._2.iterator) yield (v, w)
+      for (v <- pair._1.iterator; w <- pair._2.iterator) yield (v, w) //两层循环,分别笛卡尔乘积打印v和w
     )
   }
 
@@ -551,14 +589,15 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * resulting RDD will either contain all pairs (k, (v, Some(w))) for w in `other`, or the
    * pair (k, (v, None)) if no elements in `other` have key k. Uses the given Partitioner to
    * partition the output RDD.
+   *
    */
   def leftOuterJoin[W](
       other: RDD[(K, W)],
-      partitioner: Partitioner): RDD[(K, (V, Option[W]))] = self.withScope {
+      partitioner: Partitioner): RDD[(K, (V, Option[W]))] = self.withScope { //左连接,因此W可能是没有内容,因此是Option对象
     this.cogroup(other, partitioner).flatMapValues { pair =>
-      if (pair._2.isEmpty) {
+      if (pair._2.isEmpty) {//如果就没有右边的数据,因此直接输出即可
         pair._1.iterator.map(v => (v, None))
-      } else {
+      } else {//说明如果有右边的对象,则笛卡尔乘积关联
         for (v <- pair._1.iterator; w <- pair._2.iterator) yield (v, Some(w))
       }
     }
@@ -571,9 +610,9 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * partition the output RDD.
    */
   def rightOuterJoin[W](other: RDD[(K, W)], partitioner: Partitioner)
-      : RDD[(K, (Option[V], W))] = self.withScope {
+      : RDD[(K, (Option[V], W))] = self.withScope {//右连接,因此V可能是没有内容,因此是Option对象
     this.cogroup(other, partitioner).flatMapValues { pair =>
-      if (pair._1.isEmpty) {
+      if (pair._1.isEmpty) {//右边是空,则直接输出
         pair._2.iterator.map(w => (None, w))
       } else {
         for (v <- pair._1.iterator; w <- pair._2.iterator) yield (Some(v), w)
@@ -590,11 +629,11 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * in `this` have key k. Uses the given Partitioner to partition the output RDD.
    */
   def fullOuterJoin[W](other: RDD[(K, W)], partitioner: Partitioner)
-      : RDD[(K, (Option[V], Option[W]))] = self.withScope {
+      : RDD[(K, (Option[V], Option[W]))] = self.withScope {//全表连接,只要出现过一次key,则V和W有一个是空,或者都不是空,至于哪个是空是不确定的,因此都是Option对象
     this.cogroup(other, partitioner).flatMapValues {
-      case (vs, Seq()) => vs.iterator.map(v => (Some(v), None))
-      case (Seq(), ws) => ws.iterator.map(w => (None, Some(w)))
-      case (vs, ws) => for (v <- vs.iterator; w <- ws.iterator) yield (Some(v), Some(w))
+      case (vs, Seq()) => vs.iterator.map(v => (Some(v), None))//1对空
+      case (Seq(), ws) => ws.iterator.map(w => (None, Some(w)))//空对1
+      case (vs, ws) => for (v <- vs.iterator; w <- ws.iterator) yield (Some(v), Some(w))//多对多
     }
   }
 
@@ -732,7 +771,8 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   /**
    * Pass each value in the key-value pair RDD through a map function without changing the keys;
    * this also retains the original RDD's partitioning.
-   * 将RDD[K-V]转换成RDD[k,f[V=>U]] = RDD[k,U]操作 
+   * 将RDD[K-V]转换成RDD[k,f[V=>U]] = RDD[k,U]操作
+   * 即对key-value中的value进行map方法映射,转换成其他对象,最终将RDD[k,v]转换成RDD[k,u]
    */
   def mapValues[U](f: V => U): RDD[(K, U)] = self.withScope {
     val cleanF = self.context.clean(f)
@@ -924,17 +964,17 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   def lookup(key: K): Seq[V] = self.withScope {
     self.partitioner match {
       case Some(p) =>
-        val index = p.getPartition(key)
+        val index = p.getPartition(key)//key分配在第几个partition上
         
         //迭代key-value,找到key与参数key相同的,将value追加到ArrayBuffer中返回即可
         val process = (it: Iterator[(K, V)]) => {
           val buf = new ArrayBuffer[V]
-          for (pair <- it if pair._1 == key) {
+          for (pair <- it if pair._1 == key) {//找到与key相同的,就添加到队列中
             buf += pair._2
           }
           buf
         } : Seq[V]
-        val res = self.context.runJob(self, process, Array(index))
+        val res = self.context.runJob(self, process, Array(index))//处理index个partition对象
         res(0)
       case None =>
         self.filter(_._1 == key).map(_._2).collect() //如果没有partition,则需要遍历整个RDD,寻找与key相同的value值

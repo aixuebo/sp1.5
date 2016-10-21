@@ -27,6 +27,13 @@ import org.apache.spark.util.collection.{AppendOnlyMap, ExternalAppendOnlyMap}
  * @param createCombiner function to create the initial value of the aggregation.
  * @param mergeValue function to merge a new value into the aggregation result.
  * @param mergeCombiners function to merge outputs from multiple mergeValue function.
+ *
+ * 对key-value的数据进行聚合
+ * 规则是
+ * 1.循环每一个key-value,对value进行处理,转换成C对象,将key和c存储到map中
+ *   过程:先从map中查找key,获取对应的C,如果C没有,则说明第一次遇见该key,则将value转换成C,即createCombiner函数
+ *        如果从map中查获到key对应的c,则调用mergeValue函数,让C和新的V进行运算,生成C
+ * 2.合并过程,让每一个key-c进行合并,最终生成key-C对象
  */
 @DeveloperApi
 case class Aggregator[K, V, C] (

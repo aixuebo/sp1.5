@@ -48,6 +48,7 @@ abstract class NarrowDependency[T](_rdd: RDD[T]) extends Dependency[T] {
    * Get the parent partitions for a child partition.
    * @param partitionId a partition of the child RDD 参数是子RDD的partitionId
    * @return the partitions of the parent RDD that the child partition depends upon 返回值是与该子RDD的partition对应的N个父RDD的partition
+   * 表示该partition依赖父RDD的哪些partition序号集合
    */
   def getParents(partitionId: Int): Seq[Int]
 

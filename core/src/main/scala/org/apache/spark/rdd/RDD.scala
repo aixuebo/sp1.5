@@ -1130,6 +1130,7 @@ res4: Int = 55
   def treeReduce(f: (T, T) => T, depth: Int = 2): T = withScope {
     require(depth >= 1, s"Depth must be greater than or equal to 1 but got $depth.")
     val cleanF = context.clean(f)
+    //给定一个迭代器,返回跟参数一个类型的结果,从左到右的,每一个元素进行f函数处理
     val reducePartition: Iterator[T] => Option[T] = iter => {
       if (iter.hasNext) {
         Some(iter.reduceLeft(cleanF))
@@ -1137,6 +1138,7 @@ res4: Int = 55
         None
       }
     }
+    //每一个partition的元素进行f函数处理
     val partiallyReduced = mapPartitions(it => Iterator(reducePartition(it)))
     val op: (Option[T], Option[T]) => Option[T] = (c, x) => {
       if (c.isDefined && x.isDefined) {
@@ -1165,13 +1167,15 @@ res4: Int = 55
    * apply the fold to each element sequentially in some defined ordering. For functions
    * that are not commutative, the result may differ from that of a fold applied to a
    * non-distributed collection.
+   *
+   * 每一个partition都从zeroValue开始初始化,剩下的与reduce相同
    */
   def fold(zeroValue: T)(op: (T, T) => T): T = withScope {
     // Clone the zero value since we will also be serializing it as part of tasks
-    var jobResult = Utils.clone(zeroValue, sc.env.closureSerializer.newInstance())
+    var jobResult = Utils.clone(zeroValue, sc.env.closureSerializer.newInstance())//结果先赋值为zeroValue
     val cleanOp = sc.clean(op)
-    val foldPartition = (iter: Iterator[T]) => iter.fold(zeroValue)(cleanOp) //针对一个Iterator进行处理
-    val mergeResult = (index: Int, taskResult: T) => jobResult = op(jobResult, taskResult) //合并结果集
+    val foldPartition = (iter: Iterator[T]) => iter.fold(zeroValue)(cleanOp) //针对一个Iterator进行处理,每一个partition都预先加了zeroValue
+    val mergeResult = (index: Int, taskResult: T) => jobResult = op(jobResult, taskResult) //合并每一个partition的结果集,因为jobResult已经是zeroValue了,因此相当于结果集也加了一次zeroValue
     sc.runJob(this, foldPartition, mergeResult)
     jobResult
   }
@@ -1183,14 +1187,17 @@ res4: Int = 55
    * and one operation for merging two U's, as in scala.TraversableOnce. Both of these functions are
    * allowed to modify and return their first argument instead of creating a new U to avoid memory
    * allocation.
+   * 该函数与fold相同,但是区别在于fold是输入和输出相同的类型,因此需要一个函数即可,而该函数是输出可以与输入不相同
+   * seqOp表示将输入T与初始化函数U进行处理,产生新的对象U,然后每一个partition进行如此处理,即每一个partition的输出就是一个U
+   * 当合并每一个partition的U的时候,因此进入第二个函数comOp,最终输出一个U
    */
   def aggregate[U: ClassTag](zeroValue: U)(seqOp: (U, T) => U, combOp: (U, U) => U): U = withScope {
     // Clone the zero value since we will also be serializing it as part of tasks
-    var jobResult = Utils.clone(zeroValue, sc.env.serializer.newInstance())
+    var jobResult = Utils.clone(zeroValue, sc.env.serializer.newInstance())//结果集先赋值为zeroValue
     val cleanSeqOp = sc.clean(seqOp)
     val cleanCombOp = sc.clean(combOp)
-    val aggregatePartition = (it: Iterator[T]) => it.aggregate(zeroValue)(cleanSeqOp, cleanCombOp)
-    val mergeResult = (index: Int, taskResult: U) => jobResult = combOp(jobResult, taskResult)
+    val aggregatePartition = (it: Iterator[T]) => it.aggregate(zeroValue)(cleanSeqOp, cleanCombOp) //针对partition进行处理,每一个partiton都加了一个zeroValue
+    val mergeResult = (index: Int, taskResult: U) => jobResult = combOp(jobResult, taskResult)//对每一个partition结果集合并,因为jobResult已经是zeroValue了,因此相当于结果集也加了一次zeroValue
     sc.runJob(this, aggregatePartition, mergeResult)
     jobResult
   }
@@ -1264,9 +1271,14 @@ res4: Int = 55
    * the whole thing is loaded into the driver's memory.
    * To handle very large results, consider using rdd.map(x =&gt; (x, 1L)).reduceByKey(_ + _), which
    * returns an RDD[T, Long] instead of a map.
+   *
+   * 获取每一个值出现的次数,即1出现4次..
+   * val xx = sc.parallelize(List(1,1,1,1,2,2,3,6,5,9))
+println(xx.countByValue())
+print Map(5 -> 1, 1 -> 4, 6 -> 1, 9 -> 1, 2 -> 2, 3 -> 1)
    */
   def countByValue()(implicit ord: Ordering[T] = null): Map[T, Long] = withScope {
-    map(value => (value, null)).countByKey()
+    map(value => (value, null)).countByKey() //把value设置成 key-value形式
   }
 
   /**
@@ -1384,36 +1396,42 @@ res4: Int = 55
    *
    * @note due to complications in the internal implementation, this method will raise
    * an exception if called on an RDD of `Nothing` or `Null`.
+   * 获取前num个元素,这些元素是从第0个partition开始获取,一直获取到num数量为止
    */
   def take(num: Int): Array[T] = withScope {
     if (num == 0) {
       new Array[T](0)
     } else {
-      val buf = new ArrayBuffer[T]
-      val totalParts = this.partitions.length
-      var partsScanned = 0
-      while (buf.size < num && partsScanned < totalParts) {
-        // The number of partitions to try in this iteration. It is ok for this number to be
+      val buf = new ArrayBuffer[T]//拿回来的元素存储在这里
+      val totalParts = this.partitions.length //总partition数量
+      var partsScanned = 0//当前在第一个partition上扫描数据呢
+      while (buf.size < num && partsScanned < totalParts) {//只要数据没有取到位,就继续去取,并且只要扫描完一个partitioon后,还有partition,就继续扫描
+        // The number of partitions to try in this iteration. It is ok for this number to be 尝试去循环多少个partition
         // greater than totalParts because we actually cap it at totalParts in runJob.
-        var numPartsToTry = 1
-        if (partsScanned > 0) {
+        var numPartsToTry = 1//本次尝试接下来扫描多少个partition
+        if (partsScanned > 0) {//如果已经扫描了一个partition了,则可能接下来一次要扫描N个partition了,主要是为了提升效率
           // If we didn't find any rows after the previous iteration, quadruple and retry.
           // Otherwise, interpolate the number of partitions we need to try, but overestimate
           // it by 50%. We also cap the estimation in the end.
           if (buf.size == 0) {
-            numPartsToTry = partsScanned * 4
+            numPartsToTry = partsScanned * 4 //如果还没有数据呢,则扫描多些partition,因为可能数据太少了,很多partition文件内是没有元素的,所以要多扫描一些partition
           } else {
             // the left side of max is >=1 whenever partsScanned >= 2
-            numPartsToTry = Math.max((1.5 * num * partsScanned / buf.size).toInt - partsScanned, 1)
-            numPartsToTry = Math.min(numPartsToTry, partsScanned * 4)
+            numPartsToTry = Math.max((1.5 * num * partsScanned / buf.size).toInt - partsScanned, 1)//最少扫描一个partition
+            numPartsToTry = Math.min(numPartsToTry, partsScanned * 4)//控制上限,最多也就是partsScanned * 4
           }
         }
 
-        val left = num - buf.size
-        val p = partsScanned until math.min(partsScanned + numPartsToTry, totalParts)
-        val res = sc.runJob(this, (it: Iterator[T]) => it.take(left).toArray, p)
+        val left = num - buf.size//还要拿去多少个元素
 
-        res.foreach(buf ++= _.take(num - buf.size))
+        /**
+ 3 until 8
+c: scala.collection.immutable.Range = Range(3, 4, 5, 6, 7)
+         */
+        val p = partsScanned until math.min(partsScanned + numPartsToTry, totalParts)//从当前partition开始 获取N个接下来的partition
+        val res = sc.runJob(this, (it: Iterator[T]) => it.take(left).toArray, p)//从p的一组partition中以此获取数据,每一个partition最多获取left个数据
+
+        res.foreach(buf ++= _.take(num - buf.size))//不断的把每一个partition获取的元素拿去出来,直到拿完为止,就还下一个partition
         partsScanned += numPartsToTry
       }
 
@@ -1423,6 +1441,7 @@ res4: Int = 55
 
   /**
    * Return the first element in this RDD.
+   * 获取第一个元素
    */
   def first(): T = withScope {
     take(1) match {
@@ -1445,6 +1464,7 @@ res4: Int = 55
    * @param num k, the number of top elements to return
    * @param ord the implicit ordering for T
    * @return an array of top elements
+   * takeOrdered的倒序
    */
   def top(num: Int)(implicit ord: Ordering[T]): Array[T] = withScope {
     takeOrdered(num)(ord.reverse)
@@ -1465,20 +1485,27 @@ res4: Int = 55
    * @param num k, the number of elements to return
    * @param ord the implicit ordering for T
    * @return an array of top elements
+   *
+   * 1.每一个partition都有一个队列,都从队列中获取num个元素
+   * 2.合并每一个队列,但是最终合并后的队列也是num个元素
+   *
+   * 将RDD的元素进行排序,然后返回num个元素
    */
   def takeOrdered(num: Int)(implicit ord: Ordering[T]): Array[T] = withScope {
     if (num == 0) {
       Array.empty
     } else {
+
+      //每一个partition进行迭代
       val mapRDDs = mapPartitions { items =>
         // Priority keeps the largest elements, so let's reverse the ordering.
-        val queue = new BoundedPriorityQueue[T](num)(ord.reverse)
-        queue ++= util.collection.Utils.takeOrdered(items, num)(ord)
+        val queue = new BoundedPriorityQueue[T](num)(ord.reverse) //按照ord的倒叙创建一个队列,该队列最多存放num个元素
+        queue ++= util.collection.Utils.takeOrdered(items, num)(ord) //循环迭代器,将每一个元素存放到优先队列中
         Iterator.single(queue)
       }
-      if (mapRDDs.partitions.length == 0) {
+      if (mapRDDs.partitions.length == 0) {//没有partition,因此结果是空
         Array.empty
-      } else {
+      } else {//合并队列,每一个队列的所有元素进行合并,组成大队列,由于每一个队列都是有上限的,因此最终合并后的队列也是有上限的,就是num个元素,然后排序
         mapRDDs.reduce { (queue1, queue2) =>
           queue1 ++= queue2
           queue1
@@ -1517,6 +1544,8 @@ res4: Int = 55
 
   /**
    * Save this RDD as a text file, using string representations of elements.
+   * 保存到path路径下,key的类型是NullWritable,value的类型是Text
+   * 将每一个元素存储到text中
    */
   def saveAsTextFile(path: String): Unit = withScope {
     // https://issues.apache.org/jira/browse/SPARK-2075
@@ -1529,39 +1558,50 @@ res4: Int = 55
     //
     // Therefore, here we provide an explicit Ordering `null` to make sure the compiler generate
     // same bytecodes for `saveAsTextFile`.
-    val nullWritableClassTag = implicitly[ClassTag[NullWritable]]
-    val textClassTag = implicitly[ClassTag[Text]]
+    val nullWritableClassTag = implicitly[ClassTag[NullWritable]]//key的类型
+    val textClassTag = implicitly[ClassTag[Text]]//value的类型
+
+    //循环每一个partition的元素
     val r = this.mapPartitions { iter =>
       val text = new Text()
+      //将每一个元素赋值为x,将x的内容存储到text中,然后存储到hadoop中
       iter.map { x =>
         text.set(x.toString)
         (NullWritable.get(), text)
       }
     }
+
     RDD.rddToPairRDDFunctions(r)(nullWritableClassTag, textClassTag, null)
-      .saveAsHadoopFile[TextOutputFormat[NullWritable, Text]](path)
+      .saveAsHadoopFile[TextOutputFormat[NullWritable, Text]](path)//保存到path路径下,key的类型是NullWritable,value的类型是Text
   }
 
   /**
    * Save this RDD as a compressed text file, using string representations of elements.
+   * 保存到path路径下,key的类型是NullWritable,value的类型是Text
+   * 将每一个元素存储到text中,保存过程中可以编码
    */
   def saveAsTextFile(path: String, codec: Class[_ <: CompressionCodec]): Unit = withScope {
     // https://issues.apache.org/jira/browse/SPARK-2075
-    val nullWritableClassTag = implicitly[ClassTag[NullWritable]]
-    val textClassTag = implicitly[ClassTag[Text]]
+    val nullWritableClassTag = implicitly[ClassTag[NullWritable]]//key的类型
+    val textClassTag = implicitly[ClassTag[Text]]//value的类型
+
+    //循环每一个partition的元素
     val r = this.mapPartitions { iter =>
       val text = new Text()
+      //将每一个元素赋值为x,将x的内容存储到text中,然后存储到hadoop中
       iter.map { x =>
         text.set(x.toString)
         (NullWritable.get(), text)
       }
     }
+
     RDD.rddToPairRDDFunctions(r)(nullWritableClassTag, textClassTag, null)
-      .saveAsHadoopFile[TextOutputFormat[NullWritable, Text]](path, codec)
+      .saveAsHadoopFile[TextOutputFormat[NullWritable, Text]](path, codec) //保存到path路径下,key的类型是NullWritable,value的类型是Text
   }
 
   /**
    * Save this RDD as a SequenceFile of serialized objects.
+   * 保存成序列化文件
    */
   def saveAsObjectFile(path: String): Unit = withScope {
     this.mapPartitions(iter => iter.grouped(10).map(_.toArray))
@@ -1571,13 +1611,26 @@ res4: Int = 55
 
   /**
    * Creates tuples of the elements in this RDD by applying `f`.
+   * 为各个元素，按指定的函数生成key，形成key-value的RDD。
+  元素T通过函数转换成k,因此结果就是RDD[K,V]
+
+scala> val a = sc.parallelize(List("dog", "salmon", "salmon", "rat", "elephant"), 3)
+a: org.apache.spark.rdd.RDD[String] = ParallelCollectionRDD[123] at parallelize at <console>:21
+
+scala> val b = a.keyBy(_.length)
+b: org.apache.spark.rdd.RDD[(Int, String)] = MapPartitionsRDD[124] at keyBy at <console>:23
+
+scala> b.collect
+res80: Array[(Int, String)] = Array((3,dog), (6,salmon), (6,salmon), (3,rat), (8,elephant))
    */
   def keyBy[K](f: T => K): RDD[(K, T)] = withScope {
     val cleanedF = sc.clean(f)
     map(x => (cleanedF(x), x))
   }
 
-  /** A private method for tests, to look at the contents of each partition */
+  /** A private method for tests, to look at the contents of each partition
+    * 返回每一个partition的迭代器集合,即如果RDD有5个partition,则返回数组是5个,其中每一个元素又是一个迭代器,因此是数组套数组
+    **/
   private[spark] def collectPartitions(): Array[Array[T]] = withScope {
     sc.runJob(this, (iter: Iterator[T]) => iter.toArray)
   }
@@ -1762,6 +1815,7 @@ res4: Int = 55
    * Performs the checkpointing of this RDD by saving this. It is called after a job using this RDD
    * has completed (therefore the RDD has been materialized and potentially stored in memory).
    * doCheckpoint() is called recursively on the parent RDDs.
+   * 真正去做checkPoint操作
    */
   private[spark] def doCheckpoint(): Unit = {
     RDDOperationScope.withScope(sc, "checkpoint", allowNesting = false, ignoreParent = true) {
@@ -1891,7 +1945,6 @@ object RDD {
   // `import SparkContext._` to enable them. Now we move them here to make the compiler find
   // them automatically. However, we still keep the old functions in SparkContext for backward
   // compatibility and forward to the following functions directly.
-
   implicit def rddToPairRDDFunctions[K, V](rdd: RDD[(K, V)])
     (implicit kt: ClassTag[K], vt: ClassTag[V], ord: Ordering[K] = null): PairRDDFunctions[K, V] = {
     new PairRDDFunctions(rdd)
