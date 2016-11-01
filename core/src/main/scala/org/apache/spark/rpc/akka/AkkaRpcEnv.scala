@@ -51,7 +51,7 @@ private[spark] class AkkaRpcEnv private[akka] (
 
   //创建默认的PRC服务器地址
   private val defaultAddress: RpcAddress = {
-    val address = actorSystem.asInstanceOf[ExtendedActorSystem].provider.getDefaultAddress
+    val address = actorSystem.asInstanceOf[ExtendedActorSystem].provider.getDefaultAddress //akka://UniversityMessageSystem,即打印actorSystem的名字
     // In some test case, ActorSystem doesn't bind to any address.
     // So just use some default value since they are only some unit tests
     RpcAddress(address.host.getOrElse("localhost"), address.port.getOrElse(boundPort))
