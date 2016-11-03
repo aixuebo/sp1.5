@@ -28,13 +28,17 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.util.CallSite
 
 /**
- * Types of events that can be handled by the DAGScheduler. The DAGScheduler uses an event queue
- * architecture where any thread can post an event (e.g. a task finishing or a new job being
+ * Types of events that can be handled by the DAGScheduler.
+ * 调度器能够处理的事件类型
+ * The DAGScheduler uses an event queue architecture where any thread can post an event (e.g. a task finishing or a new job being
  * submitted) but there is a single "logic" thread that reads these events and takes decisions.
+ * 调度器使用事件队列去建筑,任何线程都能够发送一个事件(例如,task完成或者一个新的job正在提交中),但是有一个单独的逻辑线程能够读取这些事件和任务
  * This greatly simplifies synchronization.
+ * 这就是简单的同步方式
  */
-private[scheduler] sealed trait DAGSchedulerEvent
+private[scheduler] sealed trait DAGSchedulerEvent //基本类,表示调度事件
 
+//一个job已经被提交到调度了
 private[scheduler] case class JobSubmitted(
     jobId: Int,
     finalRDD: RDD[_],
@@ -45,13 +49,18 @@ private[scheduler] case class JobSubmitted(
     properties: Properties = null)
   extends DAGSchedulerEvent
 
+//取消一个stage阶段调度
 private[scheduler] case class StageCancelled(stageId: Int) extends DAGSchedulerEvent
 
+//取消一个job调度
 private[scheduler] case class JobCancelled(jobId: Int) extends DAGSchedulerEvent
 
+//取消全部job的调度
+private[scheduler] case object AllJobsCancelled extends DAGSchedulerEvent
+
+//取消一个组内全部job
 private[scheduler] case class JobGroupCancelled(groupId: String) extends DAGSchedulerEvent
 
-private[scheduler] case object AllJobsCancelled extends DAGSchedulerEvent
 
 private[scheduler]
 case class BeginEvent(task: Task[_], taskInfo: TaskInfo) extends DAGSchedulerEvent

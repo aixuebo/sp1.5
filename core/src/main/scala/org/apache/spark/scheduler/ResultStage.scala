@@ -22,18 +22,20 @@ import org.apache.spark.util.CallSite
 
 /**
  * The ResultStage represents the final stage in a job.
+ * 表示一个job最终产生的Stage,该阶段会包含各种子阶段
  */
 private[spark] class ResultStage(
-    id: Int,
-    rdd: RDD[_],
-    numTasks: Int,
-    parents: List[Stage],
-    firstJobId: Int,
+    id: Int,//该阶段的ID
+    rdd: RDD[_],//该阶段依赖的RDD输入源
+    numTasks: Int,//rdd的partition数量
+    parents: List[Stage],//该阶段依赖哪些父Stage集合
+    firstJobId: Int,//该阶段属于哪个jobid
     callSite: CallSite)
   extends Stage(id, rdd, numTasks, parents, firstJobId, callSite) {
 
   // The active job for this result stage. Will be empty if the job has already finished
   // (e.g., because the job was cancelled).
+  //该job运行中的内存对象
   var resultOfJob: Option[ActiveJob] = None
 
   override def toString: String = "ResultStage " + id

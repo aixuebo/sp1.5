@@ -39,7 +39,9 @@ class StageInfo(
     private[spark] val taskLocalityPreferences: Seq[Seq[TaskLocation]] = Seq.empty) {
   /** When this stage was submitted from the DAGScheduler to a TaskScheduler. */
   var submissionTime: Option[Long] = None
-  /** Time when all tasks in the stage completed or when the stage was cancelled. */
+  /** Time when all tasks in the stage completed or when the stage was cancelled.
+    * 该阶段完成的时间
+    **/
   var completionTime: Option[Long] = None
   /** If the stage failed, the reason why. */
   var failureReason: Option[String] = None

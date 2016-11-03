@@ -46,7 +46,7 @@ private[spark] object AkkaUtils extends Logging {
    * of a fatal exception. This is used by [[org.apache.spark.executor.Executor]].
    */
   def createActorSystem(
-      name: String,//接收收件箱的名称
+      name: String,//actorSystem的Name
       host: String,//服务器所在host
       port: Int,//服务器所在port
       conf: SparkConf,
@@ -63,7 +63,7 @@ private[spark] object AkkaUtils extends Logging {
    * 创建一个Actor系统,返回该系统以及系统所在port
    */
   private def doCreateActorSystem(
-      name: String,
+      name: String,//actorSystem的Name
       host: String,
       port: Int,
       conf: SparkConf,
@@ -136,10 +136,10 @@ private[spark] object AkkaUtils extends Logging {
   private val AKKA_MAX_FRAME_SIZE_IN_MB = Int.MaxValue / 1024 / 1024
 
   /** Returns the configured max frame size for Akka messages in bytes. 
-   * 设置传递一个message允许的字节上限,参数单位是M,将其转换成字节  
+    * 返回一个message允许的上限,单位是字节
    **/
   def maxFrameSizeBytes(conf: SparkConf): Int = {
-    val frameSizeInMB = conf.getInt("spark.akka.frameSize", 128)
+    val frameSizeInMB = conf.getInt("spark.akka.frameSize", 128)//参数单位是M,最后需要转换成字节
     if (frameSizeInMB > AKKA_MAX_FRAME_SIZE_IN_MB) {
       throw new IllegalArgumentException(
         s"spark.akka.frameSize should not be greater than $AKKA_MAX_FRAME_SIZE_IN_MB MB")
@@ -147,7 +147,9 @@ private[spark] object AkkaUtils extends Logging {
     frameSizeInMB * 1024 * 1024 //参数单位是M,将其转换成字节  
   }
 
-  /** Space reserved for extra data in an Akka message besides serialized task or task result. */
+  /** Space reserved for extra data in an Akka message besides serialized task or task result.
+    * 除了序列化任务或任务结果之外，还为Akka消息中的额外数据保留的空间
+    **/
   val reservedSizeBytes = 200 * 1024
 
   /**
@@ -170,34 +172,34 @@ private[spark] object AkkaUtils extends Logging {
    * 在尝试N次后依然失败.则抛异常
    */
   def askWithReply[T](
-      message: Any,
-      actor: ActorRef,
-      maxAttempts: Int,
-      retryInterval: Long,
-      timeout: RpcTimeout): T = {
+      message: Any,//要发送的信息
+      actor: ActorRef,//发送给哪个Actor
+      maxAttempts: Int,//最大尝试次数
+      retryInterval: Long,//尝试间隔
+      timeout: RpcTimeout): T = {//超时时间  T表示返回值
     // TODO: Consider removing multiple attempts
     if (actor == null) {//不知道发向哪个actor服务器,因此抛异常
       throw new SparkException(s"Error sending message [message = $message]" +
         " as actor is null ")
     }
-    var attempts = 0
-    var lastException: Exception = null
-    while (attempts < maxAttempts) {
+    var attempts = 0 //已经尝试发送过几次
+    var lastException: Exception = null //记录上一次异常
+    while (attempts < maxAttempts) {//说明尝试次数尚未使用完
       attempts += 1
       try {
-        val future = actor.ask(message)(timeout.duration)
-        val result = timeout.awaitResult(future)
-        if (result == null) {
+        val future = actor.ask(message)(timeout.duration) //发送message信息.并且等待future结果
+        val result = timeout.awaitResult(future)//在单位时间内等待结果
+        if (result == null) {//说明结果没有等到,则抛异常
           throw new SparkException("Actor returned null")
         }
-        return result.asInstanceOf[T]
+        return result.asInstanceOf[T]//说明结果已经等到,则结束
       } catch {
-        case ie: InterruptedException => throw ie
+        case ie: InterruptedException => throw ie //真的有异常了,抛出异常
         case e: Exception =>
-          lastException = e
+          lastException = e //记录上一次异常,并且打印信息,继续循环尝试
           logWarning(s"Error sending message [message = $message] in $attempts attempts", e)
       }
-      if (attempts < maxAttempts) {
+      if (attempts < maxAttempts) {//休息一阵子
         Thread.sleep(retryInterval)
       }
     }
@@ -207,11 +209,12 @@ private[spark] object AkkaUtils extends Logging {
       s"Error sending message [message = $message]", lastException)
   }
 
+  //获取远程driver的ActorRef对象
   def makeDriverRef(name: String, conf: SparkConf, actorSystem: ActorSystem): ActorRef = {
-    val driverActorSystemName = SparkEnv.driverActorSystemName
+    val driverActorSystemName = SparkEnv.driverActorSystemName//driver指定的Actor系统名字
     val driverHost: String = conf.get("spark.driver.host", "localhost")
     val driverPort: Int = conf.getInt("spark.driver.port", 7077)
-    Utils.checkHost(driverHost, "Expected hostname")
+    Utils.checkHost(driverHost, "Expected hostname")//断言driverHost一定仅仅有host,不能有port
     val url = address(protocol(actorSystem), driverActorSystemName, driverHost, driverPort, name)
     val timeout = RpcUtils.lookupRpcTimeout(conf)
     logInfo(s"Connecting to $name: $url")
@@ -220,21 +223,21 @@ private[spark] object AkkaUtils extends Logging {
 
   //生成一个服务器地址对象ActorRef,该对象是客户端需要持有的,向该对象发送信息
   def makeExecutorRef(
-      name: String,
+      name: String,//actor的name全路径
       conf: SparkConf,
       host: String,
       port: Int,
       actorSystem: ActorSystem): ActorRef = {
-    val executorActorSystemName = SparkEnv.executorActorSystemName
+    val executorActorSystemName = SparkEnv.executorActorSystemName //指定的Actor系统名字
     //校验参数一定是host,不能有port
     Utils.checkHost(host, "Expected hostname")
     //生成真实交流的地址,即actor的收件箱
-    val url = address(protocol(actorSystem), executorActorSystemName, host, port, name)
+    val url = address(protocol(actorSystem), executorActorSystemName, host, port, name)//生成类似akka://systemName@host:port/user/actorName格式的akka的path
     //返回连接服务器的超时时间
     val timeout = RpcUtils.lookupRpcTimeout(conf)
-    logInfo(s"Connecting to $name: $url")
+    logInfo(s"Connecting to $name: $url") //打印连接该url对应的Actor
     //创建服务器对象
-    timeout.awaitResult(actorSystem.actorSelection(url).resolveOne(timeout.duration))
+    timeout.awaitResult(actorSystem.actorSelection(url).resolveOne(timeout.duration))//可以找到url对应的Actor的代理对象
   }
 
   //获取协议名称akka.ssl.tcp或者akka.tcp
@@ -254,6 +257,7 @@ private[spark] object AkkaUtils extends Logging {
   }
 
   //生成真实交流的地址,即actor的收件箱
+  //例如 akka://systemName@host:port/user/actorName
   def address(
       protocol: String,
       systemName: String,

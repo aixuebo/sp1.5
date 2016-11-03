@@ -40,7 +40,7 @@ private[spark] trait RpcCallContext {
 
   /**
    * The sender of this message.
-   * 发送一个信息给服务器
+   * 信息的发送者是谁
    */
   def sender: RpcEndpointRef
 }

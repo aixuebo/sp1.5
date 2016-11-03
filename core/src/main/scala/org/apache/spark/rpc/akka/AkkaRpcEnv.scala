@@ -160,9 +160,10 @@ private[spark] class AkkaRpcEnv private[akka] (
     endpointRef
   }
 
+  //发送一个信息
   private def processMessage(endpoint: RpcEndpoint, m: AkkaMessage, _sender: ActorRef): Unit = {
     val message = m.message
-    val needReply = m.needReply
+    val needReply = m.needReply//true表示发送者需要一个回复
     val pf: PartialFunction[Any, Unit] =
       if (needReply) {
         endpoint.receiveAndReply(new RpcCallContext {
@@ -270,13 +271,15 @@ private[spark] class AkkaRpcEnvFactory extends RpcEnvFactory {
 
 /**
  * Monitor errors reported by Akka and log them.
+ * 订阅Error错误信息的Actor
  */
 private[akka] class ErrorMonitor extends Actor with ActorLogReceive with Logging {
 
-  override def preStart(): Unit = {
+  override def preStart(): Unit = { //订阅Error错误信息
     context.system.eventStream.subscribe(self, classOf[Error])
   }
 
+  //对收到的信息进行log日志处理
   override def receiveWithLogging: Actor.Receive = {
     case Error(cause: Throwable, _, _, message: String) => logError(message, cause)
   }
@@ -343,6 +346,7 @@ private[akka] class AkkaRpcEndpointRef(
 
 /**
  * A wrapper to `message` so that the receiver knows if the sender expects a reply.
+ * 对一个信息进行包装,如果发送者需要一个回复的时候,接受者要知道
  * @param message
  * @param needReply if the sender expects a reply message
  */
@@ -350,5 +354,6 @@ private[akka] case class AkkaMessage(message: Any, needReply: Boolean)
 
 /**
  * A reply with the failure error from the receiver to the sender
+ * 从接受者到发送者一个错误的回复
  */
 private[akka] case class AkkaFailure(e: Throwable)

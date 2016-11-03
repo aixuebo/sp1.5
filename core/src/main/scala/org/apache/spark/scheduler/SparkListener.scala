@@ -29,6 +29,7 @@ import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.storage.{BlockManagerId, BlockUpdatedInfo}
 import org.apache.spark.util.{Distribution, Utils}
 
+//定义spark支持的所有监听事件
 @DeveloperApi
 sealed trait SparkListenerEvent
 
@@ -60,14 +61,14 @@ case class SparkListenerTaskEnd(
   //每一个job开始的信息,这个时候已经为该job分配了阶段
 @DeveloperApi
 case class SparkListenerJobStart(
-    jobId: Int,
-    time: Long,
-    stageInfos: Seq[StageInfo],
-    properties: Properties = null)
+  jobId: Int,//该job的ID
+  time: Long,//job的提交时间
+  stageInfos: Seq[StageInfo],//该job包含哪些阶段
+  properties: Properties = null)//该job的启动参数集合
   extends SparkListenerEvent {
   // Note: this is here for backwards-compatibility with older versions of this event which
   // only stored stageIds and not StageInfos:
-  val stageIds: Seq[Int] = stageInfos.map(_.stageId)
+  val stageIds: Seq[Int] = stageInfos.map(_.stageId)//阶段集合ID
 }
 
 //job任务完成时候调用
@@ -139,6 +140,7 @@ private[spark] case class SparkListenerLogStart(sparkVersion: String) extends Sp
  * Interface for listening to events from the Spark scheduler. Note that this is an internal
  * interface which might change in different Spark releases. Java clients should extend
  * {@link JavaSparkListener}
+ * 定义监听器要监听哪些行为,在不同事件出发不同的监听行为
  */
 @DeveloperApi
 trait SparkListener {

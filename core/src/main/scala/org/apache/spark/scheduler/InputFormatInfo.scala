@@ -33,13 +33,16 @@ import org.apache.spark.deploy.SparkHadoopUtil
 /**
  * :: DeveloperApi ::
  * Parses and holds information about inputFormat (and files) specified as a parameter.
+ *
+ * InputFormatInfo表示一个数据源与拆分数据源的org.apache.hadoop.mapred.InputFormat类
  */
 @DeveloperApi
 class InputFormatInfo(val configuration: Configuration, val inputFormatClazz: Class[_],
     val path: String) extends Logging {
 
-  var mapreduceInputFormat: Boolean = false
-  var mapredInputFormat: Boolean = false
+  //org.apache.hadoop.mapred.InputFormat---该类里面有InputSplit[] getSplits和RecordReader<K,V> getRecordReader方法
+  var mapreduceInputFormat: Boolean = false //是hadoop new api接口
+  var mapredInputFormat: Boolean = false //是hadoop old api接口
 
   validate()
 
@@ -65,6 +68,7 @@ class InputFormatInfo(val configuration: Configuration, val inputFormatClazz: Cl
     case _ => false
   }
 
+  //必须inputFormatClazz是hadoop的InputFormat子类
   private def validate() {
     logDebug("validate InputFormatInfo : " + inputFormatClazz + ", path  " + path)
 
@@ -95,18 +99,23 @@ class InputFormatInfo(val configuration: Configuration, val inputFormatClazz: Cl
 
 
   // This method does not expect failures, since validate has already passed ...
+  //根据输入源生成数据块文件集合--针对hadoop new api
   private def prefLocsFromMapreduceInputFormat(): Set[SplitInfo] = {
     val conf = new JobConf(configuration)
     SparkHadoopUtil.get.addCredentials(conf)
-    FileInputFormat.setInputPaths(conf, path)
+    FileInputFormat.setInputPaths(conf, path)//设置该job的输入源路径
 
+    //创建InputFormat实例
     val instance: org.apache.hadoop.mapreduce.InputFormat[_, _] =
       ReflectionUtils.newInstance(inputFormatClazz.asInstanceOf[Class[_]], conf).asInstanceOf[
         org.apache.hadoop.mapreduce.InputFormat[_, _]]
     val job = new Job(conf)
 
+    //每一个数据块InputSplit对应N个SplitInfo对象,因为InputSplit数据块在N个节点有备份,因此有N个SplitInfo对象
     val retval = new ArrayBuffer[SplitInfo]()
-    val list = instance.getSplits(job)
+
+    //读取输入源,根据InputFormat实例生成不同的task任务输入源InputSplit集合
+    val list = instance.getSplits(job) //List<org.apache.hadoop.mapreduce.InputSplit>
     for (split <- list) {
       retval ++= SplitInfo.toSplitInfo(inputFormatClazz, path, split)
     }
@@ -115,6 +124,7 @@ class InputFormatInfo(val configuration: Configuration, val inputFormatClazz: Cl
   }
 
   // This method does not expect failures, since validate has already passed ...
+  //根据输入源生成数据块文件集合--针对hadoop old api
   private def prefLocsFromMapredInputFormat(): Set[SplitInfo] = {
     val jobConf = new JobConf(configuration)
     SparkHadoopUtil.get.addCredentials(jobConf)
@@ -132,6 +142,7 @@ class InputFormatInfo(val configuration: Configuration, val inputFormatClazz: Cl
     retval.toSet
    }
 
+  //根据输入源生成数据块文件集合
   private def findPreferredLocations(): Set[SplitInfo] = {
     logDebug("mapreduceInputFormat : " + mapreduceInputFormat + ", mapredInputFormat : " +
       mapredInputFormat + ", inputFormatClazz : " + inputFormatClazz)
@@ -166,16 +177,20 @@ object InputFormatInfo {
     If a node 'dies', follow same procedure.
 
     PS: I know the wording here is weird, hopefully it makes some sense !
+    参数是一组数据源与拆分数据源的org.apache.hadoop.mapred.InputFormat类
+
+    返回值 key是每一台物理节点host,value是该节点上存储的数据块信息集合
   */
   def computePreferredLocations(formats: Seq[InputFormatInfo]): Map[String, Set[SplitInfo]] = {
 
+    //key是每一台物理节点host,value是该节点上存储的数据块信息集合
     val nodeToSplit = new HashMap[String, HashSet[SplitInfo]]
-    for (inputSplit <- formats) {
-      val splits = inputSplit.findPreferredLocations()
+    for (inputSplit <- formats) {//循环每一个  数据源与拆分数据源的org.apache.hadoop.mapred.InputFormat类
+      val splits = inputSplit.findPreferredLocations() //获取该数据源对应的SplitInfo集合
 
       for (split <- splits){
-        val location = split.hostLocation
-        val set = nodeToSplit.getOrElseUpdate(location, new HashSet[SplitInfo])
+        val location = split.hostLocation//该数据块所在的节点host
+        val set = nodeToSplit.getOrElseUpdate(location, new HashSet[SplitInfo]) //设置该节点上存储的数据块集合
         set += split
       }
     }

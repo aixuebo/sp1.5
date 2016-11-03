@@ -33,7 +33,11 @@ import org.apache.spark.executor.TaskMetrics
  * for each Spark job, containing tasks start/stop and shuffle information. JobLogger is a subclass
  * of SparkListener, use addSparkListener to add JobLogger to a SparkContext after the SparkContext
  * is created. Note that each JobLogger only works for one SparkContext
- *
+ * 一个logger类记录spark的job的运行期记录日志,这个类是一个job对应一个输出文件
+  * 文件内容包含任务的开始和结束,shuffle的信息
+  * JobLogger是SparkListener的子类,在SparkContext创建后,使用addSparkListener方法添加到SparkContext中的
+  * 注意该对象仅仅工作在一个SparkContext中
+  *
  * NOTE: The functionality of this class is heavily stripped down to accommodate for a general
  * refactor of the SparkListener interface. In its place, the EventLoggingListener is introduced
  * to log application information as SparkListenerEvents. To enable this functionality, set
@@ -47,8 +51,8 @@ import org.apache.spark.executor.TaskMetrics
 class JobLogger(val user: String, val logDirName: String) extends SparkListener with Logging {
 
   //默认第二个参数logDirName.文件夹名字是时间戳
-  def this() = this(System.getProperty("user.name", "<unknown>"),
-    String.valueOf(System.currentTimeMillis()))
+  def this() = this(System.getProperty("user.name", "<unknown>"),//用户名
+    String.valueOf(System.currentTimeMillis()))//时间戳
 
     //获取base文件夹
   private val logDir =
@@ -58,8 +62,10 @@ class JobLogger(val user: String, val logDirName: String) extends SparkListener 
       "/tmp/spark-%s".format(user)
     }
 
-  //每一个jobId对应一个日志文件PrintWriter
+  //每一个jobId对应一个日志文件PrintWriter,因为一个jobid对应一个日志文件输出
   private val jobIdToPrintWriter = new HashMap[Int, PrintWriter]
+
+  //因为一个job是包含多个stage的
   //每一个阶段ID,一定对应一个JobId,但是一个jobId是对应多个阶段ID的
   private val stageIdToJobId = new HashMap[Int, Int]
   //key是JobId,value是该Job对应的阶段ID集合
@@ -109,10 +115,14 @@ class JobLogger(val user: String, val logDirName: String) extends SparkListener 
    */
   protected def closeLogWriter(jobId: Int) {
     jobIdToPrintWriter.get(jobId).foreach { fileWriter =>
-      fileWriter.close()
+      fileWriter.close()//关闭文件流
+
+      //将该job对应的stage都删除掉
       jobIdToStageIds.get(jobId).foreach(_.foreach { stageId =>
         stageIdToJobId -= stageId
       })
+
+      //删除掉job映射关系
       jobIdToPrintWriter -= jobId
       jobIdToStageIds -= jobId
     }
@@ -120,35 +130,37 @@ class JobLogger(val user: String, val logDirName: String) extends SparkListener 
 
   /**
    * Build up the maps that represent stage-job relationships
-   * @param jobId ID of the job
-   * @param stageIds IDs of the associated stages
+   * @param jobId ID of the job job的ID
+   * @param stageIds IDs of the associated stages 该jobId对一个哪些阶段集合
    * 关联JobId与他对应的阶段ID集合关系
    */
   protected def buildJobStageDependencies(jobId: Int, stageIds: Seq[Int]) = {
-    jobIdToStageIds(jobId) = stageIds
-    stageIds.foreach { stageId => stageIdToJobId(stageId) = jobId }
+    jobIdToStageIds(jobId) = stageIds //设置jobId与stage集合的映射关系
+    stageIds.foreach { stageId => stageIdToJobId(stageId) = jobId }//设置jobId与stage集合的映射关系
   }
 
   /**
    * Write info into log file
+    * 想jobId对应的log文件写入信息
    * @param jobId ID of the job
-   * @param info Info to be recorded
-   * @param withTime Controls whether to record time stamp before the info, default is true
+   * @param info Info to be recorded 要写入的信息
+   * @param withTime Controls whether to record time stamp before the info, default is true 信息内容前是否要加入时间格式
    * 将info信息写入jobId对应的日志文件中,如果withTime=true,则要先写入当前时间
    */
   protected def jobLogInfo(jobId: Int, info: String, withTime: Boolean = true) {
     var writeInfo = info
-    if (withTime) {
+    if (withTime) {//是否要写入时间戳
       val date = new Date(System.currentTimeMillis())
-      writeInfo = dateFormat.get.format(date) + ": " + info
+      writeInfo = dateFormat.get.format(date) + ": " + info //加入时间格式
     }
     // scalastyle:off println
-    jobIdToPrintWriter.get(jobId).foreach(_.println(writeInfo))
+    jobIdToPrintWriter.get(jobId).foreach(_.println(writeInfo))//打印该job的信息
     // scalastyle:on println
   }
 
   /**
    * Write info into log file
+    * 一个阶段产生的日志,写入到该阶段对应的jobid日志中
    * @param stageId ID of the stage
    * @param info Info to be recorded
    * @param withTime Controls whether to record time stamp before the info, default is true
@@ -166,6 +178,7 @@ class JobLogger(val user: String, val logDirName: String) extends SparkListener 
    * @param taskInfo Task description info
    * @param taskMetrics Task running metrics
    */
+  //任务完成的时候,打印任务的统计信息的内容
   protected def recordTaskMetrics(stageId: Int, status: String,
                                 taskInfo: TaskInfo, taskMetrics: TaskMetrics) {
     val info = " TID=" + taskInfo.taskId + " STAGE_ID=" + stageId +
@@ -206,23 +219,23 @@ class JobLogger(val user: String, val logDirName: String) extends SparkListener 
 
   /**
    * When stage is submitted, record stage submit info
-   * @param stageSubmitted Stage submitted event
+   * @param stageSubmitted Stage submitted event 阶段被提交事件
    * 记录该阶段被提交了,同时该阶段有多少个任务
    */
   override def onStageSubmitted(stageSubmitted: SparkListenerStageSubmitted) {
     val stageInfo = stageSubmitted.stageInfo
     stageLogInfo(stageInfo.stageId, "STAGE_ID=%d STATUS=SUBMITTED TASK_SIZE=%d".format(
-      stageInfo.stageId, stageInfo.numTasks))
+      stageInfo.stageId, stageInfo.numTasks))//记录日志
   }
 
   /**
    * When stage is completed, record stage completion status
-   * @param stageCompleted Stage completed event
+   * @param stageCompleted Stage completed event 阶段完成事件
    * 记录该阶段成功完成了,还是失败完成了
    */
   override def onStageCompleted(stageCompleted: SparkListenerStageCompleted) {
     val stageId = stageCompleted.stageInfo.stageId
-    if (stageCompleted.stageInfo.failureReason.isEmpty) {
+    if (stageCompleted.stageInfo.failureReason.isEmpty) {//记录日志
       stageLogInfo(stageId, s"STAGE_ID=$stageId STATUS=COMPLETED")
     } else {
       stageLogInfo(stageId, s"STAGE_ID=$stageId STATUS=FAILED")
@@ -231,7 +244,7 @@ class JobLogger(val user: String, val logDirName: String) extends SparkListener 
 
   /**
    * When task ends, record task completion status and metrics
-   * @param taskEnd Task end event
+   * @param taskEnd Task end event 任务完成事件
    * 每一个任务完成后记录的日志
    */
   override def onTaskEnd(taskEnd: SparkListenerTaskEnd) {
@@ -249,14 +262,14 @@ class JobLogger(val user: String, val logDirName: String) extends SparkListener 
         taskStatus += " STATUS=FETCHFAILED TID=" + taskInfo.taskId + " STAGE_ID=" +
                       taskEnd.stageId + " SHUFFLE_ID=" + shuffleId + " MAP_ID=" +
                       mapId + " REDUCE_ID=" + reduceId
-        stageLogInfo(taskEnd.stageId, taskStatus)
+        stageLogInfo(taskEnd.stageId, taskStatus)//打印任务完成日志
       case _ =>
     }
   }
 
   /**
    * When job ends, recording job completion status and close log file
-   * @param jobEnd Job end event
+   * @param jobEnd Job end event job结束事件
    * job完成,写入成功完成日志,以及失败信息日志
    */
   override def onJobEnd(jobEnd: SparkListenerJobEnd) {
@@ -269,8 +282,8 @@ class JobLogger(val user: String, val logDirName: String) extends SparkListener 
         exception.getMessage.split("\\s+").foreach(info += _ + "_")
       case _ =>
     }
-    jobLogInfo(jobId, info.substring(0, info.length - 1).toUpperCase)
-    closeLogWriter(jobId) //关闭该close的输出流
+    jobLogInfo(jobId, info.substring(0, info.length - 1).toUpperCase) //记录该job的日志信息
+    closeLogWriter(jobId) //关闭该close的输出流,清理映射关系
   }
 
   /**
@@ -288,17 +301,17 @@ class JobLogger(val user: String, val logDirName: String) extends SparkListener 
 
   /**
    * When job starts, record job property and stage graph
-   * @param jobStart Job start event
+   * @param jobStart Job start event job启动事件
    * job启动
    */
   override def onJobStart(jobStart: SparkListenerJobStart) {
-    val jobId = jobStart.jobId
-    val properties = jobStart.properties
+    val jobId = jobStart.jobId //获取jobId
+    val properties = jobStart.properties //启动属性
     //为该job创建日志文件
     createLogWriter(jobId)
     //将该job的描述写入到日志中
     recordJobProperties(jobId, properties)
-    //为该job以及对应的阶段集合写入日志中
+    //设置该job以及对应的阶段集合映射关系
     buildJobStageDependencies(jobId, jobStart.stageIds)
     //记录该job开始日志
     jobLogInfo(jobId, "JOB_ID=" + jobId + " STATUS=STARTED")

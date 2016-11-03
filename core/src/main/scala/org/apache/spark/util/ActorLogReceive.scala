@@ -34,7 +34,7 @@ import org.slf4j.Logger
  *     ...
  *   }
  * }}}
- *
+ *该类是Actor接受到log信息时候如何处理
  */
 private[spark] trait ActorLogReceive {
   self: Actor =>

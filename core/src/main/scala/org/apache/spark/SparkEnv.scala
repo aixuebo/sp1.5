@@ -156,8 +156,8 @@ class SparkEnv (
 object SparkEnv extends Logging {
   @volatile private var env: SparkEnv = _
 
-  private[spark] val driverActorSystemName = "sparkDriver" //为driver设置名字
-  private[spark] val executorActorSystemName = "sparkExecutor" //为执行者设置名字
+  private[spark] val driverActorSystemName = "sparkDriver" //为driver设置ActorSystem的名字前缀
+  private[spark] val executorActorSystemName = "sparkExecutor" //为执行者设置ActorSystem的名字前缀
 
   def set(e: SparkEnv) {
     env = e

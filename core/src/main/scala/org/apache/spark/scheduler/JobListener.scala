@@ -24,6 +24,6 @@ package org.apache.spark.scheduler
  * 当job执行完提交后,么一个task的成功都会通知,而job的失败也会发送通知
  */
 private[spark] trait JobListener {
-  def taskSucceeded(index: Int, result: Any)
-  def jobFailed(exception: Exception)
+  def taskSucceeded(index: Int, result: Any) //说明该job的一个task完成了
+  def jobFailed(exception: Exception) //说明该job失败了
 }

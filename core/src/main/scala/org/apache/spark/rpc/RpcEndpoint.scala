@@ -57,7 +57,7 @@ private[spark] trait ThreadSafeRpcEndpoint extends RpcEndpoint
  *
  * Note: `receive` can be called concurrently. If you want `receive` to be thread-safe, please use
  * [[ThreadSafeRpcEndpoint]]
- * 注意:接收烦烦噶是并发被调用的,如果你想要线程安全的接收,则要使用线程安全类
+ * 注意:接收方法是并发被调用的,如果你想要线程安全的接收,则要使用线程安全类
  *
  * If any error is thrown from one of [[RpcEndpoint]] methods except `onError`, `onError` will be
  * invoked with the cause. If `onError` throws an error, [[RpcEnv]] will ignore it.

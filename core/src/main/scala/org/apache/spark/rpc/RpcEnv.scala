@@ -161,7 +161,7 @@ private[spark] abstract class RpcEnv(conf: SparkConf) {
 //表示一个RPC服务器配置
 private[spark] case class RpcEnvConfig(
     conf: SparkConf,
-    name: String,//名称
+    name: String,//actorSystem的Name
     host: String,//RPC服务器所在host
     port: Int,//RPC服务器所在port
     securityManager: SecurityManager)
