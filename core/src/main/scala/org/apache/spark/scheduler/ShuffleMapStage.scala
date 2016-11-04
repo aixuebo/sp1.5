@@ -24,6 +24,7 @@ import org.apache.spark.util.CallSite
 
 /**
  * The ShuffleMapStage represents the intermediate stages in a job.
+ * ShuffleMapStage代表job中的一个中间阶段
  */
 private[spark] class ShuffleMapStage(
     id: Int,
@@ -37,26 +38,29 @@ private[spark] class ShuffleMapStage(
 
   override def toString: String = "ShuffleMapStage " + id
 
-  var numAvailableOutputs: Long = 0
+  var numAvailableOutputs: Long = 0 //可用的输出数量
 
   def isAvailable: Boolean = numAvailableOutputs == numPartitions
 
+  //每一个partition是一个List[MapStatus]作为数组的元素
   val outputLocs = Array.fill[List[MapStatus]](numPartitions)(Nil)
 
+  //为该partition添加一个输出
   def addOutputLoc(partition: Int, status: MapStatus): Unit = {
-    val prevList = outputLocs(partition)
-    outputLocs(partition) = status :: prevList
+    val prevList = outputLocs(partition)//返回该partition对应的List[MapStatus]元素
+    outputLocs(partition) = status :: prevList //将status追加到数组的前面
     if (prevList == Nil) {
-      numAvailableOutputs += 1
+      numAvailableOutputs += 1 //可用的输出数量累加1
     }
   }
 
+  //移除该partition的某一个输出
   def removeOutputLoc(partition: Int, bmAddress: BlockManagerId): Unit = {
-    val prevList = outputLocs(partition)
-    val newList = prevList.filterNot(_.location == bmAddress)
-    outputLocs(partition) = newList
+    val prevList = outputLocs(partition) //找到该partiiton对应的输出集合
+    val newList = prevList.filterNot(_.location == bmAddress) //过滤不是要删除的bmAddress
+    outputLocs(partition) = newList //重新设置
     if (prevList != Nil && newList == Nil) {
-      numAvailableOutputs -= 1
+      numAvailableOutputs -= 1 //减少一个有效可用的输出数量
     }
   }
 
@@ -64,19 +68,20 @@ private[spark] class ShuffleMapStage(
    * Removes all shuffle outputs associated with this executor. Note that this will also remove
    * outputs which are served by an external shuffle server (if one exists), as they are still
    * registered with this execId.
+   * 移除在execId上的结果集
    */
   def removeOutputsOnExecutor(execId: String): Unit = {
-    var becameUnavailable = false
-    for (partition <- 0 until numPartitions) {
-      val prevList = outputLocs(partition)
-      val newList = prevList.filterNot(_.location.executorId == execId)
-      outputLocs(partition) = newList
+    var becameUnavailable = false //默认变成不可用为false
+    for (partition <- 0 until numPartitions) {//循环每一个partition
+      val prevList = outputLocs(partition)//找到该partition对应的集合
+      val newList = prevList.filterNot(_.location.executorId == execId) //过滤在execId上的结果集
+      outputLocs(partition) = newList //重新设置集合
       if (prevList != Nil && newList == Nil) {
-        becameUnavailable = true
-        numAvailableOutputs -= 1
+        becameUnavailable = true //说明不可用了
+        numAvailableOutputs -= 1 //减少一个有效可用的输出数量
       }
     }
-    if (becameUnavailable) {
+    if (becameUnavailable) { //打印日志,当不可用的时候
       logInfo("%s is now unavailable on executor %s (%d/%d, %s)".format(
         this, execId, numAvailableOutputs, numPartitions, isAvailable))
     }

@@ -31,24 +31,28 @@ import org.apache.spark.shuffle.MetadataFetchFailedException
 import org.apache.spark.storage.{BlockId, BlockManagerId, ShuffleBlockId}
 import org.apache.spark.util._
 
-private[spark] sealed trait MapOutputTrackerMessage
-private[spark] case class GetMapOutputStatuses(shuffleId: Int)
-  extends MapOutputTrackerMessage
-private[spark] case object StopMapOutputTracker extends MapOutputTrackerMessage
+private[spark] sealed trait MapOutputTrackerMessage //对map的输出进行跟踪
+private[spark] case class GetMapOutputStatuses(shuffleId: Int) extends MapOutputTrackerMessage //获取shuffleId的结果状态
+private[spark] case object StopMapOutputTracker extends MapOutputTrackerMessage //停止一个map的输出跟踪
 
-/** RpcEndpoint class for MapOutputTrackerMaster */
+/** RpcEndpoint class for MapOutputTrackerMaster
+  * 该类负责接收请求,将对应的信息返回给对方
+  * 比如接收请求获取某个shuffleId对应的结果状态
+  **/
 private[spark] class MapOutputTrackerMasterEndpoint(
     override val rpcEnv: RpcEnv, tracker: MapOutputTrackerMaster, conf: SparkConf)
   extends RpcEndpoint with Logging {
-  val maxAkkaFrameSize = AkkaUtils.maxFrameSizeBytes(conf)
+  val maxAkkaFrameSize = AkkaUtils.maxFrameSizeBytes(conf)//返回一个message允许的上限,单位是字节
 
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
     case GetMapOutputStatuses(shuffleId: Int) =>
-      val hostPort = context.sender.address.hostPort
+      val hostPort = context.sender.address.hostPort  //发送者的host和port
       logInfo("Asked to send map output locations for shuffle " + shuffleId + " to " + hostPort)
+
+      //获取该shuffleId对应的结果状态
       val mapOutputStatuses = tracker.getSerializedMapOutputStatuses(shuffleId)
       val serializedSize = mapOutputStatuses.size
-      if (serializedSize > maxAkkaFrameSize) {
+      if (serializedSize > maxAkkaFrameSize) {//超过大小了,要抛异常
         val msg = s"Map output statuses were $serializedSize bytes which " +
           s"exceeds spark.akka.frameSize ($maxAkkaFrameSize bytes)."
 
@@ -62,7 +66,7 @@ private[spark] class MapOutputTrackerMasterEndpoint(
       }
 
     case StopMapOutputTracker =>
-      logInfo("MapOutputTrackerMasterEndpoint stopped!")
+      logInfo("MapOutputTrackerMasterEndpoint stopped!")//对该Akka进行停止
       context.reply(true)
       stop()
   }
@@ -329,8 +333,8 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
       val statuses = mapStatuses(shuffleId) //shuffleId对应的Array[MapStatus]集合
       if (statuses.nonEmpty) {
         // HashMap to add up sizes of all blocks at the same location
-        val locs = new HashMap[BlockManagerId, Long]
-        var totalOutputSize = 0L
+        val locs = new HashMap[BlockManagerId, Long] //key是status.location,value是该status.location上字节总数
+        var totalOutputSize = 0L //总输出字节数
         var mapIdx = 0
         while (mapIdx < statuses.length) {
           val status = statuses(mapIdx)

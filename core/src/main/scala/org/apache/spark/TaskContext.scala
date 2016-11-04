@@ -37,6 +37,7 @@ object TaskContext {
   /**
    * Returns the partition id of currently active TaskContext. It will return 0
    * if there is no active TaskContext for cases like local execution.
+   * 返回当时任务是第几个partiiton
    */
   def getPartitionId(): Int = {
     val tc = taskContext.get() //返回当前线程下的任务上下文
@@ -79,6 +80,7 @@ object TaskContext {
  * {{{
  *   org.apache.spark.TaskContext.get()
  * }}}
+ * 关于一个task在执行期间可以被读取或者被改写的信息,当使用org.apache.spark.TaskContext.get()即可获取该task的上下文信息
  */
 abstract class TaskContext extends Serializable {
   // Note: TaskContext must NOT define a get method. Otherwise it will prevent the Scala compiler
@@ -105,7 +107,7 @@ abstract class TaskContext extends Serializable {
 
   /**
    * Returns true if the task is running locally in the driver program.
-   * @return
+   * @return true表示task运行在本地的driver程序中
    */
   def isRunningLocally(): Boolean
 
@@ -114,6 +116,7 @@ abstract class TaskContext extends Serializable {
    * This will be called in all situation - success, failure, or cancellation.
    * An example use is for HadoopRDD to register a callback to close the input stream.
    * 当任务完成时候 执行该onTaskCompletion方法,将任务的上下文传递过来
+   * 即如果需要监听该task是否完成的话,则需要创建一个TaskCompletionListener,然后调用该方法即可,当task完成后,就会调用所有的TaskCompletionListener对象进行通知
    */
   def addTaskCompletionListener(listener: TaskCompletionListener): TaskContext
 
@@ -121,8 +124,7 @@ abstract class TaskContext extends Serializable {
    * Adds a listener in the form of a Scala closure to be executed on task completion.
    * This will be called in all situations - success, failure, or cancellation.
    * An example use is for HadoopRDD to register a callback to close the input stream.
-   * 当task任务完成的时候调用该函数f,传入参数TaskContext为任务的上下文,无返回值
-   * 例如:为任务上下文添加一个监听,当该task完成的时候调用该监听,关闭输入源
+   * 方法同上
    */
   def addTaskCompletionListener(f: (TaskContext) => Unit): TaskContext
 
@@ -132,6 +134,7 @@ abstract class TaskContext extends Serializable {
    * Will be called in any situation - success, failure, or cancellation.
    *
    * @param f Callback function.
+   * 方法同上
    */
   @deprecated("use addTaskCompletionListener", "1.2.0")
   def addOnCompleteCallback(f: () => Unit)
@@ -144,6 +147,7 @@ abstract class TaskContext extends Serializable {
 
   /**
    * The ID of the RDD partition that is computed by this task.
+   * 这个任务属于第几个partition的ID
    */
   def partitionId(): Int
 

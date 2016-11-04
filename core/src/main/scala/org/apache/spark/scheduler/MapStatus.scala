@@ -27,9 +27,10 @@ import org.apache.spark.util.Utils
 /**
  * Result returned by a ShuffleMapTask to a scheduler. Includes the block manager address that the
  * task ran on as well as the sizes of outputs for each reducer, for passing on to the reduce tasks.
+ * 表示ShuffleMapTask去调度后返回的一个结果,包含数据块地址和任务运行输出的大小,将其传递给每一个reduce任务
  */
 private[spark] sealed trait MapStatus {
-  /** Location where this task was run. */
+  /** Location where this task was run. 这个task运行的位置*/
   def location: BlockManagerId
 
   /**
@@ -37,6 +38,7 @@ private[spark] sealed trait MapStatus {
    *
    * If a block is non-empty, then this method MUST return a non-zero size.  This invariant is
    * necessary for correctness, since block fetchers are allowed to skip zero-size blocks.
+   * 估算某一个reduce的数据块所占大小
    */
   def getSizeForBlock(reduceId: Int): Long
 }
@@ -44,8 +46,14 @@ private[spark] sealed trait MapStatus {
 
 private[spark] object MapStatus {
 
+  /**
+   *
+   * @param loc
+   * @param uncompressedSizes 数据块字节数组,数组索引代表的是partition的ID,每一个元素表示该partition对应的文件大小预估值
+   * @return
+   */
   def apply(loc: BlockManagerId, uncompressedSizes: Array[Long]): MapStatus = {
-    if (uncompressedSizes.length > 2000) {
+    if (uncompressedSizes.length > 2000) {//超过2000个partition,要如何处理
       HighlyCompressedMapStatus(loc, uncompressedSizes)
     } else {
       new CompressedMapStatus(loc, uncompressedSizes)
@@ -91,7 +99,7 @@ private[spark] object MapStatus {
  */
 private[spark] class CompressedMapStatus(
     private[this] var loc: BlockManagerId,
-    private[this] var compressedSizes: Array[Byte])
+    private[this] var compressedSizes: Array[Byte])//数据块字节数组,数组索引代表的是partition的ID,每一个元素表示该partition对应的文件大小预估值
   extends MapStatus with Externalizable {
 
   protected def this() = this(null, null.asInstanceOf[Array[Byte]])  // For deserialization only
@@ -102,14 +110,15 @@ private[spark] class CompressedMapStatus(
 
   override def location: BlockManagerId = loc
 
+  //获取第reduceId个partition解压后的大小
   override def getSizeForBlock(reduceId: Int): Long = {
     MapStatus.decompressSize(compressedSizes(reduceId))
   }
 
   override def writeExternal(out: ObjectOutput): Unit = Utils.tryOrIOException {
     loc.writeExternal(out)
-    out.writeInt(compressedSizes.length)
-    out.write(compressedSizes)
+    out.writeInt(compressedSizes.length)//多少个partition
+    out.write(compressedSizes)//每一个partition大小
   }
 
   override def readExternal(in: ObjectInput): Unit = Utils.tryOrIOException {
@@ -131,10 +140,10 @@ private[spark] class CompressedMapStatus(
  * @param avgSize average size of the non-empty blocks
  */
 private[spark] class HighlyCompressedMapStatus private (
-    private[this] var loc: BlockManagerId,
-    private[this] var numNonEmptyBlocks: Int,
-    private[this] var emptyBlocks: RoaringBitmap,
-    private[this] var avgSize: Long)
+    private[this] var loc: BlockManagerId,//数据存储路径位置
+    private[this] var numNonEmptyBlocks: Int,//不是空的数据块的数量
+    private[this] var emptyBlocks: RoaringBitmap,//空的数据块集合,即可以知道哪些数据块是空的
+    private[this] var avgSize: Long)//平均每一个数据块大小
   extends MapStatus with Externalizable {
 
   // loc could be null when the default constructor is called during deserialization
@@ -146,7 +155,7 @@ private[spark] class HighlyCompressedMapStatus private (
   override def location: BlockManagerId = loc
 
   override def getSizeForBlock(reduceId: Int): Long = {
-    if (emptyBlocks.contains(reduceId)) {
+    if (emptyBlocks.contains(reduceId)) {//说明该数据块是空,则返回0
       0
     } else {
       avgSize
@@ -155,8 +164,8 @@ private[spark] class HighlyCompressedMapStatus private (
 
   override def writeExternal(out: ObjectOutput): Unit = Utils.tryOrIOException {
     loc.writeExternal(out)
-    emptyBlocks.writeExternal(out)
-    out.writeLong(avgSize)
+    emptyBlocks.writeExternal(out)//写入空的数据块集合
+    out.writeLong(avgSize)//平均每一个数据块多少字节
   }
 
   override def readExternal(in: ObjectInput): Unit = Utils.tryOrIOException {
@@ -167,28 +176,37 @@ private[spark] class HighlyCompressedMapStatus private (
   }
 }
 
+//partition过多的时候,超过2000个,则使用这个压缩技术
 private[spark] object HighlyCompressedMapStatus {
+  /**
+   *
+   * @param loc
+   * @param uncompressedSizes 数据块字节数组,数组索引代表的是partition的ID,每一个元素表示该partition对应的文件大小预估值
+   * @return
+   */
   def apply(loc: BlockManagerId, uncompressedSizes: Array[Long]): HighlyCompressedMapStatus = {
     // We must keep track of which blocks are empty so that we don't report a zero-sized
     // block as being non-empty (or vice-versa) when using the average block size.
-    var i = 0
-    var numNonEmptyBlocks: Int = 0
-    var totalSize: Long = 0
+    var i = 0 //当前第几个数据块了
+    var numNonEmptyBlocks: Int = 0//不是空的数据块个数
+    var totalSize: Long = 0 //总数据块所占用大小之和
     // From a compression standpoint, it shouldn't matter whether we track empty or non-empty
     // blocks. From a performance standpoint, we benefit from tracking empty blocks because
     // we expect that there will be far fewer of them, so we will perform fewer bitmap insertions.
-    val emptyBlocks = new RoaringBitmap()
-    val totalNumBlocks = uncompressedSizes.length
+    val emptyBlocks = new RoaringBitmap()//空的数据块都添加到这个集合里面
+    val totalNumBlocks = uncompressedSizes.length //总partition数据块数量
     while (i < totalNumBlocks) {
-      var size = uncompressedSizes(i)
-      if (size > 0) {
+      var size = uncompressedSizes(i)//获取该数据块大小
+      if (size > 0) {//数据块有内容
         numNonEmptyBlocks += 1
         totalSize += size
       } else {
-        emptyBlocks.add(i)
+        emptyBlocks.add(i)//添加空的数据块
       }
       i += 1
     }
+
+    //平均每一个数据块占用多少字节
     val avgSize = if (numNonEmptyBlocks > 0) {
       totalSize / numNonEmptyBlocks
     } else {

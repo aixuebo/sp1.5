@@ -41,10 +41,10 @@ import org.apache.spark.shuffle.ShuffleManager
 import org.apache.spark.shuffle.hash.HashShuffleManager
 import org.apache.spark.util._
 
-private[spark] sealed trait BlockValues
-private[spark] case class ByteBufferValues(buffer: ByteBuffer) extends BlockValues
-private[spark] case class IteratorValues(iterator: Iterator[Any]) extends BlockValues
-private[spark] case class ArrayValues(buffer: Array[Any]) extends BlockValues
+private[spark] sealed trait BlockValues //数据块的类型
+private[spark] case class ByteBufferValues(buffer: ByteBuffer) extends BlockValues //用字节存储数据块
+private[spark] case class IteratorValues(iterator: Iterator[Any]) extends BlockValues //数据块存储的是一个迭代器集合
+private[spark] case class ArrayValues(buffer: Array[Any]) extends BlockValues //数据块存储的是一个数组集合
 
 /* Class for returning a fetched block and associated metrics. */
 private[spark] class BlockResult(

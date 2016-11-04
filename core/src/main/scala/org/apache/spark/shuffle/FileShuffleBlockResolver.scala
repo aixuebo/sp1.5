@@ -67,7 +67,7 @@ private[spark] trait ShuffleWriterGroup {
 private[spark] class FileShuffleBlockResolver(conf: SparkConf)
   extends ShuffleBlockResolver with Logging {
 
-  private val transportConf = SparkTransportConf.fromSparkConf(conf)
+  private val transportConf = SparkTransportConf.fromSparkConf(conf) //获取传输相关的配置信息
 
   private lazy val blockManager = SparkEnv.get.blockManager
 
@@ -259,10 +259,13 @@ private[spark] object FileShuffleBlockResolver {
      * position in the file.
      * Note: mapIdToIndex(mapId) returns the index of the mapper into the vector for every
      * reducer.
+     * 该数组存储的元素是PrimitiveVector[Long],每一个File对象对应一个该元素,用于存储该文件的一些偏移量
      */
     private val blockOffsetsByReducer = Array.fill[PrimitiveVector[Long]](files.length) {
       new PrimitiveVector[Long]()
     }
+
+    //该数组存储的元素是PrimitiveVector[Long],每一个File对象对应一个该元素,用于存储该文件的一些文件段需要的长度
     private val blockLengthsByReducer = Array.fill[PrimitiveVector[Long]](files.length) {
       new PrimitiveVector[Long]()
     }
