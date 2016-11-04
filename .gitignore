@@ -24,7 +24,7 @@
 /network/yarn/.project
 /network/yarn/.settings
 /target
-/.idea
+*.idea
 /bin/
 *.iml
 *.bak
