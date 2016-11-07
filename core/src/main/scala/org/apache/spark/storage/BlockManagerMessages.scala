@@ -86,8 +86,10 @@ private[spark] object BlockManagerMessages {
     }
   }
 
+  //获取该数据块的位置
   case class GetLocations(blockId: BlockId) extends ToBlockManagerMaster
 
+  //获取多个数据块的位置
   case class GetLocationsMultipleBlockIds(blockIds: Array[BlockId]) extends ToBlockManagerMaster
 
   case class GetPeers(blockManagerId: BlockManagerId) extends ToBlockManagerMaster

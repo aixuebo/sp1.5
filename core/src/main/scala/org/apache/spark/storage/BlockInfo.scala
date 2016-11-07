@@ -19,6 +19,11 @@ package org.apache.spark.storage
 
 import java.util.concurrent.ConcurrentHashMap
 
+/**
+ * 表示数据块的大小  或者 该数据块是失败了或者等待处理中
+ * @param level
+ * @param tellMaster
+ */
 private[storage] class BlockInfo(val level: StorageLevel, val tellMaster: Boolean) {
   // To save space, 'pending' and 'failed' are encoded as special sizes:
   @volatile var size: Long = BlockInfo.BLOCK_PENDING //最终数据块大小
@@ -88,6 +93,8 @@ private object BlockInfo {
    * to minimize BlockInfo's memory footprint. 
    * 全局属性,因为是静态对象,获取操作该BlockInfo数据块的线程,该队列属于等待的数据块队列
    * 因为当前数据块仅仅处于等待状态,我们想要使用最小的内存去保存该数据块的足迹
+   *
+   * 一旦数据块完成了或者失败了,则从该队列中删除
    **/
   private val blockInfoInitThreads = new ConcurrentHashMap[BlockInfo, Thread]
 

@@ -36,7 +36,7 @@ class BlockManagerMaster(
     isDriver: Boolean)
   extends Logging {
 
-  val timeout = RpcUtils.askRpcTimeout(conf)
+  val timeout = RpcUtils.askRpcTimeout(conf) //获取超时时间
 
   /** Remove a dead executor from the driver endpoint. This is only called on the driver side. */
   def removeExecutor(execId: String) {
@@ -66,12 +66,16 @@ class BlockManagerMaster(
     res
   }
 
-  /** Get locations of the blockId from the driver */
+  /** Get locations of the blockId from the driver
+    * 从driver上获取一个数据块的位置
+    **/
   def getLocations(blockId: BlockId): Seq[BlockManagerId] = {
     driverEndpoint.askWithRetry[Seq[BlockManagerId]](GetLocations(blockId))
   }
 
-  /** Get locations of multiple blockIds from the driver */
+  /** Get locations of multiple blockIds from the driver
+    * 从driver上获取多个数据块的位置
+    **/
   def getLocations(blockIds: Array[BlockId]): IndexedSeq[Seq[BlockManagerId]] = {
     driverEndpoint.askWithRetry[IndexedSeq[Seq[BlockManagerId]]](
       GetLocationsMultipleBlockIds(blockIds))
@@ -80,6 +84,8 @@ class BlockManagerMaster(
   /**
    * Check if block manager master has a block. Note that this can be used to check for only
    * those blocks that are reported to block manager master.
+   * 校验是否driver上有该数据块,true表示有,false表示没有
+   * 注意:这个仅仅被适用于去校验数据块是否报告给了数据块管理master
    */
   def contains(blockId: BlockId): Boolean = {
     !getLocations(blockId).isEmpty

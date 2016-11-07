@@ -245,7 +245,7 @@ object SparkEnv extends Logging {
 
     // Listener bus is only used on the driver 该属性仅仅用于driver,非driver的都是null
     if (isDriver) {
-      assert(listenerBus != null, "Attempted to create driver SparkEnv with null listener bus!")
+      assert(listenerBus != null, "Attempted to create driver SparkEnv with null listener bus!") //listenerBus不允许是null
     }
 
     val securityManager = new SecurityManager(conf)
@@ -265,9 +265,10 @@ object SparkEnv extends Logging {
     }
 
     // Create an instance of the class with the given name, possibly initializing it with our conf
-    //创建参数对应的class的实例对象
+    //创建参数对应的class的实例对象,该class必须有构造函数为SparkConf和boolean isDriver 或者SparkConf的构造函数
+    //返回该class对应的实例对象
     def instantiateClass[T](className: String): T = {
-      val cls = Utils.classForName(className)
+      val cls = Utils.classForName(className) //找到class对象
       // Look for a constructor taking a SparkConf and a boolean isDriver, then one taking just
       // SparkConf, then one taking no arguments
       //首先寻找两个参数的构造函数,SparkConf和boolean isDriver,如果找不到,则找一个SparkConf参数的方法,如果继续找不到则找无参数的构造方法

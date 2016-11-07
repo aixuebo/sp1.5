@@ -288,19 +288,21 @@ private[akka] class ErrorMonitor extends Actor with ActorLogReceive with Logging
 //代表一个客户端实现类
 private[akka] class AkkaRpcEndpointRef(
     @transient defaultAddress: RpcAddress,
-    @transient _actorRef: => ActorRef,
+    @transient _actorRef: => ActorRef,//引用的Actor
     @transient conf: SparkConf,
     @transient initInConstructor: Boolean = true)
   extends RpcEndpointRef(conf) with Logging {
 
-  lazy val actorRef = _actorRef
+  lazy val actorRef = _actorRef //引用的actort对象
 
+  //获取引用的Actor对应的ip和port
   override lazy val address: RpcAddress = {
     val akkaAddress = actorRef.path.address
     RpcAddress(akkaAddress.host.getOrElse(defaultAddress.host),
       akkaAddress.port.getOrElse(defaultAddress.port))
   }
 
+  //引用的Actor的name
   override lazy val name: String = actorRef.path.name
 
   private[akka] def init(): Unit = {
@@ -314,10 +316,13 @@ private[akka] class AkkaRpcEndpointRef(
     init()
   }
 
+  //向引用的actor发送信息,信息被包装成AkkaMessage对象
+  //tell是发完就走,纯粹的异步发送
   override def send(message: Any): Unit = {
     actorRef ! AkkaMessage(message, false)
   }
 
+  //ask是发完等Future
   override def ask[T: ClassTag](message: Any, timeout: RpcTimeout): Future[T] = {
     actorRef.ask(AkkaMessage(message, true))(timeout.duration).flatMap {
       // The function will run in the calling thread, so it should be short and never block.
