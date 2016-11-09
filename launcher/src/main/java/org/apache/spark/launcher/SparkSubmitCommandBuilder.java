@@ -31,6 +31,17 @@ import static org.apache.spark.launcher.CommandBuilderUtils.*;
  * Spark applications.
  * <p>
  * This class has also some special features to aid launching pyspark.
+ * 解析submit需要的参数
+ * 例如
+ * ./bin/spark-submit \
+ --class org.apache.spark.examples.SparkPi \
+ --master spark://207.184.161.138:7077 \
+ --deploy-mode cluster \
+ --supervise \
+ --executor-memory 20G \
+ --total-executor-cores 100 \
+ /path/to/examples.jar \
+ 1000
  */
 class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
 
@@ -66,12 +77,13 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
    * This map must match the class names for available special classes, since this modifies the way
    * command line parsing works. This maps the class name to the resource to use when calling
    * spark-submit.
+   * 类路径与脚本名称对应关系
    */
   private static final Map<String, String> specialClasses = new HashMap<String, String>();
   static {
-    specialClasses.put("org.apache.spark.repl.Main", "spark-shell");
+    specialClasses.put("org.apache.spark.repl.Main", "spark-shell");//shell脚本对应的类
     specialClasses.put("org.apache.spark.sql.hive.thriftserver.SparkSQLCLIDriver",
-      "spark-internal");
+      "spark-internal");//spark_sql对应的类
     specialClasses.put("org.apache.spark.sql.hive.thriftserver.HiveThriftServer2",
       "spark-internal");
   }
@@ -83,6 +95,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
    * Controls whether mixing spark-submit arguments with app arguments is allowed. This is needed
    * to parse the command lines for things like bin/spark-shell, which allows users to mix and
    * match arguments (e.g. "bin/spark-shell SparkShellArg --master foo").
+   * 是否允许固定参数
    */
   private boolean allowsMixedArguments;
 

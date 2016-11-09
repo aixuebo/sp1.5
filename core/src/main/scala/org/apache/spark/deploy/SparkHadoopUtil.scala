@@ -84,6 +84,8 @@ class SparkHadoopUtil extends Logging {
   /**
    * Return an appropriate (subclass) of Configuration. Creating config can initializes some Hadoop
    * subsystems.
+   * hadoop的Configuration对象 从spark的conf中以spark.hadoop.的就是hadoop的key和value,比如spark.hadoop.aa.bb=cc,则hadoop的key是aa.bb,value是cc
+特别的是hadoop的io.file.buffer.size对应的value是spark.buffer.size对应的value
    */
   def newConfiguration(conf: SparkConf): Configuration = {
     val hadoopConf = new Configuration()

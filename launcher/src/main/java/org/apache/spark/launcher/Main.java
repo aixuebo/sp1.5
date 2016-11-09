@@ -27,6 +27,7 @@ import static org.apache.spark.launcher.CommandBuilderUtils.*;
 
 /**
  * Command line interface for the Spark launcher. Used internally by Spark scripts.
+ * spark启动的主要入口,submit就是通过该函数调用的,一切bin下的脚本都是从该入口进入的,bin下的spark-class就是引用的该类
  */
 class Main {
 
@@ -46,14 +47,27 @@ class Main {
    * On Unix-like systems, the output is a list of command arguments, separated by the NULL
    * character. On Windows, the output is a command line suitable for direct execution from the
    * script.
+   * 该备注说明spark-class脚本就是该类调用者
+   * 而spark-class最终是调用java -cp lib依赖的jar  org.apache.spark.launcher.Main org.apache.spark.deploy.SparkSubmit "$@"
+   *
+   * 例如:
+   * ./bin/spark-submit \
+   --class org.apache.spark.examples.SparkPi \
+   --master spark://207.184.161.138:7077 \
+   --deploy-mode cluster \
+   --supervise \
+   --executor-memory 20G \
+   --total-executor-cores 100 \
+   /path/to/examples.jar \
+   1000
    */
   public static void main(String[] argsArray) throws Exception {
     checkArgument(argsArray.length > 0, "Not enough arguments: missing class name.");
 
     List<String> args = new ArrayList<String>(Arrays.asList(argsArray));
-    String className = args.remove(0);
+    String className = args.remove(0);//第一个参数是类名,即org.apache.spark.deploy.SparkSubmit
 
-    boolean printLaunchCommand = !isEmpty(System.getenv("SPARK_PRINT_LAUNCH_COMMAND"));
+    boolean printLaunchCommand = !isEmpty(System.getenv("SPARK_PRINT_LAUNCH_COMMAND"));//是否打印启动命令
     AbstractCommandBuilder builder;
     if (className.equals("org.apache.spark.deploy.SparkSubmit")) {
       try {

@@ -53,6 +53,7 @@ import org.apache.spark.util.{RpcUtils, Utils}
  *
  * NOTE: This is not intended for external use. This is exposed for Shark and may be made private
  *       in a future release.
+ * 代表spark的执行环境
  */
 @DeveloperApi
 class SparkEnv (
@@ -314,6 +315,7 @@ object SparkEnv extends Logging {
       }
     }
 
+    //输出
     val mapOutputTracker = if (isDriver) {
       new MapOutputTrackerMaster(conf)
     } else {

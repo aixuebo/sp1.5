@@ -101,7 +101,9 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
   protected var epoch: Long = 0
   protected val epochLock = new AnyRef
 
-  /** Remembers which map output locations are currently being fetched on an executor. */
+  /** Remembers which map output locations are currently being fetched on an executor.
+    * 记录哪一个map的输出地址正在被抓去中
+    **/
   private val fetching = new HashSet[Int]
 
   /**
@@ -110,7 +112,7 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
    */
   protected def askTracker[T: ClassTag](message: Any): T = {
     try {
-      trackerEndpoint.askWithRetry[T](message)
+      trackerEndpoint.askWithRetry[T](message) //阻塞,返回Feture
     } catch {
       case e: Exception =>
         logError("Error communicating with MapOutputTracker", e)
@@ -120,8 +122,8 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
 
   /** Send a one-way message to the trackerEndpoint, to which we expect it to reply with true. */
   protected def sendTracker(message: Any) {
-    val response = askTracker[Boolean](message)
-    if (response != true) {
+    val response = askTracker[Boolean](message)  //期待返回值是true
+    if (response != true) {//如果返回值不是true,则抛异常
       throw new SparkException(
         "Error reply received from MapOutputTracker. Expecting true, got " + response.toString)
     }
@@ -146,7 +148,7 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
       var fetchedStatuses: Array[MapStatus] = null
       fetching.synchronized {
         // Someone else is fetching it; wait for them to be done
-        while (fetching.contains(shuffleId)) {
+        while (fetching.contains(shuffleId)) {//如果该shuffle在抓去中,则等待结果即可
           try {
             fetching.wait()
           } catch {
@@ -157,13 +159,13 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
         // Either while we waited the fetch happened successfully, or
         // someone fetched it in between the get and the fetching.synchronized.
         fetchedStatuses = mapStatuses.get(shuffleId).orNull
-        if (fetchedStatuses == null) {
+        if (fetchedStatuses == null) {//如果说该shuffle没有抓去过程中,则将其添加到抓去队列中
           // We have to do the fetch, get others to wait for us.
           fetching += shuffleId
         }
       }
 
-      if (fetchedStatuses == null) {
+      if (fetchedStatuses == null) {//抓去的结果还是null
         // We won the race to fetch the output locs; do so
         logInfo("Doing the fetch; tracker endpoint = " + trackerEndpoint)
         // This try-finally prevents hangs due to timeouts:
@@ -313,14 +315,15 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
   /**
    * Return a list of locations that each have fraction of map output greater than the specified
    * threshold.
-   *
-   * @param shuffleId id of the shuffle
-   * @param reducerId id of the reduce task
-   * @param numReducers total number of reducers in the shuffle
+   * 返回一个节点集合,这个集合内产生的输出比伐值要大
+   * @param shuffleId id of the shuffle 哪个shuffle
+   * @param reducerId id of the reduce task 第几个recude任务来获取该reduce的输入源字节占比
+   * @param numReducers total number of reducers in the shuffle,shuffle过程中总的recude数量
    * @param fractionThreshold fraction of total map output size that a location must have
    *                          for it to be considered large.
    *
    * This method is not thread-safe.
+   * 返回比伐值大的输出
    */
   def getLocationsWithLargestOutputs(
       shuffleId: Int,
@@ -336,9 +339,9 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
         val locs = new HashMap[BlockManagerId, Long] //key是status.location,value是该status.location上字节总数
         var totalOutputSize = 0L //总输出字节数
         var mapIdx = 0
-        while (mapIdx < statuses.length) {
-          val status = statuses(mapIdx)
-          val blockSize = status.getSizeForBlock(reducerId)
+        while (mapIdx < statuses.length) {//循环该shuffle的所有map任务
+          val status = statuses(mapIdx) //第index个map任务
+          val blockSize = status.getSizeForBlock(reducerId)//计算该map对该reduce的输出大小
           if (blockSize > 0) {
             locs(status.location) = locs.getOrElse(status.location, 0L) + blockSize
             totalOutputSize += blockSize
@@ -423,6 +426,8 @@ private[spark] object MapOutputTracker extends Logging {
   // Serialize an array of map output locations into an efficient byte format so that we can send
   // it to reduce tasks. We do this by compressing the serialized bytes using GZIP. They will
   // generally be pretty compressible because many map outputs will be on the same hostname.
+  //因为同一个host上有很多map的输出,因此压缩一下传输效率会高一些
+  //将参数map状态集合序列化成字节数组
   def serializeMapStatuses(statuses: Array[MapStatus]): Array[Byte] = {
     val out = new ByteArrayOutputStream
     val objOut = new ObjectOutputStream(new GZIPOutputStream(out))
@@ -438,6 +443,7 @@ private[spark] object MapOutputTracker extends Logging {
   }
 
   // Opposite of serializeMapStatuses.
+  //范序列化,将字节数组转换成MapStatus数组
   def deserializeMapStatuses(bytes: Array[Byte]): Array[MapStatus] = {
     val objIn = new ObjectInputStream(new GZIPInputStream(new ByteArrayInputStream(bytes)))
     Utils.tryWithSafeFinally {

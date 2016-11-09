@@ -1573,7 +1573,9 @@ private[spark] object Utils extends Logging {
 
   /** Returns the system properties map that is thread-safe to iterator over. It gets the
     * properties which have been set explicitly, as well as those for which only a default value
-    * has been defined. */
+    * has been defined.
+    *  从System.getProperties中读取全部key-value数据
+    **/
   def getSystemProperties: Map[String, String] = {
     //循环属性中每一个key,因为key是Set集合,因此sysProps返回值也是Set集合,只是Set存储的是元祖
     val sysProps = for (key <- System.getProperties.stringPropertyNames()) yield

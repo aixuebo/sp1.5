@@ -43,7 +43,7 @@ import org.apache.spark.util.Utils
  * Note that once a SparkConf object is passed to Spark, it is cloned and can no longer be modified
  * by the user. Spark does not support modifying the configuration at runtime.
  *
- * @param loadDefaults whether to also load values from Java system properties
+ * @param loadDefaults whether to also load values from Java system properties ,true表示去加载java运行环境,从中加载spark.开头的数据,默认是true
  */
 class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
 
@@ -52,10 +52,11 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
   /** Create a SparkConf that loads defaults from system properties and the classpath */
   def this() = this(true)
 
+  //存储的最终key-value信息
   private val settings = new ConcurrentHashMap[String, String]()
 
-  if (loadDefaults) {
-    // Load any spark.* system properties 加载系统属性集合,以spark，开头的都允许被加载
+  if (loadDefaults) { //该信息先被加载,因此优先级最低,以后后续的set都会覆盖该值
+    // Load any spark.* system properties 从System.getProperties中读取全部key-value数据,加载系统属性集合,以spark，开头的都允许被加载
     for ((key, value) <- Utils.getSystemProperties if key.startsWith("spark.")) {
       set(key, value)
     }
@@ -161,11 +162,11 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
    */
   def registerKryoClasses(classes: Array[Class[_]]): SparkConf = {
     val allClassNames = new LinkedHashSet[String]()
-    allClassNames ++= get("spark.kryo.classesToRegister", "").split(',').filter(!_.isEmpty)
-    allClassNames ++= classes.map(_.getName)
+    allClassNames ++= get("spark.kryo.classesToRegister", "").split(',').filter(!_.isEmpty) //解析该key对应的value,用逗号拆分组成set集合
+    allClassNames ++= classes.map(_.getName)//将参数的数组转换成类的全路径,追加到allClassNames集合中
 
-    set("spark.kryo.classesToRegister", allClassNames.mkString(","))
-    set("spark.serializer", classOf[KryoSerializer].getName)
+    set("spark.kryo.classesToRegister", allClassNames.mkString(",")) //重新设置新的值
+    set("spark.serializer", classOf[KryoSerializer].getName) //返回KryoSerializer这个class的全路径
     this
   }
 
@@ -401,13 +402,13 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
     }
 
     val executorOptsKey = "spark.executor.extraJavaOptions"
-    val executorClasspathKey = "spark.executor.extraClassPath"
+    val executorClasspathKey = "spark.executor.extraClassPath" //去设置executor的classpath
     val driverOptsKey = "spark.driver.extraJavaOptions"
     val driverClassPathKey = "spark.driver.extraClassPath"
     val driverLibraryPathKey = "spark.driver.extraLibraryPath"
     val sparkExecutorInstances = "spark.executor.instances"
 
-    // Used by Yarn in 1.1 and before
+    // Used by Yarn in 1.1 and before 要用spark.driver.extraLibraryPath去替换该key
     sys.props.get("spark.driver.libraryPath").foreach { value =>
       val warning =
         s"""
@@ -434,6 +435,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
     }
 
     // Validate memory fractions
+    //校验这些指标在0-1之间
     val memoryKeys = Seq(
       "spark.storage.memoryFraction",
       "spark.shuffle.memoryFraction",
@@ -472,6 +474,8 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
       }
     }
 
+    //spark.executor.extraClassPath 去设置executor的classpath
+    //--driver-class-path 去设置driver的classpath
     sys.env.get("SPARK_CLASSPATH").foreach { value =>
       val warning =
         s"""

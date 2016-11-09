@@ -135,6 +135,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * @param master Cluster URL to connect to (e.g. mesos://host:port, spark://host:port, local[4]).
    * @param appName A name for your application, to display on the cluster web UI
    * @param conf a [[org.apache.spark.SparkConf]] object specifying other Spark parameters
+   * 一些关键指标和conf一起创建sparkContext
    */
   def this(master: String, appName: String, conf: SparkConf) =
     this(SparkContext.updatedConf(conf, master, appName))
@@ -212,41 +213,42 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    | constructor is still running is safe.                                                 |
    * ------------------------------------------------------------------------------------- */
 
-  private var _conf: SparkConf = _
+  private var _conf: SparkConf = _ //参数conf的拷贝
   private var _eventLogDir: Option[URI] = None //获取spark.eventLog.dir配置的日志存储路径
   private var _eventLogCodec: Option[String] = None //spark.eventLog.compress属性为true的时候,获取日志文件的压缩方式
-  private var _env: SparkEnv = _
+  private var _eventLogger: Option[EventLoggingListener] = None //日志的监听器,好记录日志
+  private var _env: SparkEnv = _ //创建的SparkEnv对象,代表spark的执行环境
   private var _metadataCleaner: MetadataCleaner = _
-  private var _jobProgressListener: JobProgressListener = _
+  private var _jobProgressListener: JobProgressListener = _ //JobProgressListener 监听器
   private var _statusTracker: SparkStatusTracker = _
   private var _progressBar: Option[ConsoleProgressBar] = None
   private var _ui: Option[SparkUI] = None
-  private var _hadoopConfiguration: Configuration = _
-  private var _executorMemory: Int = _
+  private var _hadoopConfiguration: Configuration = _ //返回hadoop的配置信息
+  private var _executorMemory: Int = _ //每一个executor进程的内存设置,单位是M
   private var _schedulerBackend: SchedulerBackend = _
   private var _taskScheduler: TaskScheduler = _
   private var _heartbeatReceiver: RpcEndpointRef = _
-  @volatile private var _dagScheduler: DAGScheduler = _
+  @volatile private var _dagScheduler: DAGScheduler = _ //DAGScheduler
   private var _applicationId: String = _
   private var _applicationAttemptId: Option[String] = None
-  private var _eventLogger: Option[EventLoggingListener] = None
   private var _executorAllocationManager: Option[ExecutorAllocationManager] = None
   private var _cleaner: Option[ContextCleaner] = None
   private var _listenerBusStarted: Boolean = false
-  private var _jars: Seq[String] = _//spark.jars配置的jar文件集合
-  private var _files: Seq[String] = _//获取spark.files配置的文件集合
+  private var _jars: Seq[String] = _//spark.jars配置的jar文件集合,内容是按照,拆分的集合
+  private var _files: Seq[String] = _//获取spark.files配置的文件集合,内容是按照,拆分的集合
   private var _shutdownHookRef: AnyRef = _
 
   /* ------------------------------------------------------------------------------------- *
    | Accessors and public fields. These provide access to the internal state of the        |
    | context.                                                                              |
    * ------------------------------------------------------------------------------------- */
-
+  //不是拷贝该conf对象,而是直接引用
   private[spark] def conf: SparkConf = _conf
 
   /**
    * Return a copy of this SparkContext's configuration. The configuration ''cannot'' be
    * changed at runtime.
+   * 拷贝一个conf对象
    */
   def getConf: SparkConf = conf.clone()
 
@@ -369,7 +371,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    | All internal fields holding state are initialized here, and any error prompts the     |
    | stop() method to be called.                                                           |
    * ------------------------------------------------------------------------------------- */
-
+  //每一个executor进程的内存设置, 使用SPARK_MEM设置内存已经过期,要使用spark.executor.memory
   private def warnSparkMem(value: String): String = {
     logWarning("Using SPARK_MEM to set amount of memory to use per executor process is " +
       "deprecated, please use spark.executor.memory instead.")
@@ -390,8 +392,8 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   }
 
   try {
-    _conf = config.clone()
-    _conf.validateSettings()
+    _conf = config.clone() //拷贝一个conf对象
+    _conf.validateSettings() //对conf进行校验
 
     if (!_conf.contains("spark.master")) {
       throw new SparkException("A master URL must be set in your configuration")
@@ -421,9 +423,9 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
 
     _conf.set("spark.executor.id", SparkContext.DRIVER_IDENTIFIER)
 
-    //spark.jars配置的jar文件集合
+    //spark.jars配置的jar文件集合,内容是按照,拆分的集合
     _jars = _conf.getOption("spark.jars").map(_.split(",")).map(_.filter(_.size != 0)).toSeq.flatten
-    //获取spark.files配置的文件集合
+    //获取spark.files配置的文件集合,内容是按照,拆分的集合
     _files = _conf.getOption("spark.files").map(_.split(",")).map(_.filter(_.size != 0))
       .toSeq.flatten
 
@@ -482,6 +484,8 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     // the bound port to the cluster manager properly
     _ui.foreach(_.bind())
 
+    //hadoop的Configuration对象 从spark的conf中以spark.hadoop.的就是hadoop的key和value,比如spark.hadoop.aa.bb=cc,则hadoop的key是aa.bb,value是cc
+    //特别的是hadoop的io.file.buffer.size对应的value是spark.buffer.size对应的value
     _hadoopConfiguration = SparkHadoopUtil.get.newConfiguration(_conf)
 
     // Add each JAR given through the constructor
@@ -493,15 +497,18 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       files.foreach(addFile)
     }
 
+    //每一个executor进程的内存设置,单位是M
+    //其中这三个参数设置的内容单位是字节,因此最后要转换成M
     _executorMemory = _conf.getOption("spark.executor.memory")
       .orElse(Option(System.getenv("SPARK_EXECUTOR_MEMORY")))
       .orElse(Option(System.getenv("SPARK_MEM"))
       .map(warnSparkMem))
-      .map(Utils.memoryStringToMb)
-      .getOrElse(1024)
+      .map(Utils.memoryStringToMb) //转换成M
+      .getOrElse(1024)//单位是M
 
-    // Convert java options to env vars as a work around
+    // Convert java options to env vars as a work around 覆盖java操作
     // since we can't set env vars directly in sbt.
+    //在java环境中查找SPARK_TESTING对应的value,如果查找到了,则存放到executorEnvs中,如果找不到,则放弃存储
     for { (envKey, propKey) <- Seq(("SPARK_TESTING", "spark.testing"))
       value <- Option(System.getenv(envKey)).orElse(Option(System.getProperty(propKey)))} {
       executorEnvs(envKey) = value
@@ -512,7 +519,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     // The Mesos scheduler backend relies on this environment variable to set executor memory.
     // TODO: Set this only in the Mesos scheduler.
     executorEnvs("SPARK_EXECUTOR_MEMORY") = executorMemory + "m"
-    executorEnvs ++= _conf.getExecutorEnv
+    executorEnvs ++= _conf.getExecutorEnv //获取执行的环境变量元组集合
     executorEnvs("SPARK_USER") = sparkUser
 
     // We need to register "HeartbeatReceiver" before "createTaskScheduler" because Executor will
@@ -533,7 +540,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
 
     _applicationId = _taskScheduler.applicationId()
     _applicationAttemptId = taskScheduler.applicationAttemptId()
-    _conf.set("spark.app.id", _applicationId)
+    _conf.set("spark.app.id", _applicationId) //设置应用id
     _env.blockManager.initialize(_applicationId)
 
     // The metrics system for Driver need to be set spark.app.id to app ID.
@@ -542,6 +549,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     // Attach the driver metrics servlet handler to the web ui after the metrics system is started.
     metricsSystem.getServletHandlers.foreach(handler => ui.foreach(_.attachHandler(handler)))
 
+    //日志的监听器,用于设置日志内容
     _eventLogger =
       if (isEventLogEnabled) {
         val logger =
@@ -2549,6 +2557,7 @@ object SparkContext extends Logging {
    * to SparkContext, to make it easier to write SparkContext's constructors. This ignores
    * parameters that are passed as the default value of null, instead of throwing an exception
    * like SparkConf would.
+   * 为SparkConf设置一些关键参数
    */
   private[spark] def updatedConf(
       conf: SparkConf,
@@ -2590,7 +2599,9 @@ object SparkContext extends Logging {
 
   /**
    * Create a task scheduler based on a given master URL.
+   * 基于给定的master的url,创建任务的调度
    * Return a 2-tuple of the scheduler backend and the task scheduler.
+   * 返回一个tuple,含有两个元素
    */
   private def createTaskScheduler(
       sc: SparkContext,
@@ -2608,7 +2619,8 @@ object SparkContext extends Logging {
         (backend, scheduler)
 
       case LOCAL_N_REGEX(threads) =>
-        def localCpuCount: Int = Runtime.getRuntime.availableProcessors()
+        //local[N] 或者 local[*]形式 N表示线程数量
+        def localCpuCount: Int = Runtime.getRuntime.availableProcessors() //本地CPU数量
         // local[*] estimates the number of cores on the machine; local[N] uses exactly N threads.
         val threadCount = if (threads == "*") localCpuCount else threads.toInt
         if (threadCount <= 0) {
@@ -2620,7 +2632,8 @@ object SparkContext extends Logging {
         (backend, scheduler)
 
       case LOCAL_N_FAILURES_REGEX(threads, maxFailures) =>
-        def localCpuCount: Int = Runtime.getRuntime.availableProcessors()
+        //格式local[N, maxRetries]
+        def localCpuCount: Int = Runtime.getRuntime.availableProcessors() //本地CPU数量
         // local[*, M] means the number of cores on the computer with M failures
         // local[N, M] means exactly N threads with M failures
         val threadCount = if (threads == "*") localCpuCount else threads.toInt
@@ -2630,16 +2643,18 @@ object SparkContext extends Logging {
         (backend, scheduler)
 
       case SPARK_REGEX(sparkUrl) =>
+        //格式 spark://  spark://HOST:PORT 连接到指定的 Spark standalone cluster master，需要指定端口。
         val scheduler = new TaskSchedulerImpl(sc)
-        val masterUrls = sparkUrl.split(",").map("spark://" + _)
+        val masterUrls = sparkUrl.split(",").map("spark://" + _) //master集合,可以用逗号拆分
         val backend = new SparkDeploySchedulerBackend(scheduler, sc, masterUrls)
         scheduler.initialize(backend)
         (backend, scheduler)
 
       case LOCAL_CLUSTER_REGEX(numSlaves, coresPerSlave, memoryPerSlave) =>
+        //格式 local-cluster[N, cores, memory]
         // Check to make sure memory requested <= memoryPerSlave. Otherwise Spark will just hang.
-        val memoryPerSlaveInt = memoryPerSlave.toInt
-        if (sc.executorMemory > memoryPerSlaveInt) {
+        val memoryPerSlaveInt = memoryPerSlave.toInt //节点需要的内存
+        if (sc.executorMemory > memoryPerSlaveInt) {//每一个工作进程要的内存都比节点大,是不允许的
           throw new SparkException(
             "Asked to launch cluster with %d MB RAM / worker but requested %d MB/worker".format(
               memoryPerSlaveInt, sc.executorMemory))
@@ -2656,8 +2671,8 @@ object SparkContext extends Logging {
         }
         (backend, scheduler)
 
-      case "yarn-standalone" | "yarn-cluster" =>
-        if (master == "yarn-standalone") {
+      case "yarn-standalone" | "yarn-cluster" => //yarn-cluster集群模式 连接到 YARN 集群 。需要配置 HADOOP_CONF_DIR。
+        if (master == "yarn-standalone") {//yarn-standalone已经过时了,使用yarn-cluster
           logWarning(
             "\"yarn-standalone\" is deprecated as of Spark 1.0. Use \"yarn-cluster\" instead.")
         }
@@ -2685,7 +2700,7 @@ object SparkContext extends Logging {
         scheduler.initialize(backend)
         (backend, scheduler)
 
-      case "yarn-client" =>
+      case "yarn-client" => //yarn-client客户端模式 连接到 YARN 集群。需要配置 HADOOP_CONF_DIR。
         val scheduler = try {
           val clazz = Utils.classForName("org.apache.spark.scheduler.cluster.YarnScheduler")
           val cons = clazz.getConstructor(classOf[SparkContext])
@@ -2740,13 +2755,13 @@ object SparkContext extends Logging {
  * A collection of regexes for extracting information from the master string.
  */
 private object SparkMasterRegex {
-  // Regular expression used for local[N] and local[*] master formats 获取本地方式启动时候的线程数,返回是整数或者*
+  // Regular expression used for local[N] and local[*] master formats 获取本地方式启动时候的线程数,返回是整数或者*   local[N] 或者 local[*]
   val LOCAL_N_REGEX = """local\[([0-9]+|\*)\]""".r
   // Regular expression for local[N, maxRetries], used in tests with failing tasks
-  val LOCAL_N_FAILURES_REGEX = """local\[([0-9]+|\*)\s*,\s*([0-9]+)\]""".r
-  // Regular expression for simulating a Spark cluster of [N, cores, memory] locally
+  val LOCAL_N_FAILURES_REGEX = """local\[([0-9]+|\*)\s*,\s*([0-9]+)\]""".r //格式local[N, maxRetries]
+  // Regular expression for simulating a Spark cluster of [N, cores, memory] locally 格式 local-cluster[N, cores, memory]
   val LOCAL_CLUSTER_REGEX = """local-cluster\[\s*([0-9]+)\s*,\s*([0-9]+)\s*,\s*([0-9]+)\s*]""".r
-  // Regular expression for connecting to Spark deploy clusters
+  // Regular expression for connecting to Spark deploy clusters 属于spark的alone集群模式
   val SPARK_REGEX = """spark://(.*)""".r
   // Regular expression for connection to Mesos cluster by mesos:// or zk:// url
   val MESOS_REGEX = """(mesos|zk)://.*""".r
