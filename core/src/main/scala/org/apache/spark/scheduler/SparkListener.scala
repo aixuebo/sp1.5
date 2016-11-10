@@ -83,10 +83,13 @@ case class SparkListenerJobEnd(
 case class SparkListenerEnvironmentUpdate(environmentDetails: Map[String, Seq[(String, String)]])
   extends SparkListenerEvent
 
+//通知driver,有一个executor的BlockManager添加进来了,
+//参数包含 添加进来的时间,blockManagerId,以及该blockManagerId对应的最大内存
 @DeveloperApi
 case class SparkListenerBlockManagerAdded(time: Long, blockManagerId: BlockManagerId, maxMem: Long)
   extends SparkListenerEvent
 
+//在这个时间点,blockManagerId已经不能用了,已经从driver中移除
 @DeveloperApi
 case class SparkListenerBlockManagerRemoved(time: Long, blockManagerId: BlockManagerId)
   extends SparkListenerEvent
@@ -102,7 +105,8 @@ case class SparkListenerExecutorAdded(time: Long, executorId: String, executorIn
 case class SparkListenerExecutorRemoved(time: Long, executorId: String, reason: String)
   extends SparkListenerEvent
 
-//存储一个数据块在一个数据块管理着(block manager)里面的状态信息,用于org.apache.spark.scheduler.SparkListener里面监听SparkListenerBlockUpdated事件,用于更新数据块
+//更新一个数据块信息--包含该数据块所在节点、数据块ID、该数据块存储级别、该数据块所占内存、磁盘大小,
+//即一个数据块从executor节点上报给driver节点了
 @DeveloperApi
 case class SparkListenerBlockUpdated(blockUpdatedInfo: BlockUpdatedInfo) extends SparkListenerEvent
 

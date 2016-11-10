@@ -57,19 +57,20 @@ private[spark] class BlockResult(
  * retrieving blocks both locally and remotely into various stores (memory, disk, and off-heap).
  * 运行在每一个node上,每一个driver and executors都有一个该对象,管理属于该driver and executors的数据块信息,包括存储数据块和获取数据块,存储方式内存、磁盘、外部存储都可以
  * Note that #initialize() must be called before the BlockManager is usable.
+ * 一个SparkEnv创建一个该对象,运行在node节点上
  */
 private[spark] class BlockManager(
-    executorId: String,
-    rpcEnv: RpcEnv,
-    val master: BlockManagerMaster,
-    defaultSerializer: Serializer,
+    executorId: String,//drver节点上,则该内容是driver,executor暂时未知
+    rpcEnv: RpcEnv,//是driver节点或者executor节点的服务器对象RpcEnv
+    val master: BlockManagerMaster,//如果是driver节点,则是BlockManagerMaster对象,如果是executor节点,则是driver节点的RpcEndpointRef引用
+    defaultSerializer: Serializer,//如果序列化
     maxMemory: Long,//最大使用多少内存,存储数据块信息
     val conf: SparkConf,
-    mapOutputTracker: MapOutputTracker,
+    mapOutputTracker: MapOutputTracker,//如果是driver节点,则是MapOutputTrackerMaster,如果是executor节点,则是MapOutputTrackerWorker
     shuffleManager: ShuffleManager,
-    blockTransferService: BlockTransferService,
+    blockTransferService: BlockTransferService,//数据块传输协议,是NettyBlockTransferService或者NioBlockTransferService
     securityManager: SecurityManager,
-    numUsableCores: Int)
+    numUsableCores: Int)//driver需要多少cpu去执行本地模式.非本地模式都是返回0
   extends BlockDataManager with Logging {
 
   val diskBlockManager = new DiskBlockManager(this, conf) //磁盘存储管理者

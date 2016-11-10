@@ -24,6 +24,7 @@ import com.google.common.io.Files
 import org.apache.spark.util.Utils
 
 //将本地文件copy到baseDir目录下,方便其他节点来该节点下载文件和jar包
+//driver节点要创建一个该服务
 private[spark] class HttpFileServer(
     conf: SparkConf,
     securityManager: SecurityManager,

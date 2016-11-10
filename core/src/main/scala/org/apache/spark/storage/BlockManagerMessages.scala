@@ -31,7 +31,7 @@ private[spark] object BlockManagerMessages {
 
   // Remove a block from the slaves that have it. This can only be used to remove
   // blocks that the master knows about.
-  //从slaves节点移除一个数据块,如果该数据块存在的话,这个操作仅仅被使用与master已经知道要移动该数据块的数据块
+  //driver通知executor节点删除该数据块
   case class RemoveBlock(blockId: BlockId) extends ToBlockManagerSlave
 
   // Remove all blocks belonging to a specific RDD.移除该rdd下的所有的数据块
@@ -49,18 +49,22 @@ private[spark] object BlockManagerMessages {
   //////////////////////////////////////////////////////////////////////////////////
   sealed trait ToBlockManagerMaster
 
+  //在executor节点注册了一个BlockManagerId,最多允许使用maxMemSize内存
   case class RegisterBlockManager(
       blockManagerId: BlockManagerId,
       maxMemSize: Long,
-      sender: RpcEndpointRef)
+      sender: RpcEndpointRef) //该executor节点通信对象
     extends ToBlockManagerMaster
 
+  //更新一个数据块信息--包含该数据块所在节点、数据块ID、该数据块存储级别、该数据块所占内存、磁盘大小
+  //即让driver知道存在一个该数据块在该节点上
+  //相当于add方法
   case class UpdateBlockInfo(
-      var blockManagerId: BlockManagerId,
-      var blockId: BlockId,
-      var storageLevel: StorageLevel,
-      var memSize: Long,
-      var diskSize: Long,
+      var blockManagerId: BlockManagerId,//该数据块所在节点
+      var blockId: BlockId,//数据块ID
+      var storageLevel: StorageLevel,//该数据块存储级别
+      var memSize: Long,//该数据块所占内存大小
+      var diskSize: Long,//该数据块所占磁盘大小
       var externalBlockStoreSize: Long)
     extends ToBlockManagerMaster
     with Externalizable {
@@ -86,31 +90,43 @@ private[spark] object BlockManagerMessages {
     }
   }
 
-  //获取该数据块的位置
+  //相当于select方法
+  //获取该数据块对应存储在哪些节点上
   case class GetLocations(blockId: BlockId) extends ToBlockManagerMaster
 
-  //获取多个数据块的位置
+  //相当于select方法
+  //获取多个数据块的位置,每一个数据块都在多个节点上,因此返回的是IndexedSeq[Seq[BlockManagerId]]
   case class GetLocationsMultipleBlockIds(blockIds: Array[BlockId]) extends ToBlockManagerMaster
 
+  //返回除了driver和自己之外的  BlockManagerId集合 Seq[BlockManagerId]
   case class GetPeers(blockManagerId: BlockManagerId) extends ToBlockManagerMaster
 
+  //返回一个执行者的rcp对应的host和port Option[(String, Int)]
   case class GetRpcHostPortForExecutor(executorId: String) extends ToBlockManagerMaster
 
+  //删除一个executor节点
   case class RemoveExecutor(execId: String) extends ToBlockManagerMaster
 
+  //停止该driver节点
   case object StopBlockManagerMaster extends ToBlockManagerMaster
 
+  //返回所有的BlockManagerId,与之该BlockManagerId相关的最大内存和剩余内存,即Map[BlockManagerId, (Long, Long)]
   case object GetMemoryStatus extends ToBlockManagerMaster
 
+  //每一个BlockManagerId对应一个StorageStatus被返回,因此返回的是 Array[StorageStatus]数组
   case object GetStorageStatus extends ToBlockManagerMaster
 
+  //返回该数据块在每一个BlockManagerId节点上的状态集合,格式即Map[BlockManagerId, Future[Option[BlockStatus]]]
+  //参数askSlaves 为true,则表示这些状态要去executor节点去现查
   case class GetBlockStatus(blockId: BlockId, askSlaves: Boolean = true)
     extends ToBlockManagerMaster
 
+  //查询所有的数据块,找到跟参数filter函数匹配的数据块集合
   case class GetMatchingBlockIds(filter: BlockId => Boolean, askSlaves: Boolean = true)
     extends ToBlockManagerMaster
 
+  //定期executor节点要心跳给driver节点,让driver节点知道该executor节点还活着
   case class BlockManagerHeartbeat(blockManagerId: BlockManagerId) extends ToBlockManagerMaster
-
+  //判断该executor节点上是否在driver节点上有缓存数据块,返回boolean值
   case class HasCachedBlocks(executorId: String) extends ToBlockManagerMaster
 }

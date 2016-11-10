@@ -227,7 +227,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   private var _executorMemory: Int = _ //每一个executor进程的内存设置,单位是M
   private var _schedulerBackend: SchedulerBackend = _
   private var _taskScheduler: TaskScheduler = _
-  private var _heartbeatReceiver: RpcEndpointRef = _
+  private var _heartbeatReceiver: RpcEndpointRef = _ //该服务器上创建HeartbeatReceiver对象引用,用于处理接收心跳
   @volatile private var _dagScheduler: DAGScheduler = _ //DAGScheduler
   private var _applicationId: String = _
   private var _applicationAttemptId: Option[String] = None
@@ -524,6 +524,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
 
     // We need to register "HeartbeatReceiver" before "createTaskScheduler" because Executor will
     // retrieve "HeartbeatReceiver" in the constructor. (SPARK-6640)
+    //该服务器上创建HeartbeatReceiver对象引用,用于处理接收心跳
     _heartbeatReceiver = env.rpcEnv.setupEndpoint(
       HeartbeatReceiver.ENDPOINT_NAME, new HeartbeatReceiver(this))
 
@@ -2355,6 +2356,7 @@ object SparkContext extends Logging {
    * Executor id for the driver.  In earlier versions of Spark, this was `<driver>`, but this was
    * changed to `driver` because the angle brackets caused escaping issues in URLs and XML (see
    * SPARK-6716 for more details).
+   * 表示该Executor是一个driver,以前都是<driver>,现在改成driver,因为原来的方式url中有些编码上的问题
    */
   private[spark] val DRIVER_IDENTIFIER = "driver"
 

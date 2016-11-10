@@ -69,7 +69,7 @@ class Main {
 
     boolean printLaunchCommand = !isEmpty(System.getenv("SPARK_PRINT_LAUNCH_COMMAND"));//是否打印启动命令
     AbstractCommandBuilder builder;
-    if (className.equals("org.apache.spark.deploy.SparkSubmit")) {
+    if (className.equals("org.apache.spark.deploy.SparkSubmit")) {//正常submit提交的类
       try {
         builder = new SparkSubmitCommandBuilder(args);
       } catch (IllegalArgumentException e) {
@@ -98,7 +98,7 @@ class Main {
 
     Map<String, String> env = new HashMap<String, String>();
     List<String> cmd = builder.buildCommand(env);
-    if (printLaunchCommand) {
+    if (printLaunchCommand) {//打印启动命令
       System.err.println("Spark Command: " + join(" ", cmd));
       System.err.println("========================================");
     }

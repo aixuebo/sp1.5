@@ -31,7 +31,7 @@ import org.apache.spark.util.{ThreadUtils, RpcUtils}
  */
 private[spark]
 class BlockManagerMaster(
-    var driverEndpoint: RpcEndpointRef,//该引用是ref,表示客户端
+    var driverEndpoint: RpcEndpointRef,//如果该节点是driver,则该对象是dirver节点上的BlockManagerMasterEndpoint引用     如果该节点是executor,则该对象是driver的RpcEndpointRef引用
     conf: SparkConf,
     isDriver: Boolean)
   extends Logging {
@@ -241,5 +241,5 @@ class BlockManagerMaster(
 }
 
 private[spark] object BlockManagerMaster {
-  val DRIVER_ENDPOINT_NAME = "BlockManagerMaster"
+  val DRIVER_ENDPOINT_NAME = "BlockManagerMaster" //Actor的name
 }

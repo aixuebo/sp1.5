@@ -21,7 +21,7 @@ package org.apache.spark.rpc
  * A callback that [[RpcEndpoint]] can use it to send back a message or failure. It's thread-safe
  * and can be called in any thread.
  * 线程安全的,可以被任意线程调用,
- * 用于RpcEndpoint将返回值活着异常信息返回给客户端
+ * 用于RpcEndpoint将返回值信息返回给服务端
  */
 private[spark] trait RpcCallContext {
 

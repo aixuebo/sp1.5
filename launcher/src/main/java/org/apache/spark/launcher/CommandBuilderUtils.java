@@ -24,6 +24,7 @@ import java.util.Map;
 
 /**
  * Helper methods for command builders.
+ * builder的工具类
  */
 class CommandBuilderUtils {
 

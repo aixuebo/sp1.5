@@ -24,6 +24,8 @@ import org.apache.spark.storage.BlockManagerMessages.UpdateBlockInfo
  * :: DeveloperApi ::
  * Stores information about a block status in a block manager.
  * 存储一个数据块在一个数据块管理着(block manager)里面的状态信息,用于org.apache.spark.scheduler.SparkListener里面监听SparkListenerBlockUpdated事件,用于更新数据块
+ *
+ * 更新一个数据块信息--包含该数据块所在节点、数据块ID、该数据块存储级别、该数据块所占内存、磁盘大小
  */
 @DeveloperApi
 case class BlockUpdatedInfo(

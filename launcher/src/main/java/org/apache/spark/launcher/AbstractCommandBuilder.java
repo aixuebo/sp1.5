@@ -86,6 +86,7 @@ abstract class AbstractCommandBuilder {
    * 构建java执行环境
    * 包括:
    * javaHome/bin/java -Dkey=value -Dkey=value -cp classpath1;classpath2;extraClassPath
+   * 其中-Dkey=value -Dkey=value  来自于java-opts文件
    */
   List<String> buildJavaCommand(String extraClassPath) throws IOException {
     List<String> cmd = new ArrayList<String>();
@@ -164,6 +165,9 @@ abstract class AbstractCommandBuilder {
    * specifically, with trailing slashes for directories).
    * 将机器上各种关于spark或者scala的classpath追加,并且返回classpath集合
    * 参数是app应用存储路径,其他的追加是系统环境classpath
+   *
+   * 参数appClassPath 可以是按照;拆分的字符串
+   * 返回是classpath的集合
    */
   List<String> buildClassPath(String appClassPath) throws IOException {
     String sparkHome = getSparkHome();
@@ -177,7 +181,7 @@ abstract class AbstractCommandBuilder {
     boolean prependClasses = !isEmpty(getenv("SPARK_PREPEND_CLASSES"));
     boolean isTesting = "1".equals(getenv("SPARK_TESTING"));
     if (prependClasses || isTesting) {
-      String scala = getScalaVersion();
+      String scala = getScalaVersion();//获取scala版本
       List<String> projects = Arrays.asList("core", "repl", "mllib", "bagel", "graphx",
         "streaming", "tools", "sql/catalyst", "sql/core", "sql/hive", "sql/hive-thriftserver",
         "yarn", "launcher");
@@ -306,7 +310,7 @@ abstract class AbstractCommandBuilder {
       //校验配置文件一定是一个文件,不能是目录
       checkArgument(propsFile.isFile(), "Invalid properties file '%s'.", propertiesFile);
     } else {
-      propsFile = new File(getConfDir(), DEFAULT_PROPERTIES_FILE);//加载默认配置文件
+      propsFile = new File(getConfDir(), DEFAULT_PROPERTIES_FILE);//加载默认配置文件 spark-defaults.conf
     }
 
     if (propsFile.isFile()) {

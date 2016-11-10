@@ -93,13 +93,15 @@ private[spark] class AkkaRpcEnv private[akka] (
    */
   override def endpointRef(endpoint: RpcEndpoint): RpcEndpointRef = endpointToRef.get(endpoint)
 
+  //向endpoint发送请求,创建endpoint的引用
   override def setupEndpoint(name: String, endpoint: RpcEndpoint): RpcEndpointRef = {
     @volatile var endpointRef: AkkaRpcEndpointRef = null
     // Use lazy because the Actor needs to use `endpointRef`.
     // So `actorRef` should be created after assigning `endpointRef`.
+    //对客户端RpcEndpoint封装一个本地引用Actor,里面包含客户端RpcEndpoint对象
     lazy val actorRef = actorSystem.actorOf(Props(new Actor with ActorLogReceive with Logging {
 
-      assert(endpointRef != null)
+      assert(endpointRef != null)//客户端对象不为null
 
       override def preStart(): Unit = {
         // Listen for remote client network events
@@ -164,11 +166,14 @@ private[spark] class AkkaRpcEnv private[akka] (
   private def processMessage(endpoint: RpcEndpoint, m: AkkaMessage, _sender: ActorRef): Unit = {
     val message = m.message
     val needReply = m.needReply//true表示发送者需要一个回复
+
+    //因为receiveAndReply和receive方法返回值都是PartialFunction[Any, Unit]
+    //receiveAndReply参数是一个RpcCallContext,是客户端要回复给发送端的信息,因此里面封装的都是_sender
     val pf: PartialFunction[Any, Unit] =
       if (needReply) {
-        endpoint.receiveAndReply(new RpcCallContext {
+        endpoint.receiveAndReply(new RpcCallContext {//里面的信息都是客户端要调用的
           override def sendFailure(e: Throwable): Unit = {
-            _sender ! AkkaFailure(e)
+            _sender ! AkkaFailure(e)//客户端会调用_sender,让发送者收到信息
           }
 
           override def reply(response: Any): Unit = {
@@ -182,6 +187,8 @@ private[spark] class AkkaRpcEnv private[akka] (
       } else {
         endpoint.receive
       }
+
+
     try {
       pf.applyOrElse[Any, Unit](message, { message =>
         throw new SparkException(s"Unmatched message $message from ${_sender}")
@@ -287,8 +294,8 @@ private[akka] class ErrorMonitor extends Actor with ActorLogReceive with Logging
 
 //代表一个客户端实现类
 private[akka] class AkkaRpcEndpointRef(
-    @transient defaultAddress: RpcAddress,
-    @transient _actorRef: => ActorRef,//引用的Actor
+    @transient defaultAddress: RpcAddress,//服务器地址
+    @transient _actorRef: => ActorRef,//引用的客户端Actor
     @transient conf: SparkConf,
     @transient initInConstructor: Boolean = true)
   extends RpcEndpointRef(conf) with Logging {

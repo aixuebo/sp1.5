@@ -41,7 +41,7 @@ public class SparkLauncher {
   /** Configuration key for the driver memory. */
   public static final String DRIVER_MEMORY = "spark.driver.memory";
   /** Configuration key for the driver class path. */
-  public static final String DRIVER_EXTRA_CLASSPATH = "spark.driver.extraClassPath";
+  public static final String DRIVER_EXTRA_CLASSPATH = "spark.driver.extraClassPath";//driver的classpath
   /** Configuration key for the driver VM options. */
   public static final String DRIVER_EXTRA_JAVA_OPTIONS = "spark.driver.extraJavaOptions";
   /** Configuration key for the driver native library path. */

@@ -28,7 +28,7 @@ import org.apache.spark.util.Utils
  * 对广播工厂的创建、初始化、stop等操作,属于工厂的代理类
  */
 private[spark] class BroadcastManager(
-    val isDriver: Boolean,
+    val isDriver: Boolean,//是否该节点是driver
     conf: SparkConf,
     securityManager: SecurityManager)
   extends Logging {

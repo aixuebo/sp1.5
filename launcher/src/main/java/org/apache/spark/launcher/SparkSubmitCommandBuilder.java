@@ -202,10 +202,10 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
     // Load the properties file and check whether spark-submit will be running the app's driver
     // or just launching a cluster app. When running the driver, the JVM's argument will be
     // modified to cover the driver's configuration.
-    Properties props = loadPropertiesFile();
+    Properties props = loadPropertiesFile();//加载配置文件
     boolean isClientMode = isClientMode(props);
     String extraClassPath = isClientMode ?
-      firstNonEmptyValue(SparkLauncher.DRIVER_EXTRA_CLASSPATH, conf, props) : null;
+      firstNonEmptyValue(SparkLauncher.DRIVER_EXTRA_CLASSPATH, conf, props) : null;//获取driver本地的额外classpath
 
     List<String> cmd = buildJavaCommand(extraClassPath);
     // Take Thrift Server as daemon

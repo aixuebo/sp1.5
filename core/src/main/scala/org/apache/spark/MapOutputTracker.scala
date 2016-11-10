@@ -38,12 +38,16 @@ private[spark] case object StopMapOutputTracker extends MapOutputTrackerMessage 
 /** RpcEndpoint class for MapOutputTrackerMaster
   * 该类负责接收请求,将对应的信息返回给对方
   * 比如接收请求获取某个shuffleId对应的结果状态
+  *
+  * rpcEnv是drvier上的服务器对象
+  * tracker是MapOutputTrackerMaster,表示driver上的对象
   **/
 private[spark] class MapOutputTrackerMasterEndpoint(
     override val rpcEnv: RpcEnv, tracker: MapOutputTrackerMaster, conf: SparkConf)
   extends RpcEndpoint with Logging {
   val maxAkkaFrameSize = AkkaUtils.maxFrameSizeBytes(conf)//返回一个message允许的上限,单位是字节
 
+  //代表一个服务端
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
     case GetMapOutputStatuses(shuffleId: Int) =>
       val hostPort = context.sender.address.hostPort  //发送者的host和port
@@ -79,7 +83,11 @@ private[spark] class MapOutputTrackerMasterEndpoint(
  */
 private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging {
 
-  /** Set to the MapOutputTrackerMasterEndpoint living on the driver. */
+  /** Set to the MapOutputTrackerMasterEndpoint living on the driver.
+    *
+    * 如果该节点是driver,则该对象是MapOutputTrackerMasterEndpoint对象
+    * 如果该节点是executor,则该节点就是driver的RpcEndpointRef引用
+    **/
   var trackerEndpoint: RpcEndpointRef = _
 
   /**
@@ -421,7 +429,7 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
 
 private[spark] object MapOutputTracker extends Logging {
 
-  val ENDPOINT_NAME = "MapOutputTracker"
+  val ENDPOINT_NAME = "MapOutputTracker" //Actor的name
 
   // Serialize an array of map output locations into an efficient byte format so that we can send
   // it to reduce tasks. We do this by compressing the serialized bytes using GZIP. They will

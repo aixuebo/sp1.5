@@ -60,7 +60,8 @@ private[spark] object AkkaUtils extends Logging {
   }
 
   /**
-   * 创建一个Actor系统,返回该系统以及系统所在port
+   * 创建一个服务端,在host port上进行监听,
+   * 返回真正要监听的端口号以及Actor系统
    */
   private def doCreateActorSystem(
       name: String,//actorSystem的Name
@@ -84,7 +85,7 @@ private[spark] object AkkaUtils extends Logging {
 
     val logAkkaConfig = if (conf.getBoolean("spark.akka.logAkkaConfig", false)) "on" else "off"
 
-    val akkaHeartBeatPausesS = conf.getTimeAsSeconds("spark.akka.heartbeat.pauses", "6000s")
+    val akkaHeartBeatPausesS = conf.getTimeAsSeconds("spark.akka.heartbeat.pauses", "6000s") //传输失败后,时间间隔
     val akkaHeartBeatIntervalS = conf.getTimeAsSeconds("spark.akka.heartbeat.interval", "1000s")
 
     val secretKey = securityManager.getSecretKey()

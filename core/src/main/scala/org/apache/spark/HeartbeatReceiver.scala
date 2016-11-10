@@ -221,5 +221,5 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
 }
 
 object HeartbeatReceiver {
-  val ENDPOINT_NAME = "HeartbeatReceiver"
+  val ENDPOINT_NAME = "HeartbeatReceiver" //Actor的name
 }

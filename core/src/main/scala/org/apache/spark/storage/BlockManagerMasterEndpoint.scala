@@ -58,17 +58,21 @@ class BlockManagerMasterEndpoint(
   private implicit val askExecutionContext = ExecutionContext.fromExecutorService(askThreadPool)
 
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
+
+    //从slaves节点发送数据到master节点 beigin
     case RegisterBlockManager(blockManagerId, maxMemSize, slaveEndpoint) =>
       register(blockManagerId, maxMemSize, slaveEndpoint) //在slave节点注册了一个BlockManagerId,最多允许使用maxMemSize内存
       context.reply(true)
 
       /**
-       * 更新一个数据块,并且更新该数据块对应的BlockManagerId集合,true表示更新成功,false表示更新失败
+       * 更新一个数据块信息--包含该数据块所在节点、数据块ID、该数据块存储级别、该数据块所占内存、磁盘大小
        */
     case _updateBlockInfo @ UpdateBlockInfo(
       blockManagerId, blockId, storageLevel, deserializedSize, size, externalBlockStoreSize) =>
       context.reply(updateBlockInfo(
-        blockManagerId, blockId, storageLevel, deserializedSize, size, externalBlockStoreSize)) 
+        blockManagerId, blockId, storageLevel, deserializedSize, size, externalBlockStoreSize))
+
+      //发送事件
       listenerBus.post(SparkListenerBlockUpdated(BlockUpdatedInfo(_updateBlockInfo))) 
 
     case GetLocations(blockId) =>
@@ -89,10 +93,20 @@ class BlockManagerMasterEndpoint(
       context.reply(getPeers(blockManagerId))
 
       /**
-       * 返回一个执行者的rcp对应的host和port
+       * 返回一个执行者的rcp对应的host和port Option[(String, Int)]
        */
     case GetRpcHostPortForExecutor(executorId) =>
       context.reply(getRpcHostPortForExecutor(executorId))
+
+    //删除一个执行节点
+    case RemoveExecutor(execId) =>
+      removeExecutor(execId)
+      context.reply(true)
+
+      //停止该driver节点
+    case StopBlockManagerMaster =>
+      context.reply(true)
+      stop()
 
       /**
        * 返回所有的BlockManagerId,与之该BlockManagerId相关的最大内存和剩余内存,即Map[BlockManagerId, (Long, Long)]
@@ -100,59 +114,63 @@ class BlockManagerMasterEndpoint(
     case GetMemoryStatus =>
       context.reply(memoryStatus)
 
+    //每一个BlockManagerId对应一个StorageStatus被返回,因此返回的是 Array[StorageStatus]数组
     case GetStorageStatus =>
       context.reply(storageStatus)
 
+    //返回该数据块在每一个BlockManagerId节点上的状态集合,格式即Map[BlockManagerId, Future[Option[BlockStatus]]]
+    //参数askSlaves 为true,则表示这些状态要去executor节点去现查
     case GetBlockStatus(blockId, askSlaves) =>
       context.reply(blockStatus(blockId, askSlaves))
 
+    //查询所有的数据块,找到跟参数filter函数匹配的数据块集合
     case GetMatchingBlockIds(filter, askSlaves) =>
       context.reply(getMatchingBlockIds(filter, askSlaves))
 
-    case RemoveRdd(rddId) =>
-      context.reply(removeRdd(rddId))
-
-    case RemoveShuffle(shuffleId) =>
-      context.reply(removeShuffle(shuffleId))
-
-    case RemoveBroadcast(broadcastId, removeFromDriver) =>
-      context.reply(removeBroadcast(broadcastId, removeFromDriver))
-
-    case RemoveBlock(blockId) =>
-      removeBlockFromWorkers(blockId)
-      context.reply(true)
-
-    case RemoveExecutor(execId) =>
-      removeExecutor(execId)
-      context.reply(true)
-
-    case StopBlockManagerMaster =>
-      context.reply(true)
-      stop()
-
+    //定期executor节点要心跳给driver节点,让driver节点知道该executor节点还活着
     case BlockManagerHeartbeat(blockManagerId) =>
       context.reply(heartbeatReceived(blockManagerId))
 
+    //判断该executor节点上是否在driver节点上有缓存数据块,返回boolean值
     case HasCachedBlocks(executorId) =>
-      blockManagerIdByExecutor.get(executorId) match {
+      blockManagerIdByExecutor.get(executorId) match {//找到该executorId对应的BlockManagerId对象
         case Some(bm) =>
-          if (blockManagerInfo.contains(bm)) {
+          if (blockManagerInfo.contains(bm)) {//driver中是否有该节点对应的内存映射对象BlockManagerInfo
             val bmInfo = blockManagerInfo(bm)
-            context.reply(bmInfo.cachedBlocks.nonEmpty)
+            context.reply(bmInfo.cachedBlocks.nonEmpty)//判断此时缓存的数据块是否存在
           } else {
             context.reply(false)
           }
         case None => context.reply(false)
       }
+    //从slaves节点发送数据到master节点 end
+
+    //从master节点发送数据到slaves节点 beigin
+    case RemoveBlock(blockId) =>
+      removeBlockFromWorkers(blockId) //将该数据块从work节点移除
+      context.reply(true)
+
+    case RemoveRdd(rddId) =>
+      context.reply(removeRdd(rddId)) //删除该RDD
+
+    case RemoveShuffle(shuffleId) =>
+      context.reply(removeShuffle(shuffleId)) //删除一个shffle
+
+    case RemoveBroadcast(broadcastId, removeFromDriver) =>
+      context.reply(removeBroadcast(broadcastId, removeFromDriver)) //删除一个广播
+
+    //从master节点发送数据到slaves节点 end
+
   }
 
+  //删除一个RDD
   private def removeRdd(rddId: Int): Future[Seq[Int]] = {
     // First remove the metadata for the given RDD, and then asynchronously remove the blocks
     // from the slaves.
 
     // Find all blocks for the given RDD, remove the block from both blockLocations and
     // the blockManagerInfo that is tracking the blocks.
-    //过滤所有数据该rddid的数据块集合
+    //过滤所有数据该rddid的数据块集合,找到要删除的RDD集合
     val blocks = blockLocations.keys.flatMap(_.asRDDId).filter(_.rddId == rddId)
     /**
      * 1.循环每一个rddid对应的数据块集合
@@ -161,29 +179,30 @@ class BlockManagerMasterEndpoint(
      * 4.删除该数据块所有映射
      */
     blocks.foreach { blockId =>
-      val bms: mutable.HashSet[BlockManagerId] = blockLocations.get(blockId) 
-      bms.foreach(bm => blockManagerInfo.get(bm).foreach(_.removeBlock(blockId)))
-      blockLocations.remove(blockId)
+      val bms: mutable.HashSet[BlockManagerId] = blockLocations.get(blockId)  //一个数据块在多个节点上
+      bms.foreach(bm => blockManagerInfo.get(bm).foreach(_.removeBlock(blockId))) //删除该节点在driver上的内存映射
+      blockLocations.remove(blockId) //删除该数据块的内存映射
     }
 
     // Ask the slaves to remove the RDD, and put the result in a sequence of Futures.
     // The dispatcher is used as an implicit argument into the Future sequence construction.
     //去每一个真正的节点删除该数据块的信息
+    //其实没必要让所有的节点都去删除该RDD,因为不是所有节点都有该rdd,不过不知道作者怎么想的
     val removeMsg = RemoveRdd(rddId)
     Future.sequence(
       blockManagerInfo.values.map { bm =>
         bm.slaveEndpoint.ask[Int](removeMsg)
-      }.toSeq
+      }.toSeq //去每一个节点真正去删除该RDD数据块
     )
   }
 
   //删除所有节点上shuffer信息
   private def removeShuffle(shuffleId: Int): Future[Seq[Boolean]] = {
-    // Nothing to do in the BlockManagerMasterEndpoint data structures
+    // Nothing to do in the BlockManagerMasterEndpoint data structures 在driver的缓存中什么也不做,因为driver不接受shuffle文件信息
     val removeMsg = RemoveShuffle(shuffleId)
     Future.sequence(
       blockManagerInfo.values.map { bm =>
-        bm.slaveEndpoint.ask[Boolean](removeMsg)
+        bm.slaveEndpoint.ask[Boolean](removeMsg) //直接发送所有的节点,让他们删除shuffle文件
       }.toSeq
     )
   }
@@ -200,32 +219,36 @@ class BlockManagerMasterEndpoint(
     }
     Future.sequence(
       requiredBlockManagers.map { bm =>
-        bm.slaveEndpoint.ask[Int](removeMsg)
+        bm.slaveEndpoint.ask[Int](removeMsg) //通知所有的节点,删除他们的广播文件
       }.toSeq
     )
   }
 
+  //删除一个executor节点
   private def removeBlockManager(blockManagerId: BlockManagerId) {
-    val info = blockManagerInfo(blockManagerId)
+    val info = blockManagerInfo(blockManagerId)//返回对应的内存对象BlockManagerInfo
 
     // Remove the block manager from blockManagerIdByExecutor.
-    blockManagerIdByExecutor -= blockManagerId.executorId
+    blockManagerIdByExecutor -= blockManagerId.executorId //删除内存映射
 
     // Remove it from blockManagerInfo and remove all the blocks.
-    blockManagerInfo.remove(blockManagerId)
-    val iterator = info.blocks.keySet.iterator
+    blockManagerInfo.remove(blockManagerId) //删除内存映射
+    val iterator = info.blocks.keySet.iterator //循环该节点上所有数据块
     while (iterator.hasNext) {
       val blockId = iterator.next
-      val locations = blockLocations.get(blockId)
-      locations -= blockManagerId
+      val locations = blockLocations.get(blockId) //每一个要删除的数据块对应的其他节点集合
+      locations -= blockManagerId //从节点集合中删除这次要删除的节点
       if (locations.size == 0) {
-        blockLocations.remove(blockId)
+        blockLocations.remove(blockId) //说明该数据块没有节点存储
       }
     }
+
+    //发送事件
     listenerBus.post(SparkListenerBlockManagerRemoved(System.currentTimeMillis(), blockManagerId))
     logInfo(s"Removing block manager $blockManagerId")
   }
 
+  //删除一个executor节点
   private def removeExecutor(execId: String) {
     logInfo("Trying to remove executor " + execId + " from BlockManagerMaster.")
     blockManagerIdByExecutor.get(execId).foreach(removeBlockManager)
@@ -234,6 +257,7 @@ class BlockManagerMasterEndpoint(
   /**
    * Return true if the driver knows about the given block manager. Otherwise, return false,
    * indicating that the block manager should re-register.
+   * 定期executor节点要心跳给driver节点,让driver节点知道该executor节点还活着
    */
   private def heartbeatReceived(blockManagerId: BlockManagerId): Boolean = {
     if (!blockManagerInfo.contains(blockManagerId)) {
@@ -246,16 +270,18 @@ class BlockManagerMasterEndpoint(
 
   // Remove a block from the slaves that have it. This can only be used to remove
   // blocks that the master knows about.
+  //将该数据块从work节点移除
   private def removeBlockFromWorkers(blockId: BlockId) {
-    val locations = blockLocations.get(blockId)
+    val locations = blockLocations.get(blockId) //找到该数据块在哪些节点上存在
     if (locations != null) {
+      //循环每一个节点
       locations.foreach { blockManagerId: BlockManagerId =>
-        val blockManager = blockManagerInfo.get(blockManagerId)
+        val blockManager = blockManagerInfo.get(blockManagerId)//找到该节点对应的对象
         if (blockManager.isDefined) {
           // Remove the block from the slave's BlockManager.
           // Doesn't actually wait for a confirmation and the message might get lost.
           // If message loss becomes frequent, we should add retry logic here.
-          blockManager.get.slaveEndpoint.ask[Boolean](RemoveBlock(blockId))
+          blockManager.get.slaveEndpoint.ask[Boolean](RemoveBlock(blockId)) //通知该节点删除该数据块
         }
       }
     }
@@ -287,6 +313,7 @@ class BlockManagerMasterEndpoint(
    * statuses. This is useful when the master is not informed of the given block by all block
    * managers.
    * 返回该数据块在每一个BlockManagerId节点上的状态集合,格式即Map[BlockManagerId, Future[Option[BlockStatus]]]
+   * 参数askSlaves 为true,则表示这些状态要去executor节点去现查
    */
   private def blockStatus(
       blockId: BlockId,
@@ -315,6 +342,7 @@ class BlockManagerMasterEndpoint(
    * If askSlaves is true, the master queries each block manager for the most updated block
    * statuses. This is useful when the master is not informed of the given block by all block
    * managers.
+   * 查询所有的数据块,找到跟参数filter函数匹配的数据块集合
    */
   private def getMatchingBlockIds(
       filter: BlockId => Boolean,
@@ -334,10 +362,15 @@ class BlockManagerMasterEndpoint(
   }
 
   //在slave节点注册了一个BlockManagerId,最多允许使用maxMemSize内存
+  /**
+   * @param id
+   * @param maxMemSize
+   * @param slaveEndpoint 表示该executor节点的代理对象
+   */
   private def register(id: BlockManagerId, maxMemSize: Long, slaveEndpoint: RpcEndpointRef) {
     val time = System.currentTimeMillis()
     if (!blockManagerInfo.contains(id)) {//说明我们还不知道该BlockManagerId
-      blockManagerIdByExecutor.get(id.executorId) match {
+      blockManagerIdByExecutor.get(id.executorId) match {//必须一个executorId对应一个BlockManagerId对象
         case Some(oldId) =>
           // A block manager of the same executor already exists, so remove it (assumed dead)
           logError("Got two different block manager registrations on same executor - "
@@ -345,18 +378,24 @@ class BlockManagerMasterEndpoint(
           removeExecutor(id.executorId)
         case None =>
       }
+
+      //记录刚刚注册进来的节点ip信息以及内存信息
       logInfo("Registering block manager %s with %s RAM, %s".format(
         id.hostPort, Utils.bytesToString(maxMemSize), id))
 
+      //一个executorId对应一个BlockManagerId对象
       blockManagerIdByExecutor(id.executorId) = id
 
+      //在driver本地建立一个BlockManagerId对象的内存映射
       blockManagerInfo(id) = new BlockManagerInfo(
         id, System.currentTimeMillis(), maxMemSize, slaveEndpoint)
     }
+
+    //发送事件
     listenerBus.post(SparkListenerBlockManagerAdded(time, id, maxMemSize))
   }
 
-  //更新一个数据块,并且更新该数据块对应的BlockManagerId集合,true表示更新成功,false表示更新失败
+  //更新一个数据块信息--包含该数据块所在节点、数据块ID、该数据块存储级别、该数据块所占内存、磁盘大小
   private def updateBlockInfo(
       blockManagerId: BlockManagerId,
       blockId: BlockId,
@@ -365,7 +404,7 @@ class BlockManagerMasterEndpoint(
       diskSize: Long,
       externalBlockStoreSize: Long): Boolean = {
 
-    if (!blockManagerInfo.contains(blockManagerId)) {
+    if (!blockManagerInfo.contains(blockManagerId)) {//说明目前不识别该节点,这个不正常
       if (blockManagerId.isDriver && !isLocal) {
         // We intentionally do not register the master (except in local mode),
         // so we should not indicate failure.
@@ -375,11 +414,12 @@ class BlockManagerMasterEndpoint(
       }
     }
 
-    if (blockId == null) {
+    if (blockId == null) {//仅仅更新最后访问时间,说明该executor节点还活着
       blockManagerInfo(blockManagerId).updateLastSeenMs()
       return true
     }
 
+    //更新driver关于该数据块的该节点的内存信息
     blockManagerInfo(blockManagerId).updateBlockInfo(
       blockId, storageLevel, memSize, diskSize, externalBlockStoreSize)
 
@@ -392,14 +432,15 @@ class BlockManagerMasterEndpoint(
       blockLocations.put(blockId, locations)
     }
 
+    //将该节点存储到该数据块集合中
     if (storageLevel.isValid) {
       locations.add(blockManagerId)
-    } else {
+    } else {//如果该存储不可用,则删除该数据块
       locations.remove(blockManagerId)
     }
 
     // Remove the block from master tracking if it has been removed on all slaves.
-    if (locations.size == 0) {
+    if (locations.size == 0) {//说明没有该数据块对应的节点,则删除该数据块的映射
       blockLocations.remove(blockId)
     }
     true
@@ -424,10 +465,10 @@ class BlockManagerMasterEndpoint(
    * 返回除了driver和自己之外的  BlockManagerId集合
    **/
   private def getPeers(blockManagerId: BlockManagerId): Seq[BlockManagerId] = {
-    val blockManagerIds = blockManagerInfo.keySet
-    if (blockManagerIds.contains(blockManagerId)) {
+    val blockManagerIds = blockManagerInfo.keySet //该driver所有的节点集合
+    if (blockManagerIds.contains(blockManagerId)) {//说明该节点是其中一个,因此可以回复一些信息给该节点
       blockManagerIds.filterNot { _.isDriver }.filterNot { _ == blockManagerId }.toSeq
-    } else {
+    } else {//说明该节点没权限,因此返回空集合
       Seq.empty
     }
   }
@@ -467,6 +508,9 @@ object BlockStatus {
   def empty: BlockStatus = BlockStatus(StorageLevel.NONE, 0L, 0L, 0L)
 }
 
+/**
+ * 该对象是在driver节点上缓存的一个对象,表示一个BlockManagerId对应的信息
+ */
 private[spark] class BlockManagerInfo(
     val blockManagerId: BlockManagerId,//确定哪个执行者在哪个节点上的管理器
     timeMs: Long,//创建时间
@@ -503,7 +547,7 @@ private[spark] class BlockManagerInfo(
 
     if (_blocks.containsKey(blockId)) { //更新该数据块的状态
       // The block exists on the slave already.
-      val blockStatus: BlockStatus = _blocks.get(blockId)
+      val blockStatus: BlockStatus = _blocks.get(blockId) //以前存储的该数据块对应的状态对象
       val originalLevel: StorageLevel = blockStatus.storageLevel //原始存储级别
       val originalMemSize: Long = blockStatus.memSize //原始内存使用量
 
@@ -566,7 +610,7 @@ private[spark] class BlockManagerInfo(
     }
   }
 
-  //移除一个数据块
+  //移除一个数据块,将该driver的内存映射移除
   def removeBlock(blockId: BlockId) {
     if (_blocks.containsKey(blockId)) {
       _remainingMem += _blocks.get(blockId).memSize //还原内存

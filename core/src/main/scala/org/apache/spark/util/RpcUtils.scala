@@ -29,11 +29,12 @@ object RpcUtils {
    * Retrieve a [[RpcEndpointRef]] which is located in the driver via its name.
    */
   def makeDriverRef(name: String, conf: SparkConf, rpcEnv: RpcEnv): RpcEndpointRef = {
+    //从配置文件中获取driver的host和port,
     val driverActorSystemName = SparkEnv.driverActorSystemName
     val driverHost: String = conf.get("spark.driver.host", "localhost")
     val driverPort: Int = conf.getInt("spark.driver.port", 7077)
     Utils.checkHost(driverHost, "Expected hostname")
-    rpcEnv.setupEndpointRef(driverActorSystemName, RpcAddress(driverHost, driverPort), name)
+    rpcEnv.setupEndpointRef(driverActorSystemName, RpcAddress(driverHost, driverPort), name) //向driver发送请求,返回引用
   }
 
   /** Returns the configured number of times to retry connecting 设置尝试次数*/

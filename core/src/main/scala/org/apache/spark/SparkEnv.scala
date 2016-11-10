@@ -54,13 +54,15 @@ import org.apache.spark.util.{RpcUtils, Utils}
  * NOTE: This is not intended for external use. This is exposed for Shark and may be made private
  *       in a future release.
  * 代表spark的执行环境
+ *
+ * 以下对象都是每一个SparkEnv单独创建一个该对象
  */
 @DeveloperApi
 class SparkEnv (
-    val executorId: String,
-    private[spark] val rpcEnv: RpcEnv,
-    val serializer: Serializer,
-    val closureSerializer: Serializer,
+    val executorId: String,//如果是driver的话这个值就是driver
+    private[spark] val rpcEnv: RpcEnv,//提供PRC的服务器端对象
+    val serializer: Serializer,//序列化类
+    val closureSerializer: Serializer,//闭关代码的序列化类
     val cacheManager: CacheManager,
     val mapOutputTracker: MapOutputTracker,
     val shuffleManager: ShuffleManager,
@@ -195,12 +197,12 @@ object SparkEnv extends Logging {
     val port = conf.get("spark.driver.port").toInt
     create(
       conf,
-      SparkContext.DRIVER_IDENTIFIER,
-      hostname,
-      port,
+      SparkContext.DRIVER_IDENTIFIER,//driver
+      hostname,//driver所在host
+      port,//driver所在port
       isDriver = true,
       isLocal = isLocal,
-      numUsableCores = numCores,
+      numUsableCores = numCores,//driver需要多少cpu去执行本地模式.非本地模式都是返回0
       listenerBus = listenerBus,
       mockOutputCommitCoordinator = mockOutputCommitCoordinator
     )
@@ -235,9 +237,9 @@ object SparkEnv extends Logging {
    */
   private def create(
       conf: SparkConf,
-      executorId: String,//如果是driver,则写入固定的driver名字
-      hostname: String,//driver所在host
-      port: Int,//driver所在post
+      executorId: String,//如果是driver,则写入固定的driver名字,表示该执行器是driver的执行器
+      hostname: String,//driver或者executor所在host
+      port: Int,//driver或者executor所在post
       isDriver: Boolean,//true表示是driver的环境,false表示是执行者的环境
       isLocal: Boolean,//true表示是本地方式启动,不是集群方式,即master == "local" || master.startsWith("local[")
       numUsableCores: Int,//driver需要多少cpu去执行本地模式.非本地模式都是返回0
@@ -254,7 +256,7 @@ object SparkEnv extends Logging {
     // Create the ActorSystem for Akka and get the port it binds to.绑定的Actor名字
     val actorSystemName = if (isDriver) driverActorSystemName else executorActorSystemName
     
-    //对host,port创建一个RPC
+    //对host,port创建一个RPC 服务端,在host port上进行监听
     val rpcEnv = RpcEnv.create(actorSystemName, hostname, port, conf, securityManager)
     val actorSystem = rpcEnv.asInstanceOf[AkkaRpcEnv].actorSystem
 
@@ -309,9 +311,9 @@ object SparkEnv extends Logging {
       RpcEndpointRef = {
       if (isDriver) {
         logInfo("Registering " + name)
-        rpcEnv.setupEndpoint(name, endpointCreator)
+        rpcEnv.setupEndpoint(name, endpointCreator)//在driver本地向endpointCreator发送请求,建立引用
       } else {
-        RpcUtils.makeDriverRef(name, conf, rpcEnv)
+        RpcUtils.makeDriverRef(name, conf, rpcEnv) //executor不需要第二个参数.因为此时rpcEnv是executor的服务器所在对象,他要从conf中获取driver的host和port,向起发送信息,向driver发请求,返回driver的引用
       }
     }
 
@@ -324,6 +326,10 @@ object SparkEnv extends Logging {
 
     // Have to assign trackerActor after initialization as MapOutputTrackerActor
     // requires the MapOutputTracker itself
+    /**
+     * 如果该节点是driver,则该对象是MapOutputTrackerMasterEndpoint对象
+     * 如果该节点是executor,则该节点就是driver的RpcEndpointRef引用
+     */
     mapOutputTracker.trackerEndpoint = registerOrLookupEndpoint(MapOutputTracker.ENDPOINT_NAME,
       new MapOutputTrackerMasterEndpoint(
         rpcEnv, mapOutputTracker.asInstanceOf[MapOutputTrackerMaster], conf))
@@ -349,12 +355,14 @@ object SparkEnv extends Logging {
           new NioBlockTransferService(conf, securityManager)
       }
 
+    //为BlockManagerMaster设置参数,如果该节点是driver,则该对象是dirver节点上的BlockManagerMasterEndpoint引用     如果该节点是executor,则该对象是driver的RpcEndpointRef引用
     val blockManagerMaster = new BlockManagerMaster(registerOrLookupEndpoint(
       BlockManagerMaster.DRIVER_ENDPOINT_NAME,
       new BlockManagerMasterEndpoint(rpcEnv, isLocal, conf, listenerBus)),
       conf, isDriver)
 
     // NB: blockManager is not valid until initialize() is called later.
+    //参数具体含义,参照BlockManager类详细信息
     val blockManager = new BlockManager(executorId, rpcEnv, blockManagerMaster,
       serializer, conf, mapOutputTracker, shuffleManager, blockTransferService, securityManager,
       numUsableCores)
@@ -364,7 +372,7 @@ object SparkEnv extends Logging {
     val cacheManager = new CacheManager(blockManager)
 
     val httpFileServer =
-      if (isDriver) {
+      if (isDriver) {//driver节点要创建一个服务
         val fileServerPort = conf.getInt("spark.fileserver.port", 0)
         val server = new HttpFileServer(conf, securityManager, fileServerPort)
         server.initialize()
@@ -403,6 +411,7 @@ object SparkEnv extends Logging {
     }
     val outputCommitCoordinatorRef = registerOrLookupEndpoint("OutputCommitCoordinator",
       new OutputCommitCoordinatorEndpoint(rpcEnv, outputCommitCoordinator))
+
     outputCommitCoordinator.coordinatorRef = Some(outputCommitCoordinatorRef)
 
     val executorMemoryManager: ExecutorMemoryManager = {

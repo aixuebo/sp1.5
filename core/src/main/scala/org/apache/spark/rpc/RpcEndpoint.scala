@@ -61,7 +61,7 @@ private[spark] trait ThreadSafeRpcEndpoint extends RpcEndpoint
  *
  * If any error is thrown from one of [[RpcEndpoint]] methods except `onError`, `onError` will be
  * invoked with the cause. If `onError` throws an error, [[RpcEnv]] will ignore it.
- * 代表一个客户端
+ * 代表一个服务端
  */
 private[spark] trait RpcEndpoint {
 

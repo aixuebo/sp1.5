@@ -69,7 +69,7 @@ private[spark] object RpcEnv {
  * nodes, and deliver them to corresponding [[RpcEndpoint]]s. For uncaught exceptions caught by
  * [[RpcEnv]], [[RpcEnv]] will use [[RpcCallContext.sendFailure]] to send exceptions back to the
  * sender, or logging them if no such sender or `NotSerializableException`.
- *
+ * RpcEndpoint 需要去注册他自己(使用一个name)到RpcEnv上,去接受信息,然后RpcEnv去处理从RpcEndpointRef或者远程节点信息,并且分发他们去关联的RpcEndpoint。
  * [[RpcEnv]] also provides some methods to retrieve [[RpcEndpointRef]]s given name or uri.
  * 详细参见AkkaRpcEnv实现类
  */
@@ -93,6 +93,7 @@ private[spark] abstract class RpcEnv(conf: SparkConf) {
   /**
    * Register a [[RpcEndpoint]] with a name and return its [[RpcEndpointRef]]. [[RpcEnv]] does not
    * guarantee thread-safety.
+   * 返回已经建立好的连接
    */
   def setupEndpoint(name: String, endpoint: RpcEndpoint): RpcEndpointRef
 
