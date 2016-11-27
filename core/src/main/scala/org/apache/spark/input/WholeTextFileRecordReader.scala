@@ -44,6 +44,7 @@ private[spark] trait Configurable extends HConfigurable {
  * A [[org.apache.hadoop.mapreduce.RecordReader RecordReader]] for reading a single whole text file
  * out in a key-value pair, where the key is the file path and the value is the entire content of
  * the file.
+  * key是文件的路径path的String形式  value是文件的全部内容
  */
 private[spark] class WholeTextFileRecordReader(
     split: CombineFileSplit,
@@ -56,7 +57,7 @@ private[spark] class WholeTextFileRecordReader(
     SparkHadoopUtil.get.getConfigurationFromJobContext(context))
 
   // True means the current file has been processed, then skip it.
-  private[this] var processed = false
+  private[this] var processed = false //是否读取完整个文件
 
   private[this] val key = path.toString
   private[this] var value: String = null
@@ -65,7 +66,7 @@ private[spark] class WholeTextFileRecordReader(
 
   override def close(): Unit = {}
 
-  override def getProgress: Float = if (processed) 1.0f else 0.0f
+  override def getProgress: Float = if (processed) 1.0f else 0.0f //要么成功,要么没成功
 
   override def getCurrentKey: String = key
 

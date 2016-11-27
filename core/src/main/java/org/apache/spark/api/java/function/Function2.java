@@ -21,6 +21,7 @@ import java.io.Serializable;
 
 /**
  * A two-argument function that takes arguments of type T1 and T2 and returns an R.
+ * 一种映射函数,将T1和T2对象转换成R对象
  */
 public interface Function2<T1, T2, R> extends Serializable {
   public R call(T1 v1, T2 v2) throws Exception;

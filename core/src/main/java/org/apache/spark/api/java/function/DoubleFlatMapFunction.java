@@ -21,6 +21,7 @@ import java.io.Serializable;
 
 /**
  * A function that returns zero or more records of type Double from each input record.
+ * 将每一个泛型T记录转换成一组double迭代器对象
  */
 public interface DoubleFlatMapFunction<T> extends Serializable {
   public Iterable<Double> call(T t) throws Exception;

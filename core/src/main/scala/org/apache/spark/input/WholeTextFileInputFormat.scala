@@ -52,10 +52,13 @@ private[spark] class WholeTextFileInputFormat
    * which is set through setMaxSplitSize
    */
   def setMinPartitions(context: JobContext, minPartitions: Int) {
-    val files = listStatus(context)
+    val files = listStatus(context)//获取输入源对应的全部文件
+    //用scala语法循环所有的文件,计算所有文件的字节
     val totalLen = files.map { file =>
       if (file.isDir) 0L else file.getLen
     }.sum
+
+    //设置每一个split最大多少个字节
     val maxSplitSize = Math.ceil(totalLen * 1.0 /
       (if (minPartitions == 0) 1 else minPartitions)).toLong
     super.setMaxSplitSize(maxSplitSize)

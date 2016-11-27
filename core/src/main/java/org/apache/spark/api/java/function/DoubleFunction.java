@@ -21,6 +21,7 @@ import java.io.Serializable;
 
 /**
  *  A function that returns Doubles, and can be used to construct DoubleRDDs.
+ *  将泛型T对象转换成double对象
  */
 public interface DoubleFunction<T> extends Serializable {
   public double call(T t) throws Exception;

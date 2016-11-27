@@ -23,6 +23,7 @@ import java.io.Serializable;
  * Base interface for functions whose return types do not create special RDDs. PairFunction and
  * DoubleFunction are handled separately, to allow PairRDDs and DoubleRDDs to be constructed
  * when mapping RDDs of other types.
+ * 相当于映射方法,将泛型T对象转换成R对象
  */
 public interface Function<T1, R> extends Serializable {
   public R call(T1 v1) throws Exception;

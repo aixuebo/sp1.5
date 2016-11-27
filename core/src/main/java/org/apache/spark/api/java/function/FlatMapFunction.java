@@ -21,6 +21,7 @@ import java.io.Serializable;
 
 /**
  * A function that returns zero or more output records from each input record.
+ * 将每一个T类型对象,转换成一个R对象集合的迭代器
  */
 public interface FlatMapFunction<T, R> extends Serializable {
   public Iterable<R> call(T t) throws Exception;

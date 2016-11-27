@@ -21,6 +21,7 @@ import java.io.Serializable;
 
 /**
  * A function that takes two inputs and returns zero or more output records.
+ * 将T1和T2两个类型参数转换成R类型的迭代器
  */
 public interface FlatMapFunction2<T1, T2, R> extends Serializable {
   public Iterable<R> call(T1 t1, T2 t2) throws Exception;

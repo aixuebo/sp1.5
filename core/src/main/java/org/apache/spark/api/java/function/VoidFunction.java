@@ -21,6 +21,7 @@ import java.io.Serializable;
 
 /**
  * A function with no return value.
+ * 泛型T作为参数进行处理,没返回值
  */
 public interface VoidFunction<T> extends Serializable {
   public void call(T t) throws Exception;

@@ -21,6 +21,7 @@ import java.io.Serializable;
 
 /**
  * A zero-argument function that returns an R.
+ * 不需要参数,返回一个R泛型的对象
  */
 public interface Function0<R> extends Serializable {
   public R call() throws Exception;

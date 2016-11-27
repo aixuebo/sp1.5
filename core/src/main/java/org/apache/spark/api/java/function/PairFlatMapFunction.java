@@ -24,6 +24,7 @@ import scala.Tuple2;
 /**
  * A function that returns zero or more key-value pair records from each input record. The
  * key-value pairs are represented as scala.Tuple2 objects.
+ * 一个映射函数,将T转换成一个元祖,元祖是K V组成的迭代器
  */
 public interface PairFlatMapFunction<T, K, V> extends Serializable {
   public Iterable<Tuple2<K, V>> call(T t) throws Exception;

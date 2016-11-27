@@ -21,6 +21,7 @@ import java.io.Serializable;
 
 /**
  * A three-argument function that takes arguments of type T1, T2 and T3 and returns an R.
+ * 一种映射函数,接收三个参数,返回R对象
  */
 public interface Function3<T1, T2, T3, R> extends Serializable {
   public R call(T1 v1, T2 v2, T3 v3) throws Exception;
