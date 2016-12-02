@@ -51,7 +51,7 @@ private[spark] class LocalEndpoint(
 
   private var freeCores = totalCores
 
-  val localExecutorId = SparkContext.DRIVER_IDENTIFIER
+  val localExecutorId = SparkContext.DRIVER_IDENTIFIER //driver
   val localExecutorHostname = "localhost"
 
   private val executor = new Executor(
@@ -109,6 +109,7 @@ private[spark] class LocalBackend(
    * Returns a list of URLs representing the user classpath.
    *
    * @param conf Spark configuration.
+   * 将classpath集合转换成URL集合
    */
   def getUserClasspath(conf: SparkConf): Seq[URL] = {
     val userClassPathStr = conf.getOption("spark.executor.extraClassPath")
