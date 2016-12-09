@@ -30,15 +30,19 @@ import org.apache.hadoop.mapreduce.TaskAttemptContext
  * A [[org.apache.hadoop.mapreduce.lib.input.CombineFileInputFormat CombineFileInputFormat]] for
  * reading whole text files. Each file is read as key-value pair, where the key is the file path and
  * the value is the entire content of file.
+  * 读取文件的全部内容,key是文件的路径path,value是文件内容
+  *
+  * 因为这种文件应该都是小文件,因此用到了CombineFileInputFormat类,该类可以让一个若干个文件组成一个数据块
  */
 
 private[spark] class WholeTextFileInputFormat
   extends CombineFileInputFormat[String, String] with Configurable {
 
+  //每一个文件是不允许拆分的,因为要读取全部文件内容
   override protected def isSplitable(context: JobContext, file: Path): Boolean = false
 
   override def createRecordReader(
-      split: InputSplit,
+      split: InputSplit,//该数据块是包含多个文件的分片对象
       context: TaskAttemptContext): RecordReader[String, String] = {
 
     val reader =
@@ -50,6 +54,9 @@ private[spark] class WholeTextFileInputFormat
   /**
    * Allow minPartitions set by end-user in order to keep compatibility with old Hadoop API,
    * which is set through setMaxSplitSize
+    * 设置每一个分片的最大字节数
+    *
+    * 参数minPartitions 表示至少spark也要用这些个分区处理原始数据
    */
   def setMinPartitions(context: JobContext, minPartitions: Int) {
     val files = listStatus(context)//获取输入源对应的全部文件

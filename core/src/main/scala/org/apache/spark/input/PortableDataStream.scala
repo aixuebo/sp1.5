@@ -37,6 +37,7 @@ import org.apache.spark.deploy.SparkHadoopUtil
 private[spark] abstract class StreamFileInputFormat[T]
   extends CombineFileInputFormat[String, T]
 {
+  //不允许对文件进行拆分,一个文件就只能被一个map处理
   override protected def isSplitable(context: JobContext, file: Path): Boolean = false
 
   /**
@@ -49,6 +50,7 @@ private[spark] abstract class StreamFileInputFormat[T]
       if (file.isDir) 0L else file.getLen
     }.sum
 
+    //平均每一文件多少个字节作为分快,让每一个块都字节平均
     val maxSplitSize = Math.ceil(totalLen * 1.0 / files.length).toLong
     super.setMaxSplitSize(maxSplitSize)
   }
@@ -60,6 +62,7 @@ private[spark] abstract class StreamFileInputFormat[T]
 /**
  * An abstract class of [[org.apache.hadoop.mapreduce.RecordReader RecordReader]]
  * to reading files out as streams
+  * 读取一个文件
  */
 private[spark] abstract class StreamBasedRecordReader[T](
     split: CombineFileSplit,

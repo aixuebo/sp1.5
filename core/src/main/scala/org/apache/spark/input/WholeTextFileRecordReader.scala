@@ -45,6 +45,8 @@ private[spark] trait Configurable extends HConfigurable {
  * out in a key-value pair, where the key is the file path and the value is the entire content of
  * the file.
   * key是文件的路径path的String形式  value是文件的全部内容
+  *
+  * 如何读取一个文件
  */
 private[spark] class WholeTextFileRecordReader(
     split: CombineFileSplit,
@@ -52,7 +54,7 @@ private[spark] class WholeTextFileRecordReader(
     index: Integer)
   extends RecordReader[String, String] with Configurable {
 
-  private[this] val path = split.getPath(index)
+  private[this] val path = split.getPath(index)//找到该文件对应的路径,并且作为key
   private[this] val fs = path.getFileSystem(
     SparkHadoopUtil.get.getConfigurationFromJobContext(context))
 
@@ -74,6 +76,7 @@ private[spark] class WholeTextFileRecordReader(
 
   override def nextKeyValue(): Boolean = {
     if (!processed) {
+      //读取全部信息
       val conf = new Configuration
       val factory = new CompressionCodecFactory(conf)
       val codec = factory.getCodec(path)  // infers from file ext.
@@ -99,11 +102,12 @@ private[spark] class WholeTextFileRecordReader(
  * A [[org.apache.hadoop.mapreduce.lib.input.CombineFileRecordReader CombineFileRecordReader]]
  * that can pass Hadoop Configuration to [[org.apache.hadoop.conf.Configurable Configurable]]
  * RecordReaders.
+  * 如何读取一个分片,该分片包含多个文件
  */
 private[spark] class ConfigurableCombineFileRecordReader[K, V](
     split: InputSplit,
     context: TaskAttemptContext,
-    recordReaderClass: Class[_ <: RecordReader[K, V] with HConfigurable])
+    recordReaderClass: Class[_ <: RecordReader[K, V] with HConfigurable]) //表示每一个文件如何读取,即使用recordReaderClass类进行读取
   extends CombineFileRecordReader[K, V](
     split.asInstanceOf[CombineFileSplit],
     context,
@@ -111,9 +115,9 @@ private[spark] class ConfigurableCombineFileRecordReader[K, V](
   ) with Configurable {
 
   override def initNextRecordReader(): Boolean = {
-    val r = super.initNextRecordReader()
+    val r = super.initNextRecordReader()//boolean类型,true表示找到下一个文件了,准备开始读取下一个文件
     if (r) {
-      this.curReader.asInstanceOf[HConfigurable].setConf(getConf)
+      this.curReader.asInstanceOf[HConfigurable].setConf(getConf)//为curReader设置conf上下文对象
     }
     r
   }

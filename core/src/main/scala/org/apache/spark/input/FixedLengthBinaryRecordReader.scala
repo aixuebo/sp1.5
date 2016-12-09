@@ -35,15 +35,24 @@ import org.apache.spark.deploy.SparkHadoopUtil
  *
  * key = record index (Long)
  * value = the record itself (BytesWritable)
+  * 读取固定长度数据信息
+  *
+  * key是读取该数据块第几个固定大小字节,value是读取的固定大小字节内容
+  *
+  * 从数据块中每次读取固定大小的字节
  */
 private[spark] class FixedLengthBinaryRecordReader
   extends RecordReader[LongWritable, BytesWritable] {
 
-  private var splitStart: Long = 0L
-  private var splitEnd: Long = 0L
-  private var currentPosition: Long = 0L
-  private var recordLength: Int = 0
+  private var splitStart: Long = 0L //要处理数据块的开始位置
+  private var splitEnd: Long = 0L //要处理数据块的结束位置
+  private var currentPosition: Long = 0L //当前位置
+
+  private var recordLength: Int = 0 //固定大小字节
+
   private var fileInputStream: FSDataInputStream = null
+
+
   private var recordKey: LongWritable = null
   private var recordValue: BytesWritable = null
 
