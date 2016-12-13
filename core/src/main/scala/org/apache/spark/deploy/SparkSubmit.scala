@@ -65,7 +65,7 @@ private[deploy] object SparkSubmitAction extends Enumeration {
 object SparkSubmit {
 
   // Cluster managers
-  //master参数以什么开头的
+  //master参数以什么开头的 --- spark的四种集群 local  spark本身的队列STANDALONE   yarn   MESOS
   private val YARN = 1 //以yarn开头
   private val STANDALONE = 2 //以spark开头
   private val MESOS = 4 //以mesos开头
@@ -91,7 +91,8 @@ object SparkSubmit {
   private val CLASS_NOT_FOUND_EXIT_STATUS = 101
 
   // scalastyle:off println
-  // Exposed for testing退出程序函数,传入退出状态码
+  // Exposed for testing退出程序函数,
+  //传入退出状态码,无返回值
   private[spark] var exitFn: Int => Unit = (exitCode: Int) => System.exit(exitCode)
   
   //警告信息输出流
@@ -237,6 +238,7 @@ object SparkSubmit {
     var childMainClass = ""
 
     // Set the cluster manager
+    //spark的四种集群 local  spark本身的队列STANDALONE   yarn   MESOS
     val clusterManager: Int = args.master match {
       case m if m.startsWith("yarn") => YARN
       case m if m.startsWith("spark") => STANDALONE
@@ -258,7 +260,7 @@ object SparkSubmit {
     // from each other if only one is specified, or exit early if they are at odds.
     //yarn的时候,args.master一定是yarn-cluster或者yarn-client
     if (clusterManager == YARN) {
-      if (args.master == "yarn-standalone") {
+      if (args.master == "yarn-standalone") {//老版本是这个名字,因此改成yarn-cluster
         printWarning("\"yarn-standalone\" is deprecated. Use \"yarn-cluster\" instead.")
         args.master = "yarn-cluster"
       }
@@ -273,7 +275,7 @@ object SparkSubmit {
           args.master = "yarn-" + Option(mode).getOrElse("client")
       }
 
-      // Make sure YARN is included in our build if we're trying to use it
+      // Make sure YARN is included in our build if we're trying to use it 确保有这个类
       if (!Utils.classIsLoadable("org.apache.spark.deploy.yarn.Client") && !Utils.isTesting) {
         printErrorAndExit(
           "Could not load YARN classes. " +

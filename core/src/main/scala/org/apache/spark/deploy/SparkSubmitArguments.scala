@@ -47,7 +47,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
   var executorMemory: String = null
   var executorCores: String = null
   var totalExecutorCores: String = null
-  var propertiesFile: String = null //参数设置的属性配置文件路径,可以设置多个配置文件,每个文件一行即可
+  var propertiesFile: String = null //参数设置的属性配置文件路径,可以设置多个配置文件,每个文件一行即可,$SPARK_CONF_DIR/conf//spark-defaults.conf
   var driverMemory: String = null
   var driverExtraClassPath: String = null
   var driverExtraLibraryPath: String = null
@@ -67,7 +67,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
 
   //需要maven的jar包记录
   var packages: String = null// 按照,拆分,每一组是一个maven坐标,分别用:或者/进行拆分,例如redis.clients:jedis:2.5.1,mysql/mysql-connector-java/5.1.29,表示需要的maven上的jar包
-  var repositories: String = null //maven资源集合,eg:http://10.1.5.102:8081/nexus/content/groups/public/,http://repo2.maven.org/maven2/从两个资源中下载数据
+  var repositories: String = null //maven资源集合,eg:http://ip:8081/nexus/content/groups/public/,http://repo2.maven.org/maven2/从两个资源中下载数据
   var ivyRepoPath: String = null //本地的maven仓库位置,本地存储从maven上下载下来的数据的目录,该目录不是maven的目录,是用ivygo工具下载后存储的目录
   var packagesExclusions: String = null //存储不需要的包,多个包用逗号拆分,该内容是maven的group组成的集合即可
 
@@ -100,12 +100,12 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
   lazy val defaultSparkProperties: HashMap[String, String] = {
     val defaultProperties = new HashMap[String, String]()
     // scalastyle:off println
-    if (verbose) SparkSubmit.printStream.println(s"Using properties file: $propertiesFile")
+    if (verbose) SparkSubmit.printStream.println(s"Using properties file: $propertiesFile")//向error中打印信息
     //读取配置文件,该配置文件可以是多个文件,每个文件一行即可
     Option(propertiesFile).foreach { filename =>
     Utils.getPropertiesFromFile(filename).foreach { case (k, v) =>
         defaultProperties(k) = v
-        if (verbose) SparkSubmit.printStream.println(s"Adding default property: $k=$v")
+        if (verbose) SparkSubmit.printStream.println(s"Adding default property: $k=$v") //打印具体key=value信息
       }
     }
     // scalastyle:on println
@@ -119,7 +119,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
     case e: IllegalArgumentException =>
       SparkSubmit.printErrorAndExit(e.getMessage())
   }
-  // Populate `sparkProperties` map from properties file 合并配置信息
+  // Populate `sparkProperties` map from properties file 合并配置信息,将默认的配置存储进来
   mergeDefaultSparkProperties()
   // Remove keys that don't start with "spark." from `sparkProperties`.过滤非spark.开头的属性
   ignoreNonSparkProperties()
@@ -502,7 +502,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
         |Usage: spark-submit --status [submission ID] --master [spark://...]""".stripMargin)
     outStream.println(command)
 
-    val mem_mb = Utils.DEFAULT_DRIVER_MEM_MB
+    val mem_mb = Utils.DEFAULT_DRIVER_MEM_MB //默认1024M
     outStream.println(
       s"""
         |Options:
@@ -582,7 +582,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
 
     if (SparkSubmit.isSqlShell(mainClass)) {
       outStream.println("CLI options:")
-      outStream.println(getSqlShellOptions())
+      outStream.println(getSqlShellOptions())//执行sql
     }
     // scalastyle:on println
 
@@ -595,6 +595,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
    *
    * Since the CLI will call `System.exit()`, we install a security manager to prevent that call
    * from working, and restore the original one afterwards.
+   * 执行main函数,并且打印输出
    */
   private def getSqlShellOptions(): String = {
     val currentOut = System.out
@@ -615,6 +616,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
       }
       System.setSecurityManager(sm)
 
+      //执行主类的main函数
       try {
         Utils.classForName(mainClass).getMethod("main", classOf[Array[String]])
           .invoke(null, Array(HELP))
@@ -626,6 +628,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
           }
       }
 
+      //刷新输出
       stream.flush()
 
       // Get the output and discard any unnecessary lines from it.
