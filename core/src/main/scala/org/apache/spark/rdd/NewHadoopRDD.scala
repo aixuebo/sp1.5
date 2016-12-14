@@ -37,10 +37,11 @@ import org.apache.spark.util.{SerializableConfiguration, ShutdownHookManager, Ut
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.storage.StorageLevel
 
+//代表一个数据块,用于一个map去跑
 private[spark] class NewHadoopPartition(
-    rddId: Int,
-    val index: Int,
-    @transient rawSplit: InputSplit with Writable)
+    rddId: Int,//该数据块属于哪个rdd任务
+    val index: Int,//该rdd的第几个数据块
+    @transient rawSplit: InputSplit with Writable)//原始数据块内容
   extends Partition {
 
   val serializableHadoopSplit = new SerializableWritable(rawSplit)
@@ -63,9 +64,9 @@ private[spark] class NewHadoopPartition(
  */
 @DeveloperApi
 class NewHadoopRDD[K, V](
-    sc : SparkContext,
-    inputFormatClass: Class[_ <: InputFormat[K, V]],
-    keyClass: Class[K],
+    sc : SparkContext,//上下文对象
+    inputFormatClass: Class[_ <: InputFormat[K, V]],//对输入源如何读取数据块以及拆分数据块
+    keyClass: Class[K],//输入源的key和value类型
     valueClass: Class[V],
     @transient conf: Configuration)
   extends RDD[(K, V)](sc, Nil)
@@ -81,9 +82,9 @@ class NewHadoopRDD[K, V](
     formatter.format(new Date())
   }
 
-  @transient protected val jobId = new JobID(jobTrackerId, id)
+  @transient protected val jobId = new JobID(jobTrackerId, id)//时间+RDD的id作为job的id
 
-  private val shouldCloneJobConf = sparkContext.conf.getBoolean("spark.hadoop.cloneConf", false)
+  private val shouldCloneJobConf = sparkContext.conf.getBoolean("spark.hadoop.cloneConf", false) //是否拷贝一个conf对象
 
   def getConf: Configuration = {
     val conf: Configuration = confBroadcast.value.value
@@ -104,25 +105,27 @@ class NewHadoopRDD[K, V](
     }
   }
 
+  //返回所有的数据块切分后的集合
   override def getPartitions: Array[Partition] = {
-    val inputFormat = inputFormatClass.newInstance
+    val inputFormat = inputFormatClass.newInstance//实例化inputFormat类
     inputFormat match {
       case configurable: Configurable =>
         configurable.setConf(conf)
       case _ =>
     }
     val jobContext = newJobContext(conf, jobId)
-    val rawSplits = inputFormat.getSplits(jobContext).toArray
-    val result = new Array[Partition](rawSplits.size)
+    val rawSplits = inputFormat.getSplits(jobContext).toArray //拆分成多少个数据块
+    val result = new Array[Partition](rawSplits.size)//每一个数据块作为一个partition被处理
     for (i <- 0 until rawSplits.size) {
       result(i) = new NewHadoopPartition(id, i, rawSplits(i).asInstanceOf[InputSplit with Writable])
     }
     result
   }
 
+  //如何读取一个数据块内容,返回数据块内容的迭代器
   override def compute(theSplit: Partition, context: TaskContext): InterruptibleIterator[(K, V)] = {
     val iter = new Iterator[(K, V)] {
-      val split = theSplit.asInstanceOf[NewHadoopPartition]
+      val split = theSplit.asInstanceOf[NewHadoopPartition]//获取该数据切片内容
       logInfo("Input split: " + split.serializableHadoopSplit)
       val conf = getConf
 
@@ -140,6 +143,7 @@ class NewHadoopRDD[K, V](
       }
       inputMetrics.setBytesReadCallback(bytesReadCallback)
 
+      //创建任务上下文,目的是因为hadoop的reader读取一个数据块需要该参数,该参数在spark中本身没意义
       val attemptId = newTaskAttemptID(jobTrackerId, id, isMap = true, split.index, 0)
       val hadoopAttemptContext = newTaskAttemptContext(conf, attemptId)
       val format = inputFormatClass.newInstance
@@ -148,41 +152,45 @@ class NewHadoopRDD[K, V](
           configurable.setConf(conf)
         case _ =>
       }
+
+      //读取一个数据块的reader
       private var reader = format.createRecordReader(
         split.serializableHadoopSplit.value, hadoopAttemptContext)
-      reader.initialize(split.serializableHadoopSplit.value, hadoopAttemptContext)
+      reader.initialize(split.serializableHadoopSplit.value, hadoopAttemptContext)//初始化该reader
 
       // Register an on-task-completion callback to close the input stream.
       context.addTaskCompletionListener(context => close())
-      var havePair = false
-      var finished = false
+      var havePair = false //true表示该next数据已经使用完 ,要重新在获取下一个数据了
+      var finished = false //true表示已经完成
       var recordsSinceMetricsUpdate = 0
 
       override def hasNext: Boolean = {
         if (!finished && !havePair) {
-          finished = !reader.nextKeyValue
-          if (finished) {
+          finished = !reader.nextKeyValue //如果读取结束了,则!false为true,即已经完成
+          if (finished) {//完成读取该数据块数据
             // Close and release the reader here; close() will also be called when the task
             // completes, but for tasks that read from many files, it helps to release the
             // resources early.
             close()
           }
-          havePair = !finished
+          havePair = !finished //设置havePair为true,表示有新的next数据了
         }
         !finished
       }
 
+      //读取一行内容,返回key-vlaue信息
       override def next(): (K, V) = {
-        if (!hasNext) {
+        if (!hasNext) {//false说明没有数据了,抛异常
           throw new java.util.NoSuchElementException("End of stream")
         }
-        havePair = false
+        havePair = false //说明已经读取完数据了
         if (!finished) {
-          inputMetrics.incRecordsRead(1)
+          inputMetrics.incRecordsRead(1)//增加一条记录
         }
-        (reader.getCurrentKey, reader.getCurrentValue)
+        (reader.getCurrentKey, reader.getCurrentValue) //返回key和value信息
       }
 
+      //关闭输入流
       private def close() {
         if (reader != null) {
           // Close the reader and release it. Note: it's very important that we don't close the
@@ -283,15 +291,17 @@ private[spark] object NewHadoopRDD {
   }
 }
 
+//一次读取一整个文件内容
 private[spark] class WholeTextFileRDD(
     sc : SparkContext,
     inputFormatClass: Class[_ <: WholeTextFileInputFormat],
-    keyClass: Class[String],
-    valueClass: Class[String],
+    keyClass: Class[String],//key是文件的path
+    valueClass: Class[String],//value是文件的全部内容
     @transient conf: Configuration,
     minPartitions: Int)
   extends NewHadoopRDD[String, String](sc, inputFormatClass, keyClass, valueClass, conf) {
 
+  //返回分区集合
   override def getPartitions: Array[Partition] = {
     val inputFormat = inputFormatClass.newInstance
     val conf = getConf
@@ -302,7 +312,7 @@ private[spark] class WholeTextFileRDD(
     }
     val jobContext = newJobContext(conf, jobId)
     inputFormat.setMinPartitions(jobContext, minPartitions)
-    val rawSplits = inputFormat.getSplits(jobContext).toArray
+    val rawSplits = inputFormat.getSplits(jobContext).toArray //返回数据块分区数量
     val result = new Array[Partition](rawSplits.size)
     for (i <- 0 until rawSplits.size) {
       result(i) = new NewHadoopPartition(id, i, rawSplits(i).asInstanceOf[InputSplit with Writable])
