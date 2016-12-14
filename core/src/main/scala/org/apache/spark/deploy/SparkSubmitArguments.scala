@@ -63,7 +63,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
   var name: String = null //app的名字
 
   var childArgs: ArrayBuffer[String] = new ArrayBuffer[String]() //额外没有解析的参数集合
-  var jars: String = null //返回值是path的url形式用逗号分割的字符串,可以是HDFS格式的
+  var jars: String = null //返回值是path的url形式用逗号分割的字符串,可以是HDFS格式的,也包括从mavan上刚刚下载的jar包集合(在本地)
 
   //需要maven的jar包记录
   var packages: String = null// 按照,拆分,每一组是一个maven坐标,分别用:或者/进行拆分,例如redis.clients:jedis:2.5.1,mysql/mysql-connector-java/5.1.29,表示需要的maven上的jar包

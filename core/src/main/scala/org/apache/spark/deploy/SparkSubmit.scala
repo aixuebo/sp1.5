@@ -83,7 +83,7 @@ object SparkSubmit {
   private val SPARK_INTERNAL = "spark-internal"
 
   // Special primary resource names that represent shells rather than application jars.
-  private val SPARK_SHELL = "spark-shell"
+  private val SPARK_SHELL = "spark-shell"//spark-shell的程序
   private val PYSPARK_SHELL = "pyspark-shell" //python的shell
   private val SPARKR_SHELL = "sparkr-shell" //R语言的shell
   private val SPARKR_PACKAGE_ARCHIVE = "sparkr.zip"
@@ -232,9 +232,9 @@ object SparkSubmit {
   private[deploy] def prepareSubmitEnvironment(args: SparkSubmitArguments)
       : (Seq[String], Seq[String], Map[String, String], String) = {
     // Return values 四个返回值
-    val childArgs = new ArrayBuffer[String]()
+    val childArgs = new ArrayBuffer[String]()//运行命令属性
     val childClasspath = new ArrayBuffer[String]()//classPath的全路径
-    val sysProps = new HashMap[String, String]()
+    val sysProps = new HashMap[String, String]()//系统属性
     var childMainClass = ""
 
     // Set the cluster manager
@@ -358,11 +358,11 @@ object SparkSubmit {
       case (LOCAL, CLUSTER) =>
         printErrorAndExit("Cluster deploy mode is not compatible with master \"local\"")
       case (_, CLUSTER) if isShell(args.primaryResource) =>
-        printErrorAndExit("Cluster deploy mode is not applicable to Spark shells.")
+        printErrorAndExit("Cluster deploy mode is not applicable to Spark shells.")//资源是否是shell启动的spark,shell启动的spark只能是local模式,不能是集群模式
       case (_, CLUSTER) if isSqlShell(args.mainClass) =>
-        printErrorAndExit("Cluster deploy mode is not applicable to Spark SQL shell.")
+        printErrorAndExit("Cluster deploy mode is not applicable to Spark SQL shell.")//class是否是org.apache.spark.sql.hive.thriftserver.SparkSQLCLIDriver,即spark sql这个类也是不支持集群模式的
       case (_, CLUSTER) if isThriftServer(args.mainClass) =>
-        printErrorAndExit("Cluster deploy mode is not applicable to Spark Thrift server.")
+        printErrorAndExit("Cluster deploy mode is not applicable to Spark Thrift server.")//class是org.apache.spark.sql.hive.thriftserver.HiveThriftServer2的时候,也是不支持集群模式的
       case _ =>
     }
 
@@ -605,7 +605,7 @@ object SparkSubmit {
       "spark.yarn.dist.files",
       "spark.yarn.dist.archives")
     pathConfigs.foreach { config =>
-      // Replace old URIs with resolved URIs, if they exist
+      // Replace old URIs with resolved URIs, if they exist 老值替换成新值
       sysProps.get(config).foreach { oldValue =>
         sysProps(config) = Utils.resolveURIs(oldValue)
       }
@@ -629,6 +629,10 @@ object SparkSubmit {
    * Note that this main class will not be the one provided by the user if we're
    * running cluster deploy mode or python applications.
    * 运行主函数
+   *
+   * 将childClasspath让classloader加载
+   * 将sysProps的信息添加到System.setProperty中
+   * 执行childMainClass类的main方法,childArgs就是main方法的args内容
    */
   private def runMain(
       childArgs: Seq[String],//主类需要的参数集合
@@ -744,7 +748,7 @@ object SparkSubmit {
 
   /**
    * Return whether the given primary resource represents a shell.
-   * 资源是否是shell
+   * 资源是否是shell启动的spark
    */
   private[deploy] def isShell(res: String): Boolean = {
     (res == SPARK_SHELL || res == PYSPARK_SHELL || res == SPARKR_SHELL)
