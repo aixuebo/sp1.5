@@ -844,6 +844,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     assertNotStopped()
     //hadoopFile返回 key-value元组的RDD
     //.map(pair => pair._2.toString) 返回value的toString方法
+    //
     hadoopFile(path, classOf[TextInputFormat], classOf[LongWritable], classOf[Text],
       minPartitions).map(pair => pair._2.toString)
   }
