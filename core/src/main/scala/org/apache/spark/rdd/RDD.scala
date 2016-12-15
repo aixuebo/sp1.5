@@ -985,6 +985,11 @@ res0: Array[(Int, String)] = Array((1,A), (2,B), (3,C), (4,D), (5,E))
    */
   def foreach(f: T => Unit): Unit = withScope {
     val cleanF = sc.clean(f)
+
+    /**
+     * 让sc执行runjob方法,第一个参数是根需要的RDD
+     * 第二个参数是传入一个迭代器,函数会循环迭代器,每一个元素都执行f方法
+     */
     sc.runJob(this, (iter: Iterator[T]) => iter.foreach(cleanF))//迭代器每一个partition,每一个元素进行f函数处理
   }
 

@@ -348,7 +348,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
   }
 
   /** Get all executor environment variables set on this SparkConf 
-   *  获取执行的环境变量元组集合 
+   *  获取执行以spark.executorEnv.开头的环境变量元组集合
    **/
   def getExecutorEnv: Seq[(String, String)] = {
     val prefix = "spark.executorEnv."

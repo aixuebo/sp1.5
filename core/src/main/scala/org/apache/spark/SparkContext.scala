@@ -75,6 +75,45 @@ import org.apache.spark.util._
  *
  * @param config a Spark Config object describing the application configuration. Any settings in
  *   this config overrides the default configs as well as system properties.
+ *
+执行步骤
+一、几个重要的属性
+1.master : String 提交队列类型以及地址
+2.appName : String 任务名称
+3.sparkHome : String 工作环境
+4.jars: Seq[String] 需要的一组jar包,需要加入到环境变量里面
+5.environment: Map[String, String] 运行的环境变量
+
+二、初始化数据
+ try 里面进行的 ,例如 定位给代码:_conf = config.clone() //拷贝一个conf对象
+1.sparkContext的master == "yarn-cluster" || master == "yarn-standalone"是不允许的,即SparkContext是不支持yarn集群模式的,yarn集群模式请使用spark-submit
+  if (master == "yarn-client") System.setProperty("SPARK_YARN_MODE", "true") 如果是yarn客户端模式,则设置属性为true,表示是spark的yarn模式
+2.如果没有设置host和port,则要设置
+  设置spark.driver.host,默认为本地ip
+  设置spark.driver.port,默认为0,在创建SparkEnv的时候才会返回真正的端口号
+3.设置spark.executor.id为driver
+4.设置spark.eventLog.dir配置事件的日志存储路径
+  设置spark.eventLog.compress对应的日志压缩方式
+5.设置spark.externalBlockStore.folderName为额外的数据块目录名称,命名为spark-随机数
+6.创建_jobProgressListener = new JobProgressListener(_conf)对象,用于监听job的进度,属于ui部分的监听
+  SparkEnv.createDriverEnv(conf, isLocal, listenerBus, SparkContext.numDriverCores(master))
+  //SparkContext.numDriverCores(master) 表示多少个线程执行local模式,如果非local模式,则该值为0
+  spark.hadoop开头的key都会创建hadoop的配置对象,即_hadoopConfiguration
+  _metadataCleaner = new MetadataCleaner(MetadataCleanerType.SPARK_CONTEXT, this.cleanup, _conf)
+  _statusTracker = new SparkStatusTracker(this)
+  _progressBar = new ConsoleProgressBar(this)
+  _ui = SparkUI.createLiveUI(this, _conf, listenerBus, _jobProgressListener,
+          _env.securityManager, appName, startTime = startTime)
+7.将每一个jar文件和file文件映射成文件和时间戳的映射
+  同时将本地文件copy到http下载目录下,方便其他文件可以下载该文件
+8.读取每一个executor进程的内存设置,单位是M,其中这三个参数设置的内容单位是字节,因此最后要转换成M
+  _executorMemory,key的优先级spark.executor.memory、System.getenv("SPARK_EXECUTOR_MEMORY")、System.getenv("SPARK_MEM")
+9.为execute执行时候需要的环境变量设置内容
+SPARK_PREPEND_CLASSES = System.getenv("SPARK_PREPEND_CLASSES")
+SPARK_EXECUTOR_MEMORY=executorMemory m,比如100m,表示执行需要的内存
+获取conf中以spark.executorEnv.开头的环境变量元组集合
+SPARK_USER=sparkUser 当前spark操作的用户
+
  */
 class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationClient {
 
@@ -93,6 +132,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   // This is used only by YARN for now, but should be relevant to other cluster types (Mesos,
   // etc) too. This is typically generated from InputFormatInfo.computePreferredLocations. It
   // contains a map from hostname to a list of input format splits on the host.
+  //在yarn中被使用,去选择启动容器的节点
   private[spark] var preferredNodeLocationData: Map[String, Set[SplitInfo]] = Map()
 
   val startTime = System.currentTimeMillis()
@@ -149,7 +189,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * @param jars Collection of JARs to send to the cluster. These can be paths on the local file
    *             system or HDFS, HTTP, HTTPS, or FTP URLs.
    * @param environment Environment variables to set on worker nodes.
-   * @param preferredNodeLocationData used in YARN mode to select nodes to launch containers on.
+   * @param preferredNodeLocationData used in YARN mode to select nodes to launch containers on. 在yarn中被使用,去选择启动容器的节点
    * Can be generated using [[org.apache.spark.scheduler.InputFormatInfo.computePreferredLocations]]
    * from a list of input files or InputFormats for the application.
    */
@@ -214,9 +254,14 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * ------------------------------------------------------------------------------------- */
 
   private var _conf: SparkConf = _ //参数conf的拷贝
+
+  private var _jars: Seq[String] = _//spark.jars配置的jar文件集合,内容是按照,拆分的集合
+  private var _files: Seq[String] = _//获取spark.files配置的文件集合,内容是按照,拆分的集合
+
   private var _eventLogDir: Option[URI] = None //获取spark.eventLog.dir配置的日志存储路径
   private var _eventLogCodec: Option[String] = None //spark.eventLog.compress属性为true的时候,获取日志文件的压缩方式
   private var _eventLogger: Option[EventLoggingListener] = None //日志的监听器,好记录日志
+
   private var _env: SparkEnv = _ //创建的SparkEnv对象,代表spark的执行环境
   private var _metadataCleaner: MetadataCleaner = _
   private var _jobProgressListener: JobProgressListener = _ //JobProgressListener 监听器
@@ -234,9 +279,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   private var _executorAllocationManager: Option[ExecutorAllocationManager] = None
   private var _cleaner: Option[ContextCleaner] = None
   private var _listenerBusStarted: Boolean = false
-  private var _jars: Seq[String] = _//spark.jars配置的jar文件集合,内容是按照,拆分的集合
-  private var _files: Seq[String] = _//获取spark.files配置的文件集合,内容是按照,拆分的集合
-  private var _shutdownHookRef: AnyRef = _
+  private var _shutdownHookRef: AnyRef = _ //shutdown的钩子
 
   /* ------------------------------------------------------------------------------------- *
    | Accessors and public fields. These provide access to the internal state of the        |
@@ -257,12 +300,13 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   def master: String = _conf.get("spark.master")//集群master位置
   def appName: String = _conf.get("spark.app.name")//应用名称
 
-  private[spark] def isEventLogEnabled: Boolean = _conf.getBoolean("spark.eventLog.enabled", false)
+  private[spark] def isEventLogEnabled: Boolean = _conf.getBoolean("spark.eventLog.enabled", false) //是否要记录spark的事件日志
   private[spark] def eventLogDir: Option[URI] = _eventLogDir
   private[spark] def eventLogCodec: Option[String] = _eventLogCodec
 
   // Generate the random name for a temp folder in external block store.
   // Add a timestamp as the suffix here to make it more safe
+  //产生一个随机的目录
   val externalBlockStoreFolderName = "spark-" + randomUUID.toString()
   @deprecated("Use externalBlockStoreFolderName instead.", "1.4.0")
   val tachyonFolderName = externalBlockStoreFolderName
@@ -271,14 +315,14 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   def isLocal: Boolean = (master == "local" || master.startsWith("local["))
 
   // An asynchronous listener bus for Spark events
-  private[spark] val listenerBus = new LiveListenerBus
+  private[spark] val listenerBus = new LiveListenerBus //事件集合,所有的事件都监听器都在这里集中,当产生事件的时候,循环通知属于这个事件所有监听者
 
   // This function allows components created by SparkEnv to be mocked in unit tests:
   private[spark] def createSparkEnv(
       conf: SparkConf,
-      isLocal: Boolean,
-      listenerBus: LiveListenerBus): SparkEnv = {
-    SparkEnv.createDriverEnv(conf, isLocal, listenerBus, SparkContext.numDriverCores(master))
+      isLocal: Boolean,//是否是local本地模式
+      listenerBus: LiveListenerBus): SparkEnv = {//所有监听器对象
+    SparkEnv.createDriverEnv(conf, isLocal, listenerBus, SparkContext.numDriverCores(master))// SparkContext.numDriverCores(master)表示多少个线程执行local模式,如果非local模式,则该值为0
   }
 
   private[spark] def env: SparkEnv = _env
@@ -309,7 +353,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
 
   private[spark] def executorMemory: Int = _executorMemory
 
-  // Environment variables to pass to our executors.
+  // Environment variables to pass to our executors.execute执行环境需要的key/value
   private[spark] val executorEnvs = HashMap[String, String]()
 
   // Set SPARK_USER for user who is running SparkContext.
@@ -519,8 +563,8 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     // The Mesos scheduler backend relies on this environment variable to set executor memory.
     // TODO: Set this only in the Mesos scheduler.
     executorEnvs("SPARK_EXECUTOR_MEMORY") = executorMemory + "m"
-    executorEnvs ++= _conf.getExecutorEnv //获取执行的环境变量元组集合
-    executorEnvs("SPARK_USER") = sparkUser
+    executorEnvs ++= _conf.getExecutorEnv //获取执行以spark.executorEnv.开头的环境变量元组集合
+    executorEnvs("SPARK_USER") = sparkUser //设置
 
     // We need to register "HeartbeatReceiver" before "createTaskScheduler" because Executor will
     // retrieve "HeartbeatReceiver" in the constructor. (SPARK-6640)
@@ -1649,10 +1693,10 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     if (path == null) {
       logWarning("null specified as parameter to addJar")
     } else {
-      var key = ""
-      if (path.contains("\\")) {
+      var key = ""//最终文件路径
+      if (path.contains("\\")) {//说明是local路径,并且是windows上的
         // For local paths with backslashes on Windows, URI throws an exception
-        key = env.httpFileServer.addJar(new File(path))
+        key = env.httpFileServer.addJar(new File(path))//将文件copy到下载目录,可以被其他节点下载,返回文件在下载目录的文件的位置
       } else {
         val uri = new URI(path)
         key = uri.getScheme match {
@@ -1870,6 +1914,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   /**
    * Run a job on a given set of partitions of an RDD, but take a function of type
    * `Iterator[T] => U` instead of `(TaskContext, Iterator[T]) => U`.
+   * 在多少个partition上运行一个根RDD,一般partition数量都是根RDD上存在的partition数量,每一个partition持有func函数,处理每一条数据
    */
   def runJob[T, U: ClassTag](
       rdd: RDD[T],
@@ -1945,6 +1990,8 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
 
   /**
    * Run a job on all partitions in an RDD and return the results in an array.
+   * RDD上执行的该方法,让sc执行runjob方法,第一个参数是根需要的RDD
+   * 第二个参数是传入一个迭代器,函数会循环迭代器,每一个元素都执行f方法
    */
   def runJob[T, U: ClassTag](rdd: RDD[T], func: Iterator[T] => U): Array[U] = {
     runJob(rdd, func, 0 until rdd.partitions.length)

@@ -65,12 +65,12 @@ private[spark] class HttpFileServer(
 
   def addFile(file: File) : String = {
     addFileToDir(file, fileDir)
-    serverUri + "/files/" + file.getName
+    serverUri + "/files/" + file.getName //复制后文件路径
   }
 
   def addJar(file: File) : String = {
     addFileToDir(file, jarDir)
-    serverUri + "/jars/" + file.getName
+    serverUri + "/jars/" + file.getName //复制后文件路径
   }
 
   //将file文件复制到dir目录下,返回dir/file.getName

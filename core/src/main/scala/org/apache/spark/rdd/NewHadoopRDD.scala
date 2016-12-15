@@ -69,7 +69,7 @@ class NewHadoopRDD[K, V](
     keyClass: Class[K],//输入源的key和value类型
     valueClass: Class[V],
     @transient conf: Configuration)
-  extends RDD[(K, V)](sc, Nil)
+  extends RDD[(K, V)](sc, Nil) //rdd存储的泛型元素是元组
   with SparkHadoopMapReduceUtil
   with Logging {
 

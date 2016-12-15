@@ -56,6 +56,96 @@ import org.apache.spark.util.{RpcUtils, Utils}
  * 代表spark的执行环境
  *
  * 以下对象都是每一个SparkEnv单独创建一个该对象
+ *
+ *
+ 逻辑如下:
+ 一、创建一个SparkEnv对象需要的参数
+      conf: SparkConf,
+      executorId: String,//如果是driver,则写入固定的driver名字,表示该执行器是driver的执行器
+      hostname: String,//driver或者executor所在host
+      port: Int,//driver或者executor所在post
+      isDriver: Boolean,//true表示是driver的环境,false表示是执行者的环境
+      isLocal: Boolean,//true表示是本地方式启动,不是集群方式,即master == "local" || master.startsWith("local[")
+      numUsableCores: Int,//driver需要多少cpu去执行本地模式.非本地模式都是返回0
+      listenerBus: LiveListenerBus = null,//该属性仅仅用于driver,非driver的都是null
+      mockOutputCommitCoordinator: Option[OutputCommitCoordinator] = None
+二、创建步骤
+1.如果该对象是driver的,则必须有listenerBus,因为上面会有很多监听器,串联整个逻辑关系
+2.val securityManager = new SecurityManager(conf)
+3.在host和port下创建RpcEnv.create对象,actorSystemName的name看是driver还是execute而不同
+  因此返回真正的port,这在设置到spark.driver.port或者spark.executor.port中
+4.创建序列化对象,默认是org.apache.spark.serializer.JavaSerializer
+  从conf中读取key为spark.serializer的,返回的class就是序列化对象serializer
+  从conf中读取key为spark.closure.serializer的,返回的class就是序列化对象closureSerializer
+5.创建输出对象
+    val mapOutputTracker = if (isDriver) {
+      new MapOutputTrackerMaster(conf)
+    } else {
+      new MapOutputTrackerWorker(conf)
+    }
+6.通过spark.shuffle.manager获取短名称,从而得到具体shuffler类
+      "hash" -> "org.apache.spark.shuffle.hash.HashShuffleManager",
+      "sort" -> "org.apache.spark.shuffle.sort.SortShuffleManager",
+      "tungsten-sort" -> "org.apache.spark.shuffle.unsafe.UnsafeShuffleManager")
+7.val shuffleMemoryManager = ShuffleMemoryManager.create(conf, 多线程数量)
+8.数据块传输服务
+    val blockTransferService =
+      conf.get("spark.shuffle.blockTransferService", "netty").toLowerCase match {
+        case "netty" =>
+          new NettyBlockTransferService(conf, securityManager, numUsableCores)
+        case "nio" =>
+          logWarning("NIO-based block transfer service is deprecated, " +
+            "and will be removed in Spark 1.6.0.")
+          new NioBlockTransferService(conf, securityManager)
+      }
+9.
+    //为BlockManagerMaster设置参数,如果该节点是driver,则该对象是dirver节点上的BlockManagerMasterEndpoint引用     如果该节点是executor,则该对象是driver的RpcEndpointRef引用
+    val blockManagerMaster = new BlockManagerMaster(registerOrLookupEndpoint(
+      BlockManagerMaster.DRIVER_ENDPOINT_NAME,
+      new BlockManagerMasterEndpoint(rpcEnv, isLocal, conf, listenerBus)),
+      conf, isDriver)
+
+    // NB: blockManager is not valid until initialize() is called later.
+    //参数具体含义,参照BlockManager类详细信息
+    val blockManager = new BlockManager(executorId, rpcEnv, blockManagerMaster,
+      serializer, conf, mapOutputTracker, shuffleManager, blockTransferService, securityManager,
+      numUsableCores)
+
+10.val broadcastManager = new BroadcastManager(isDriver, conf, securityManager)
+11.val cacheManager = new CacheManager(blockManager)
+12.在本地开启一个下载服务,可以下载指定目录下的文件
+spark.fileserver.port 表示服务端口
+spark.fileserver.uri 表示最终服务的uri
+
+13.
+    // Set the sparkFiles directory, used when downloading dependencies.  In local mode,
+    // this is a temporary directory; in distributed mode, this is the executor's current working
+    // directory.
+    val sparkFilesDir: String = if (isDriver) {
+      Utils.createTempDir(Utils.getLocalDir(conf), "userFiles").getAbsolutePath
+    } else {
+      "."
+    }
+
+    val outputCommitCoordinator = mockOutputCommitCoordinator.getOrElse {
+      new OutputCommitCoordinator(conf, isDriver)
+    }
+    val outputCommitCoordinatorRef = registerOrLookupEndpoint("OutputCommitCoordinator",
+      new OutputCommitCoordinatorEndpoint(rpcEnv, outputCommitCoordinator))
+
+    outputCommitCoordinator.coordinatorRef = Some(outputCommitCoordinatorRef)
+
+    val executorMemoryManager: ExecutorMemoryManager = {
+      val allocator = if (conf.getBoolean("spark.unsafe.offHeap", false)) {
+        MemoryAllocator.UNSAFE
+      } else {
+        MemoryAllocator.HEAP
+      }
+      new ExecutorMemoryManager(allocator)
+    }
+
+注意 class从配置参数读取出来的,都是只能接受SparkConf和是否是driver的boolean变量的构造函数,或者只接受SparkConf对象的构造函数
+
  */
 @DeveloperApi
 class SparkEnv (
@@ -191,6 +281,7 @@ object SparkEnv extends Logging {
       listenerBus: LiveListenerBus,
       numCores: Int,//driver需要多少cpu去执行本地模式.非本地模式都是返回0
       mockOutputCommitCoordinator: Option[OutputCommitCoordinator] = None): SparkEnv = {
+    //必须有host和port
     assert(conf.contains("spark.driver.host"), "spark.driver.host is not set on the driver!")
     assert(conf.contains("spark.driver.port"), "spark.driver.port is not set on the driver!")
     val hostname = conf.get("spark.driver.host")
@@ -211,6 +302,7 @@ object SparkEnv extends Logging {
   /**
    * Create a SparkEnv for an executor.
    * In coarse-grained mode, the executor provides an actor system that is already instantiated.
+   * 为execute创建环境
    */
   private[spark] def createExecutorEnv(
       conf: SparkConf,
@@ -306,6 +398,8 @@ object SparkEnv extends Logging {
     val closureSerializer = instantiateClassFromConf[Serializer](
       "spark.closure.serializer", "org.apache.spark.serializer.JavaSerializer")
 
+    //如果是dirver,则与RpcEndpoint创建连接,返回引用,即driver向RpcEndpoint发送连接
+    //如果是execute,则从conf中读取driver的host和port,连接到driver节点上,即RpcEndpoint的功能由driver提供,因此要连接到driver即可
     def registerOrLookupEndpoint(
         name: String, endpointCreator: => RpcEndpoint):
       RpcEndpointRef = {
@@ -339,12 +433,13 @@ object SparkEnv extends Logging {
       "hash" -> "org.apache.spark.shuffle.hash.HashShuffleManager",
       "sort" -> "org.apache.spark.shuffle.sort.SortShuffleManager",
       "tungsten-sort" -> "org.apache.spark.shuffle.unsafe.UnsafeShuffleManager")
-    val shuffleMgrName = conf.get("spark.shuffle.manager", "sort")
-    val shuffleMgrClass = shortShuffleMgrNames.getOrElse(shuffleMgrName.toLowerCase, shuffleMgrName)
-    val shuffleManager = instantiateClass[ShuffleManager](shuffleMgrClass)
+    val shuffleMgrName = conf.get("spark.shuffle.manager", "sort")//获取短名称
+    val shuffleMgrClass = shortShuffleMgrNames.getOrElse(shuffleMgrName.toLowerCase, shuffleMgrName)//通过短名称获取类
+    val shuffleManager = instantiateClass[ShuffleManager](shuffleMgrClass)//实例化该类
 
-    val shuffleMemoryManager = ShuffleMemoryManager.create(conf, numUsableCores)
+    val shuffleMemoryManager = ShuffleMemoryManager.create(conf, numUsableCores)//numUsableCores表示多线程数量,如果不是local的,则该值为0
 
+    //数据块传输服务
     val blockTransferService =
       conf.get("spark.shuffle.blockTransferService", "netty").toLowerCase match {
         case "netty" =>

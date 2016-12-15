@@ -41,6 +41,7 @@ private[spark] class ServerStateException(message: String) extends Exception(mes
  * An HTTP server for static content used to allow worker nodes to access JARs added to SparkContext
  * as well as classes created by the interpreter when the user types in code. This is just a wrapper
  * around a Jetty server.
+ * 在该服务器的一个端口上打开一个服务,该服务可以被外面访问,
  */
 private[spark] class HttpServer(
     conf: SparkConf,
