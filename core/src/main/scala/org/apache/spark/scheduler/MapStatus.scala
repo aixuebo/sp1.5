@@ -30,7 +30,7 @@ import org.apache.spark.util.Utils
  * 表示ShuffleMapTask去调度后返回的一个结果,包含数据块地址和任务运行输出的大小,将其传递给每一个reduce任务
  */
 private[spark] sealed trait MapStatus {
-  /** Location where this task was run. 这个task运行的位置*/
+  /** Location where this task was run. 这个task运行的位置,即在哪个节点运行的该数据块*/
   def location: BlockManagerId
 
   /**

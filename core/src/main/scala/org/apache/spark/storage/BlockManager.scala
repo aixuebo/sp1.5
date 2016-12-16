@@ -49,7 +49,7 @@ private[spark] case class ArrayValues(buffer: Array[Any]) extends BlockValues //
 /* Class for returning a fetched block and associated metrics. */
 private[spark] class BlockResult(
     val data: Iterator[Any],
-    val readMethod: DataReadMethod.Value,
+    val readMethod: DataReadMethod.Value,//数据如何被读,从内存、磁盘、hdfs、网络
     val bytes: Long)
 
 /**
@@ -62,7 +62,7 @@ private[spark] class BlockResult(
 private[spark] class BlockManager(
     executorId: String,//drver节点上,则该内容是driver,executor暂时未知
     rpcEnv: RpcEnv,//是driver节点或者executor节点的服务器对象RpcEnv
-    val master: BlockManagerMaster,//如果是driver节点,则是BlockManagerMaster对象,如果是executor节点,则是driver节点的RpcEndpointRef引用
+    val master: BlockManagerMaster,//如果是driver节点,则是BlockManagerMaster对象,如果是executor节点,则是driver节点的RpcEndpointRef引用,driver中用于管理每一个execute节点上有哪些数据块以该节点上内存使用情况
     defaultSerializer: Serializer,//如果序列化
     maxMemory: Long,//最大使用多少内存,存储数据块信息
     val conf: SparkConf,
@@ -189,6 +189,7 @@ private[spark] class BlockManager(
    * This method initializes the BlockTransferService and ShuffleClient, registers with the
    * BlockManagerMaster, starts the BlockManagerWorker endpoint, and registers with a local shuffle
    * service if configured.
+   * 参数是appid
    */
   def initialize(appId: String): Unit = {
     blockTransferService.init(this)

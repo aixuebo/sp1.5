@@ -92,8 +92,9 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
 
   /**
    * This HashMap has different behavior for the driver and the executors.
-   *
+   * 在driver和executor中是不同的意义
    * On the driver, it serves as the source of map outputs recorded from ShuffleMapTasks.
+   *
    * On the executors, it simply serves as a cache, in which a miss triggers a fetch from the
    * driver's corresponding HashMap.
    *
@@ -117,6 +118,7 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
   /**
    * Send a message to the trackerEndpoint and get its result within a default timeout, or
    * throw a SparkException if this fails.
+   * 将message发送到trackerEndpoint端,返回T类型的数据
    */
   protected def askTracker[T: ClassTag](message: Any): T = {
     try {

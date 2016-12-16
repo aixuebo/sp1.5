@@ -29,41 +29,46 @@ import org.apache.spark.storage._
  */
 private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
 
-  /** Keys of RDD partitions that are being computed/loaded. */
+  /** Keys of RDD partitions that are being computed/loaded.
+    * 正在被计算或者加载的RDD-partition的集合
+    **/
   private val loading = new mutable.HashSet[RDDBlockId]
 
-  /** Gets or computes an RDD partition. Used by RDD.iterator() when an RDD is cached. */
+  /** Gets or computes an RDD partition. Used by RDD.iterator() when an RDD is cached.
+    * 获取rdd的一个分区,返回该分区的一行一行数据的迭代器
+    **/
   def getOrCompute[T](
-      rdd: RDD[T],
-      partition: Partition,
-      context: TaskContext,
+      rdd: RDD[T],//指定RDD
+      partition: Partition,//需要的分区信息
+      context: TaskContext,//哪个任务执行该分区
       storageLevel: StorageLevel): Iterator[T] = {
 
-    val key = RDDBlockId(rdd.id, partition.index)
+    val key = RDDBlockId(rdd.id, partition.index)//该rdd的一个分片名称
     logDebug(s"Looking for partition $key")
-    blockManager.get(key) match {
+    blockManager.get(key) match {//说明本地有该数据块
       case Some(blockResult) =>
-        // Partition is already materialized, so just return its values
+        // Partition is already materialized, so just return its values 该数据块已经物化了,
         val existingMetrics = context.taskMetrics
           .getInputMetricsForReadMethod(blockResult.readMethod)
-        existingMetrics.incBytesRead(blockResult.bytes)
+        existingMetrics.incBytesRead(blockResult.bytes)//增加统计量
 
-        val iter = blockResult.data.asInstanceOf[Iterator[T]]
+        val iter = blockResult.data.asInstanceOf[Iterator[T]]//返回该数据块对应的迭代信息,即一行一行的迭代器
         new InterruptibleIterator[T](context, iter) {
           override def next(): T = {
-            existingMetrics.incRecordsRead(1)
+            existingMetrics.incRecordsRead(1)//记录增加了多少行数据
             delegate.next()
           }
         }
       case None =>
-        // Acquire a lock for loading this partition
-        // If another thread already holds the lock, wait for it to finish return its results
+        //说明本地没有数据块,要去加载回来
+        // Acquire a lock for loading this partition 要求一个锁,表示正在加载这个partition的数据
+        // If another thread already holds the lock, wait for it to finish return its results 如果其他线程也已经持有该锁了,则等待他们返回即可
         val storedValues = acquireLockForPartition[T](key)
-        if (storedValues.isDefined) {
-          return new InterruptibleIterator[T](context, storedValues.get)
+        if (storedValues.isDefined) {//说明数据块已经加载回来了,因为其他线程已经申请了该数据块了,只需要等待其他线程将数据块取回来即可
+          return new InterruptibleIterator[T](context, storedValues.get)//直接返回属具体数据块内容
         }
 
-        // Otherwise, we have to load the partition ourselves
+        // Otherwise, we have to load the partition ourselves 我们这个线程要去加载这个数据块
         try {
           logInfo(s"Partition $key not found, computing it")
           val computedValues = rdd.computeOrReadCheckpoint(partition, context)
@@ -95,19 +100,20 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
    *
    * If the lock is free, just acquire it and return None. Otherwise, another thread is already
    * loading the partition, so we wait for it to finish and return the values loaded by the thread.
+   * 获取一个partition数据,先枷锁,返回该partition的数据内容迭代器
    */
   private def acquireLockForPartition[T](id: RDDBlockId): Option[Iterator[T]] = {
     loading.synchronized {
-      if (!loading.contains(id)) {
+      if (!loading.contains(id)) {//将该rdd-partition数据块添加到集合,表示正在加载中
         // If the partition is free, acquire its lock to compute its value
         loading.add(id)
         None
       } else {
         // Otherwise, wait for another thread to finish and return its result
         logInfo(s"Another thread is loading $id, waiting for it to finish...")
-        while (loading.contains(id)) {
+        while (loading.contains(id)) {//说明已经在有其他线程加载该数据块了
           try {
-            loading.wait()
+            loading.wait()//等待
           } catch {
             case e: Exception =>
               logWarning(s"Exception while waiting for another thread to load $id", e)
@@ -122,7 +128,7 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
           logInfo(s"Whoever was loading $id failed; we'll try it ourselves")
           loading.add(id)
         }
-        values.map(_.data.asInstanceOf[Iterator[T]])
+        values.map(_.data.asInstanceOf[Iterator[T]])//将value结果转换成仅要迭代器的部分数据
       }
     }
   }
@@ -144,7 +150,7 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
       effectiveStorageLevel: Option[StorageLevel] = None): Iterator[T] = {
 
     val putLevel = effectiveStorageLevel.getOrElse(level)
-    if (!putLevel.useMemory) {
+    if (!putLevel.useMemory) {//不是存储在内存中
       /*
        * This RDD is not to be cached in memory, so we can just pass the computed values as an
        * iterator directly to the BlockManager rather than first fully unrolling it in memory.
@@ -157,7 +163,7 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
           logInfo(s"Failure to store $key")
           throw new BlockException(key, s"Block manager failed to return cached value for $key!")
       }
-    } else {
+    } else {//存储在内存中
       /*
        * This RDD is to be cached in memory. In this case we cannot pass the computed values
        * to the BlockManager as an iterator and expect to read it back later. This is because

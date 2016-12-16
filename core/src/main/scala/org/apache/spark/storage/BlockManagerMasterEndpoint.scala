@@ -556,7 +556,7 @@ private[spark] class BlockManagerInfo(
       }
     }
 
-    if (storageLevel.isValid) {
+    if (storageLevel.isValid) {//有效,则更新
       /* isValid means it is either stored in-memory, on-disk or on-externalBlockStore.
        * 合法意味着他是in-memory, on-disk or on-externalBlockStore.三者之一存储方式
        * The memSize here indicates the data size in or dropped from memory,memSize值指代着是内存
@@ -588,7 +588,7 @@ private[spark] class BlockManagerInfo(
       if (!blockId.isBroadcast && blockStatus.isCached) {
         _cachedBlocks += blockId
       }
-    } else if (_blocks.containsKey(blockId)) {
+    } else if (_blocks.containsKey(blockId)) {//无效,则删除
       // If isValid is not true, drop the block.
       val blockStatus: BlockStatus = _blocks.get(blockId)
       _blocks.remove(blockId)

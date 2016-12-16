@@ -334,6 +334,7 @@ abstract class RDD[T: ClassTag](
 
   /**
    * Compute an RDD partition or read it from a checkpoint if the RDD is checkpointing.
+   * 要么从Checkpoint的RDD中找到结果,要么直接读取HDFS属于该数据块的内容,返回数据块行记录的迭代器
    */
   private[spark] def computeOrReadCheckpoint(split: Partition, context: TaskContext): Iterator[T] =
   {
