@@ -42,6 +42,7 @@ private[spark] case class CoalescedRDDPartition(
     parentsIndices: Array[Int],//该分区要合并父RDD的哪些分区
     @transient preferredLocation: Option[String] = None) extends Partition {//该分区首选的host,即该分区在哪个host上执行最好
 
+  //其中_表示Array[Int]中的int
   var parents: Seq[Partition] = parentsIndices.map(rdd.partitions(_)) //获取rdd的第index个Partition,组成的集合,这个集合的partition的index来自于parentsIndices数组
 
   //序列化
@@ -185,7 +186,7 @@ private class PartitionCoalescer(maxPartitions: Int, prev: RDD[_], balanceSlack:
   // e.g. balanceSlack=0.10 means that it allows up to 10% imbalance in favor of locality
   val slack = (balanceSlack * prev.partitions.length).toInt
 
-  var noLocality = true  // if true if no preferredLocations exists for parent RDD 说明父RDD没有优先的地址存在
+  var noLocality = true  // if true if no preferredLocations exists for parent RDD 说明父RDD的partition分配的时候不考虑地址问题
 
   // gets the *current* preferred locations from the DAGScheduler (as opposed to the static ones)
   //获取该partition的host集合
@@ -202,7 +203,7 @@ private class PartitionCoalescer(maxPartitions: Int, prev: RDD[_], balanceSlack:
 
     var it: Iterator[(String, Partition)] = resetIterator()
 
-    override val isEmpty = !it.hasNext
+    override val isEmpty = !it.hasNext //true表示空了,不能迭代元素了
 
     // initializes/resets to start iterating from the beginning
     def resetIterator(): Iterator[(String, Partition)] = {//key是partition所在host,value是partition对象
@@ -330,9 +331,9 @@ private class PartitionCoalescer(maxPartitions: Int, prev: RDD[_], balanceSlack:
   }
 
   def throwBalls() {
-    if (noLocality) {  // no preferredLocations in parent RDD, no randomization needed
+    if (noLocality) {  // no preferredLocations in parent RDD, no randomization needed 不考虑父RDD的每一个分片的位置情况下
       if (maxPartitions > groupArr.size) { // just return prev.partitions
-        for ((p, i) <- prev.partitions.zipWithIndex) {
+        for ((p, i) <- prev.partitions.zipWithIndex) {//基本不会再这里面执行,因为这里面说明新的分区比老得还多,那么就把老的分区依次填充新分区的相同位置即可
           groupArr(i).arr += p
         }
       } else { // no locality available, then simply split partitions based on positions in array
@@ -343,8 +344,8 @@ private class PartitionCoalescer(maxPartitions: Int, prev: RDD[_], balanceSlack:
           (rangeStart until rangeEnd).foreach{ j => groupArr(i).arr += prev.partitions(j) }
         }
       }
-    } else {
-      for (p <- prev.partitions if (!initialHash.contains(p))) { // throw every partition into group
+    } else {//考虑父RDD的每一个分片的位置情况
+      for (p <- prev.partitions if (!initialHash.contains(p))) { // throw every partition into group 循环每一个父RDD的分区,为该分区没有分组的进行分组
         pickBin(p).arr += p //将没有分配的partition进行分配
       }
     }

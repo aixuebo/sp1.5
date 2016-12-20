@@ -54,8 +54,8 @@ import org.apache.spark.storage.BlockManagerId
  */
 private[spark] class TaskSchedulerImpl(
     val sc: SparkContext,
-    val maxTaskFailures: Int,
-    isLocal: Boolean = false)
+    val maxTaskFailures: Int,//最大失败次数,失败次数达到该值,则该driver停止运行
+    isLocal: Boolean = false)//是否本地执行的该driver
   extends TaskScheduler with Logging
 {
   def this(sc: SparkContext) = this(sc, sc.conf.getInt("spark.task.maxFailures", 4))
@@ -63,15 +63,15 @@ private[spark] class TaskSchedulerImpl(
   val conf = sc.conf
 
   // How often to check for speculative tasks
-  val SPECULATION_INTERVAL_MS = conf.getTimeAsMs("spark.speculation.interval", "100ms")
+  val SPECULATION_INTERVAL_MS = conf.getTimeAsMs("spark.speculation.interval", "100ms")//每隔多久执行一次推测执行检查
 
   private val speculationScheduler =
-    ThreadUtils.newDaemonSingleThreadScheduledExecutor("task-scheduler-speculation")
+    ThreadUtils.newDaemonSingleThreadScheduledExecutor("task-scheduler-speculation")//线程服务
 
   // Threshold above which we warn user initial TaskSet may be starved
   val STARVATION_TIMEOUT_MS = conf.getTimeAsMs("spark.starvation.timeout", "15s")
 
-  // CPUs to request per task
+  // CPUs to request per task 每一个任务要花费多少个cpu
   val CPUS_PER_TASK = conf.getInt("spark.task.cpus", 1)
 
   // TaskSetManagers are not thread safe, so any access to one should be synchronized
@@ -146,9 +146,9 @@ private[spark] class TaskSchedulerImpl(
   override def start() {
     backend.start()
 
-    if (!isLocal && conf.getBoolean("spark.speculation", false)) {
+    if (!isLocal && conf.getBoolean("spark.speculation", false)) {//不是本地的任务,并且支持推测执行
       logInfo("Starting speculative execution thread")
-      speculationScheduler.scheduleAtFixedRate(new Runnable {
+      speculationScheduler.scheduleAtFixedRate(new Runnable {//每隔多久执行一次推测执行检查
         override def run(): Unit = Utils.tryOrStopSparkContext(sc) {
           checkSpeculatableTasks()
         }
@@ -586,6 +586,12 @@ private[spark] object TaskSchedulerImpl {
    * For example, given <h1, [o1, o2, o3]>, <h2, [o4]>, <h1, [o5, o6]>, returns
    * [o1, o5, o4, 02, o6, o3]
    * 该函数的意义是打乱顺序,从每一个key中获取一个元素,进行排序
+    *
+    * 排序规则
+    * 1.按照key排序,
+    * 2.从key对应的集合中每一次获取一个元素,比如10个key,则每次从10个key中获取一个值,然后在依次获取10个值,一直全部数据获取完结束
+    *
+    * 这样保证key的队列越大,越先被处理该任务,但是同时??又保证了每一个key对应的队列公平调度,每一个人拿出一个元素出来
    */
   def prioritizeContainers[K, T] (map: HashMap[K, ArrayBuffer[T]]): List[T] = {
     val _keyList = new ArrayBuffer[K](map.size) //获取所有的key集合
@@ -593,18 +599,18 @@ private[spark] object TaskSchedulerImpl {
 
     // order keyList based on population of value in map 对key集合进行排序,排序规则按照每一个key的内容数量从大到小排序
     val keyList = _keyList.sortWith(
-      (left, right) => map(left).size > map(right).size
+      (left, right) => map(left).size > map(right).size //left和right分别表示连续的两个key,因此看key对应的集合的size大小进行排序
     )
 
     val retval = new ArrayBuffer[T](keyList.size * 2) //最终存储的集合
-    var index = 0
+    var index = 0//该遍历第几个元素了
     var found = true
 
-    while (found) {
-      found = false
+    while (found) {//只要一直true,就不断运行
+      found = false//初始化为false,因为已经进入循环了,此时设置false目的是如果key循环后找不到比index大的,则不再循环
       //按照顺序从每一个key中获取一个元素,每次都获取每一个key对应的集合中最小元素,添加到最终集合中
-      for (key <- keyList) {
-        val containerList: ArrayBuffer[T] = map.get(key).getOrElse(null)
+      for (key <- keyList) {//从每一个队列中获取第index个元素内容(如果该元素不存在,则不需要获取)
+        val containerList: ArrayBuffer[T] = map.get(key).getOrElse(null) //value内容
         assert(containerList != null)
         // Get the index'th entry for this host - if present
         if (index < containerList.size){//如果key中的元素不足,则不需要在添加该key对应的值了

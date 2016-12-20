@@ -82,7 +82,7 @@ import org.apache.spark.util.random.{BernoulliSampler, PoissonSampler, Bernoulli
  * on RDD internals.
  * 详细可以参见该spark关于RDD的论文
  * 
- * @参数 T,是一个泛型.对应RDD的类型class,例如RDD[Double],表示Double类型的RDD
+ * @参数 T,是一个泛型.对应RDD的类型class,例如RDD[Double],表示Double类型的RDD,RDD[(K, V)]表示元组元素
  * 注意:RDD的泛型不允许是RDD类型,如果是RDD类型,说明就是RDD嵌套了,暂时是不支持的
  */
 abstract class RDD[T: ClassTag](
@@ -130,6 +130,8 @@ abstract class RDD[T: ClassTag](
    * :: DeveloperApi ::
    * Implemented by subclasses to compute a given partition.
    * 子类进行操作每一个partition,返回值是RDD的泛型类型的迭代器
+    *
+    * 相当于hadoop的InputFormat中的read一个数据块的功能
    */
   @DeveloperApi
   def compute(split: Partition, context: TaskContext): Iterator[T]
@@ -139,6 +141,8 @@ abstract class RDD[T: ClassTag](
    * be called once, so it is safe to implement a time-consuming computation in it.
    * 子类实现,将RDD进行拆分,拆分成一组partitions集合,这些partitions可以并发执行
    * 该方法仅仅被调用一次，因此安全的去实现一个非常耗时的计算在这里面
+    *
+    * 相当于hadoop的InputFormat中的split功能
    */
   protected def getPartitions: Array[Partition]
 
@@ -158,6 +162,7 @@ abstract class RDD[T: ClassTag](
 
   /** Optionally overridden by subclasses to specify how they are partitioned. 
    *  拆分对象,该类去指明如何拆分RDD
+    *  相当于hadoop的map中如何将key分配到哪个reduce的过程
    **/
   @transient val partitioner: Option[Partitioner] = None
 
@@ -188,21 +193,22 @@ abstract class RDD[T: ClassTag](
    * Mark this RDD for persisting using the specified level.
    *
    * @param newLevel the target storage level
-   * @param allowOverride whether to override any existing level with the new one
+   * @param allowOverride whether to override any existing level with the new one 是否覆盖已经存在的存储级别
    */
   private def persist(newLevel: StorageLevel, allowOverride: Boolean): this.type = {
     // TODO: Handle changes of StorageLevel
-    if (storageLevel != StorageLevel.NONE && newLevel != storageLevel && !allowOverride) {
+    if (storageLevel != StorageLevel.NONE && newLevel != storageLevel && !allowOverride) {//如果allowOverride是false,表示不能更改存储级别
       throw new UnsupportedOperationException(
         "Cannot change storage level of an RDD after it was already assigned a level")
     }
     // If this is the first time this RDD is marked for persisting, register it
     // with the SparkContext for cleanups and accounting. Do this only once.
+    //如果是第一次表示存储该RDD,因此要给context注册,这个操作只会做一次
     if (storageLevel == StorageLevel.NONE) {
       sc.cleaner.foreach(_.registerRDDForCleanup(this))
-      sc.persistRDD(this)
+      sc.persistRDD(this)//存储该RDD
     }
-    storageLevel = newLevel
+    storageLevel = newLevel //更改存储级别
     this
   }
 
@@ -242,7 +248,7 @@ abstract class RDD[T: ClassTag](
   def unpersist(blocking: Boolean = true): this.type = {
     logInfo("Removing RDD " + id + " from persistence list")
     sc.unpersistRDD(id, blocking)
-    storageLevel = StorageLevel.NONE
+    storageLevel = StorageLevel.NONE //存储级别为NOE
     this
   }
 
@@ -252,7 +258,7 @@ abstract class RDD[T: ClassTag](
   // Our dependencies and partitions will be gotten by calling subclass's methods below, and will
   // be overwritten when we're checkpointed
   private var dependencies_ : Seq[Dependency[_]] = null
-  @transient private var partitions_ : Array[Partition] = null
+  @transient private var partitions_ : Array[Partition] = null//该RDD分成多少个分片
 
   /** An Option holding our checkpoint RDD, if we are checkpointed 如果我们已经checkPoint了,则获取该RDD的checkPoint对象*/
   private def checkpointRDD: Option[CheckpointRDD[T]] = checkpointData.flatMap(_.checkpointRDD)
@@ -262,7 +268,7 @@ abstract class RDD[T: ClassTag](
    * RDD is checkpointed or not.
    */
   final def dependencies: Seq[Dependency[_]] = {
-    checkpointRDD.map(r => List(new OneToOneDependency(r))).getOrElse {
+    checkpointRDD.map(r => List(new OneToOneDependency(r))).getOrElse {//先从checkpointRDD中获取依赖,如果没有,则获取本身依赖的RDD
       if (dependencies_ == null) {
         dependencies_ = getDependencies
       }
@@ -301,9 +307,9 @@ abstract class RDD[T: ClassTag](
    * subclasses of RDD.
    */
   final def iterator(split: Partition, context: TaskContext): Iterator[T] = {
-    if (storageLevel != StorageLevel.NONE) {
+    if (storageLevel != StorageLevel.NONE) {//说明有缓存,从缓存中获取
       SparkEnv.get.cacheManager.getOrCompute(this, split, context, storageLevel)
-    } else {
+    } else {//说明没有缓存,读取原始文件或者从checkpoint中获取
       computeOrReadCheckpoint(split, context)
     }
   }
@@ -312,23 +318,24 @@ abstract class RDD[T: ClassTag](
    * Return the ancestors of the given RDD that are related to it only through a sequence of
    * narrow dependencies. This traverses the given RDD's dependency tree using DFS, but maintains
    * no ordering on the RDDs returned.
+    * 返回给定RDD的祖先关系,仅仅要祖先是NarrowDependency的,返回结果是没有顺序的
    */
   private[spark] def getNarrowAncestors: Seq[RDD[_]] = {
-    val ancestors = new mutable.HashSet[RDD[_]]
+    val ancestors = new mutable.HashSet[RDD[_]]//存储所有父RDD的集合,是没有顺序的
 
-    def visit(rdd: RDD[_]) {
-      val narrowDependencies = rdd.dependencies.filter(_.isInstanceOf[NarrowDependency[_]])
-      val narrowParents = narrowDependencies.map(_.rdd)
-      val narrowParentsNotVisited = narrowParents.filterNot(ancestors.contains)
+    def visit(rdd: RDD[_]) {//递归参数RDD操作
+      val narrowDependencies = rdd.dependencies.filter(_.isInstanceOf[NarrowDependency[_]])//只要父RDD中NarrowDependency类型的
+      val narrowParents = narrowDependencies.map(_.rdd)//父RDD集合
+      val narrowParentsNotVisited = narrowParents.filterNot(ancestors.contains)//过滤ancestors不存在的父RDD
       narrowParentsNotVisited.foreach { parent =>
-        ancestors.add(parent)
-        visit(parent)
+        ancestors.add(parent)//添加父RDD
+        visit(parent)//继续递归该父RDD的父RDD
       }
     }
 
-    visit(this)
+    visit(this)//将RDD本身作为参数传过去,进行递归操作
 
-    // In case there is a cycle, do not include the root itself
+    // In case there is a cycle, do not include the root itself 刨除自己RDD本身
     ancestors.filterNot(_ == this).toSeq
   }
 
@@ -350,6 +357,8 @@ abstract class RDD[T: ClassTag](
    * be part of the same scope. For more detail, see {{org.apache.spark.rdd.RDDOperationScope}}.
    *
    * Note: Return statements are NOT allowed in the given body.
+    * 执行body代码块在一个单独的scope中,所有在body中被创建的RDD都是有相同的scope
+    * body是返回U的,因此该返回值也是返回U
    */
   private[spark] def withScope[U](body: => U): U = RDDOperationScope.withScope[U](sc)(body)
 
@@ -361,7 +370,7 @@ abstract class RDD[T: ClassTag](
    */
   def map[U: ClassTag](f: T => U): RDD[U] = withScope {
     val cleanF = sc.clean(f)
-    new MapPartitionsRDD[U, T](this, (context, pid, iter) => iter.map(cleanF))
+    new MapPartitionsRDD[U, T](this, (context, pid, iter) => iter.map(cleanF))//表示每一个元素都执行f函数,将原本的T转换成U
   }
 
   /**
@@ -376,7 +385,7 @@ scala> val a = sc.parallelize(1 to 4, 2) scala> val b = a.flatMap(x => 1 to x) s
    */
   def flatMap[U: ClassTag](f: T => TraversableOnce[U]): RDD[U] = withScope {
     val cleanF = sc.clean(f)
-    new MapPartitionsRDD[U, T](this, (context, pid, iter) => iter.flatMap(cleanF))
+    new MapPartitionsRDD[U, T](this, (context, pid, iter) => iter.flatMap(cleanF))//表示每一个元素都f函数处理后的结果,在进行scala的flatMap处理
   }
 
   /**
@@ -394,12 +403,15 @@ scala> val a = sc.parallelize(1 to 4, 2) scala> val b = a.flatMap(x => 1 to x) s
 
   /**
    * Return a new RDD containing the distinct elements in this RDD.
+    * 返回一个新的RDD,新的RDD就是把老的RDD中重复的元素去掉了
    * 1.RDD -> MapPartitionsRDD[U, T]  即x--转换成x null的key-value形式RDD
    * 2.key-value的RDD 隐式转换--PairRDDFunctions,并且调用reduceByKey方法,返回RDD[(K, V)]
    reduceByKey参数(x, y) => x  表示输入x和y的内容,即连续两个value,返回任意一个value即可    numPartitions表示最终的结果要输出到几个partition中
    * 3.获取最终的RDD[Key]即可
    */
   def distinct(numPartitions: Int)(implicit ord: Ordering[T] = null): RDD[T] = withScope {
+    //这一系列过程其实是中间转换了好几次RDD切换,因此已经有好几层的RDD了,并且partitioner也不一样了
+    //reduceByKey中的函数是元组x,y转换成x
     map(x => (x, null)).reduceByKey((x, y) => x, numPartitions).map(_._1)//其实函数可以固定成任意字符,也是可以的,因为是过滤key,与value无关
   }
 
@@ -407,7 +419,7 @@ scala> val a = sc.parallelize(1 to 4, 2) scala> val b = a.flatMap(x => 1 to x) s
    * Return a new RDD containing the distinct elements in this RDD.
    */
   def distinct(): RDD[T] = withScope {
-    distinct(partitions.length)
+    distinct(partitions.length)//最终partition数量就是和本身RDD的数量相同
   }
 
   /**
@@ -812,6 +824,7 @@ scala> val a = sc.parallelize(1 to 4, 2) scala> val b = a.flatMap(x => 1 to x) s
    *
    * `preservesPartitioning` indicates whether the input function preserves the partitioner, which
    * should be `false` unless this is a pair RDD and the input function doesn't modify the keys.
+    * 已经过期了,其实就是mapPartitions方法
    */
   @DeveloperApi
   @deprecated("use TaskContext.get", "1.2.0")
@@ -826,6 +839,7 @@ scala> val a = sc.parallelize(1 to 4, 2) scala> val b = a.flatMap(x => 1 to x) s
   /**
    * Return a new RDD by applying a function to each partition of this RDD, while tracking the index
    * of the original partition.
+    * 已经过期了,现在使用mapPartitionsWithIndex方法
    */
   @deprecated("use mapPartitionsWithIndex", "0.7.0")
   def mapPartitionsWithSplit[U: ClassTag](
@@ -841,6 +855,8 @@ scala> val a = sc.parallelize(1 to 4, 2) scala> val b = a.flatMap(x => 1 to x) s
    *
    * partition的index作为参数,传递给constructA,返回值是A
    * 然后该partition分区的每一个元素,都进行map处理,f函数的参数是元素原始内容和A
+    *
+    * 过期了,现在就是mapPartitionsWithIndex
    */
   @deprecated("use mapPartitionsWithIndex", "1.0.0")
   def mapWith[A, U: ClassTag]
@@ -861,6 +877,8 @@ scala> val a = sc.parallelize(1 to 4, 2) scala> val b = a.flatMap(x => 1 to x) s
    *
    *  partition的index作为参数,传递给constructA,返回值是A
    * 然后该partition分区的每一个元素,都进行flatMap函数处理,f函数的参数是元素原始内容和A
+    *
+    * 过期了,现在就是mapPartitionsWithIndex
    */
   @deprecated("use mapPartitionsWithIndex and flatMap", "1.0.0")
   def flatMapWith[A, U: ClassTag]
@@ -878,6 +896,7 @@ scala> val a = sc.parallelize(1 to 4, 2) scala> val b = a.flatMap(x => 1 to x) s
    * Applies f to each element of this RDD, where f takes an additional parameter of type A.
    * This additional parameter is produced by constructA, which is called in each
    * partition with the index of that partition.
+    * 过期了,现在就是mapPartitionsWithIndex
    */
   @deprecated("use mapPartitionsWithIndex and foreach", "1.0.0")
   def foreachWith[A](constructA: Int => A)(f: (T, A) => Unit): Unit = withScope {
@@ -893,6 +912,7 @@ scala> val a = sc.parallelize(1 to 4, 2) scala> val b = a.flatMap(x => 1 to x) s
    * Filters this RDD with p, where p takes an additional parameter of type A.  This
    * additional parameter is produced by constructA, which is called in each
    * partition with the index of that partition.
+    * 过期了,现在就是mapPartitionsWithIndex
    */
   @deprecated("use mapPartitionsWithIndex and filter", "1.0.0")
   def filterWith[A](constructA: Int => A)(p: (T, A) => Boolean): RDD[T] = withScope {
@@ -979,6 +999,7 @@ res0: Array[(Int, String)] = Array((1,A), (2,B), (3,C), (4,D), (5,E))
 
 
   // Actions (launch a job to return a value to the user program)
+  //以下是Action行为的方法,用于真正去分布式处理
 
   /**
    * Applies a function f to all elements of this RDD.
@@ -1758,7 +1779,7 @@ res80: Array[(Int, String)] = Array((3,dog), (6,salmon), (6,salmon), (3,rat), (8
   // Other internal methods and fields
   // =======================================================================
 
-  private var storageLevel: StorageLevel = StorageLevel.NONE
+  private var storageLevel: StorageLevel = StorageLevel.NONE//NONE说明该RDD没有被存储
 
   /** User code that created this RDD (e.g. `textFile`, `parallelize`). */
   @transient private[spark] val creationSite = sc.getCallSite()

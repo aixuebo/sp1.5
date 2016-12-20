@@ -1666,6 +1666,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
 
   /**
    * Register an RDD to be persisted in memory and/or disk storage
+    * 注册该RDD已经要去存储起来了
    */
   private[spark] def persistRDD(rdd: RDD[_]) {
     persistentRdds(rdd.id) = rdd

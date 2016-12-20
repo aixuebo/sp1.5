@@ -31,11 +31,11 @@ private[spark] class MapPartitionsRDD[U: ClassTag, T: ClassTag](
     preservesPartitioning: Boolean = false) //true表示维持父类RDD[T]对应的Partitioner分隔类
   extends RDD[U](prev) { //继承RDD[U],该RDD依赖RDD[T]
 
-  override val partitioner = if (preservesPartitioning) firstParent[T].partitioner else None
+  override val partitioner = if (preservesPartitioning) firstParent[T].partitioner else None//如果为false,说明新的rdd是不需要partitioner的?挺奇怪,不知道为什么
 
   override def getPartitions: Array[Partition] = firstParent[T].partitions //默认partition数量与父RDD一样,即类似于Map方法,将每一个父partition对应一个子的partition
 
-  //计算某一个partition,默认逻辑是调用父partition,组成的一行记录一行记录的输入流,流入f函数中
+  //计算某一个partition,默认逻辑是调用父partition,父类的一行记录一行记录的输入流,流入f函数中,转成新的U对象
   override def compute(split: Partition, context: TaskContext): Iterator[U] =
     f(context, split.index, firstParent[T].iterator(split, context))
 }
