@@ -188,15 +188,15 @@ private[spark] object Utils extends Logging {
 
   /**
    * Primitive often used when writing [[java.nio.ByteBuffer]] to [[java.io.DataOutput]]
-   * 将ByteBuffer的内容写入ObjectOutput中
+   * 将ByteBuffer的内容写入ObjectOutput中.只是写入bb.remaining()个字节
    */
   def writeByteBuffer(bb: ByteBuffer, out: ObjectOutput): Unit = {
     if (bb.hasArray) {
-      out.write(bb.array(), bb.arrayOffset() + bb.position(), bb.remaining())
+      out.write(bb.array(), bb.arrayOffset() + bb.position(), bb.remaining()) //将bb缓冲区内从第二个参数开始,写第三个参数个字节,写入到out中
     } else {
-      val bbval = new Array[Byte](bb.remaining())
-      bb.get(bbval)
-      out.write(bbval)
+      val bbval = new Array[Byte](bb.remaining()) //创造一个字节数组
+      bb.get(bbval) //将bb的内容读取到bbval数组中,只能读取bbval.size个大小字节
+      out.write(bbval)//将读取的字节内容写入到out中
     }
   }
 

@@ -40,10 +40,10 @@ private[scheduler] sealed trait DAGSchedulerEvent //基本类,表示调度事件
 
 //一个job已经被提交到调度了
 private[scheduler] case class JobSubmitted(
-    jobId: Int,
-    finalRDD: RDD[_],
-    func: (TaskContext, Iterator[_]) => _,
-    partitions: Array[Int],
+    jobId: Int,//jobId
+    finalRDD: RDD[_],//要处理的RDD
+    func: (TaskContext, Iterator[_]) => _,//如何处理RDD的每一个分区
+    partitions: Array[Int],//多少个分区
     callSite: CallSite,
     listener: JobListener,
     properties: Properties = null)

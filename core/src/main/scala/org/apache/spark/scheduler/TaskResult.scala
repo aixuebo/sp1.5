@@ -31,31 +31,37 @@ import org.apache.spark.util.Utils
 // Task result. Also contains updates to accumulator variables.
 private[spark] sealed trait TaskResult[T]
 
-/** A reference to a DirectTaskResult that has been stored in the worker's BlockManager. */
+/** A reference to a DirectTaskResult that has been stored in the worker's BlockManager.
+  * 间接的一个引用,已经被存储在worker的数据块系统里面了
+  **/
 private[spark] case class IndirectTaskResult[T](blockId: BlockId, size: Int)
   extends TaskResult[T] with Serializable
 
-/** A TaskResult that contains the task's return value and accumulator updates. */
+/** A TaskResult that contains the task's return value and accumulator updates.
+  *  一个任务的结果,包含任务的返回值以及更新的累加器
+  **/
 private[spark]
 class DirectTaskResult[T](var valueBytes: ByteBuffer, var accumUpdates: Map[Long, Any],
     var metrics: TaskMetrics)
   extends TaskResult[T] with Externalizable {
 
-  private var valueObjectDeserialized = false
-  private var valueObject: T = _
+  private var valueObjectDeserialized = false //true表示该对象已经被反序列化了
+  private var valueObject: T = _ //反序列化后的对象
 
   def this() = this(null.asInstanceOf[ByteBuffer], null, null)
 
   override def writeExternal(out: ObjectOutput): Unit = Utils.tryOrIOException {
 
-    out.writeInt(valueBytes.remaining);
-    Utils.writeByteBuffer(valueBytes, out)
+    out.writeInt(valueBytes.remaining);//valueBytes字节数组还有多少个位置尚未被使用
+    Utils.writeByteBuffer(valueBytes, out) //将valueBytes的内容写入选择前valueBytes.remaining个写入到out中
 
+    //写入统计信息
     out.writeInt(accumUpdates.size)
     for ((key, value) <- accumUpdates) {
       out.writeLong(key)
       out.writeObject(value)
     }
+    //写入最后数据
     out.writeObject(metrics)
   }
 
@@ -63,7 +69,7 @@ class DirectTaskResult[T](var valueBytes: ByteBuffer, var accumUpdates: Map[Long
 
     val blen = in.readInt()
     val byteVal = new Array[Byte](blen)
-    in.readFully(byteVal)
+    in.readFully(byteVal)//从输入流中读取byteVal个字节
     valueBytes = ByteBuffer.wrap(byteVal)
 
     val numUpdates = in.readInt
@@ -88,14 +94,14 @@ class DirectTaskResult[T](var valueBytes: ByteBuffer, var accumUpdates: Map[Long
    * After the first time, `value()` is trivial and just returns the deserialized `valueObject`.
    */
   def value(): T = {
-    if (valueObjectDeserialized) {
+    if (valueObjectDeserialized) {//true表示该对象已经被反序列化了
       valueObject
     } else {
       // This should not run when holding a lock because it may cost dozens of seconds for a large
       // value.
       val resultSer = SparkEnv.get.serializer.newInstance()
-      valueObject = resultSer.deserialize(valueBytes)
-      valueObjectDeserialized = true
+      valueObject = resultSer.deserialize(valueBytes) //对字节数组进行反序列化
+      valueObjectDeserialized = true //说明反序列化成功
       valueObject
     }
   }

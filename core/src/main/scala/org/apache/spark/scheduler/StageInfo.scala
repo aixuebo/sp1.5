@@ -37,20 +37,23 @@ class StageInfo(
     val parentIds: Seq[Int],
     val details: String,
     private[spark] val taskLocalityPreferences: Seq[Seq[TaskLocation]] = Seq.empty) {
-  /** When this stage was submitted from the DAGScheduler to a TaskScheduler. */
+  /** When this stage was submitted from the DAGScheduler to a TaskScheduler.
+    * 该阶段被提交的时间
+    **/
   var submissionTime: Option[Long] = None
   /** Time when all tasks in the stage completed or when the stage was cancelled.
     * 该阶段完成的时间
     **/
   var completionTime: Option[Long] = None
-  /** If the stage failed, the reason why. */
+  /** If the stage failed, the reason why. 失败原因*/
   var failureReason: Option[String] = None
   /** Terminal values of accumulables updated during this stage. */
   val accumulables = HashMap[Long, AccumulableInfo]()
 
+  //该阶段最终失败
   def stageFailed(reason: String) {
     failureReason = Some(reason)
-    completionTime = Some(System.currentTimeMillis)
+    completionTime = Some(System.currentTimeMillis)//完成时间
   }
 
   private[spark] def getStatusString: String = {

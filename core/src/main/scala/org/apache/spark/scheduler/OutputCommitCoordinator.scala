@@ -100,7 +100,7 @@ private[spark] class OutputCommitCoordinator(conf: SparkConf, isDriver: Boolean)
     authorizedCommittersByStage(stage) = mutable.HashMap[PartitionId, TaskAttemptNumber]()
   }
 
-  // Called by DAGScheduler
+  // Called by DAGScheduler 说明该阶段已经完成了
   private[scheduler] def stageEnd(stage: StageId): Unit = synchronized {
     authorizedCommittersByStage.remove(stage)
   }

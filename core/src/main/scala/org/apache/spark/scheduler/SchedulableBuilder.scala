@@ -51,6 +51,7 @@ private[spark] class FIFOSchedulableBuilder(val rootPool: Pool)
 }
 
 /**
+ * xml格式
  * <root>
  *  <pool @name="">
  *    <schedulingMode>FIFO</schedulingMode>
@@ -70,9 +71,10 @@ private[spark] class FairSchedulableBuilder(val rootPool: Pool, conf: SparkConf)
   val schedulerAllocFile = conf.getOption("spark.scheduler.allocation.file") //调度配置文件
   val DEFAULT_SCHEDULER_FILE = "fairscheduler.xml" //默认的调度配置文件
     
-  val FAIR_SCHEDULER_PROPERTIES = "spark.scheduler.pool"
+  val FAIR_SCHEDULER_PROPERTIES = "spark.scheduler.pool"//调度的name对应的key
   val DEFAULT_POOL_NAME = "default"//必须要有name为default的Pool
-  
+
+  //xml节点的内容
   val POOLS_PROPERTY = "pool" //配置文件的pool节点
   val MINIMUM_SHARES_PROPERTY = "minShare"//pool节点需要的minShare
   val SCHEDULING_MODE_PROPERTY = "schedulingMode"//pool节点需要的模式
@@ -92,13 +94,13 @@ private[spark] class FairSchedulableBuilder(val rootPool: Pool, conf: SparkConf)
     try {
       is = Option {
         schedulerAllocFile.map { f =>
-          new FileInputStream(f)
+          new FileInputStream(f) //读取配置的自定义配置文件
         }.getOrElse {
-          Utils.getSparkClassLoader.getResourceAsStream(DEFAULT_SCHEDULER_FILE)
+          Utils.getSparkClassLoader.getResourceAsStream(DEFAULT_SCHEDULER_FILE) //读取默认配置文件
         }
       }
 
-      is.foreach { i => buildFairSchedulerPool(i) }
+      is.foreach { i => buildFairSchedulerPool(i) }//加载该配置文件对应的队列信息
     } finally {
       is.foreach(_.close())
     }
@@ -108,8 +110,9 @@ private[spark] class FairSchedulableBuilder(val rootPool: Pool, conf: SparkConf)
   }
 
   //必须要有name为default的Pool,如果xml文件中不存在,则该函数创建一个默认的Pool
-  private def buildDefaultPool() {
+  private def buildDefaultPool() {//加载默认的default队列
     if (rootPool.getSchedulableByName(DEFAULT_POOL_NAME) == null) {
+      //通过默认值创建default队列
       val pool = new Pool(DEFAULT_POOL_NAME, DEFAULT_SCHEDULING_MODE,
         DEFAULT_MINIMUM_SHARE, DEFAULT_WEIGHT)
       rootPool.addSchedulable(pool)
@@ -119,16 +122,16 @@ private[spark] class FairSchedulableBuilder(val rootPool: Pool, conf: SparkConf)
   }
 
   //参数是配置文件流,对该流进行解析
-  private def buildFairSchedulerPool(is: InputStream) {
-    val xml = XML.load(is)
-    for (poolNode <- (xml \\ POOLS_PROPERTY)) {
+  private def buildFairSchedulerPool(is: InputStream) {//读取xml配置文件,创建若干子队列
+    val xml = XML.load(is) //加载xml
+    for (poolNode <- (xml \\ POOLS_PROPERTY)) {//循环所有的pool标签
 
-      val poolName = (poolNode \ POOL_NAME_PROPERTY).text
+      val poolName = (poolNode \ POOL_NAME_PROPERTY).text //获取@name属性
       var schedulingMode = DEFAULT_SCHEDULING_MODE
       var minShare = DEFAULT_MINIMUM_SHARE
       var weight = DEFAULT_WEIGHT
 
-      val xmlSchedulingMode = (poolNode \ SCHEDULING_MODE_PROPERTY).text
+      val xmlSchedulingMode = (poolNode \ SCHEDULING_MODE_PROPERTY).text //获取schedulingMode的值
       if (xmlSchedulingMode != "") {
         try {
           schedulingMode = SchedulingMode.withName(xmlSchedulingMode)
@@ -138,12 +141,12 @@ private[spark] class FairSchedulableBuilder(val rootPool: Pool, conf: SparkConf)
         }
       }
 
-      val xmlMinShare = (poolNode \ MINIMUM_SHARES_PROPERTY).text
+      val xmlMinShare = (poolNode \ MINIMUM_SHARES_PROPERTY).text //获取minShare的值
       if (xmlMinShare != "") {
         minShare = xmlMinShare.toInt
       }
 
-      val xmlWeight = (poolNode \ WEIGHT_PROPERTY).text
+      val xmlWeight = (poolNode \ WEIGHT_PROPERTY).text //获取weight的值
       if (xmlWeight != "") {
         weight = xmlWeight.toInt
       }

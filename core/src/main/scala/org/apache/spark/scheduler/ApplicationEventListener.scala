@@ -24,15 +24,20 @@ package org.apache.spark.scheduler
  * from multiple applications are seen, the behavior is unspecified.
  */
 private[spark] class ApplicationEventListener extends SparkListener {
+
+  //事件满足的时候会赋值
   var appName: Option[String] = None
   var appId: Option[String] = None
   var appAttemptId: Option[String] = None
   var sparkUser: Option[String] = None
   var startTime: Option[Long] = None
+
   var endTime: Option[Long] = None
+
   var viewAcls: Option[String] = None
   var adminAcls: Option[String] = None
 
+  //应用开启
   override def onApplicationStart(applicationStart: SparkListenerApplicationStart) {
     appName = Some(applicationStart.appName)
     appId = applicationStart.appId
@@ -41,10 +46,12 @@ private[spark] class ApplicationEventListener extends SparkListener {
     sparkUser = Some(applicationStart.sparkUser)
   }
 
+  //应用结束
   override def onApplicationEnd(applicationEnd: SparkListenerApplicationEnd) {
     endTime = Some(applicationEnd.time)
   }
 
+  //更新环境
   override def onEnvironmentUpdate(environmentUpdate: SparkListenerEnvironmentUpdate) {
     synchronized {
       val environmentDetails = environmentUpdate.environmentDetails

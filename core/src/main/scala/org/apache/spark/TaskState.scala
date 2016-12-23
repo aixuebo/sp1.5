@@ -19,11 +19,14 @@ package org.apache.spark
 
 import org.apache.mesos.Protos.{TaskState => MesosTaskState}
 
+//表示一个任务的状态
 private[spark] object TaskState extends Enumeration {
 
-  val LAUNCHING, RUNNING, FINISHED, FAILED, KILLED, LOST = Value
+  val LAUNCHING, RUNNING, FINISHED, FAILED, KILLED, LOST = Value //任务状态
 
-  val FINISHED_STATES = Set(FINISHED, FAILED, KILLED, LOST)
+  val FINISHED_STATES = Set(FINISHED, FAILED, KILLED, LOST) //都是完成的状态
+
+  //KILLED, LOST 是failed失败的状态
 
   type TaskState = Value
 

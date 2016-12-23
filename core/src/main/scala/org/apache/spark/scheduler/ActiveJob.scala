@@ -38,6 +38,6 @@ private[spark] class ActiveJob(
     val properties: Properties) {
 
   val numPartitions = partitions.length
-  val finished = Array.fill[Boolean](numPartitions)(false)
-  var numFinished = 0
+  val finished = Array.fill[Boolean](numPartitions)(false) //partition完成了,则设置对应的位置为true
+  var numFinished = 0 //完成的partition数量
 }

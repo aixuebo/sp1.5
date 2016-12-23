@@ -30,28 +30,32 @@ import org.apache.spark.util.{ThreadUtils, Utils}
 
 /**
  * Runs a thread pool that deserializes and remotely fetches (if necessary) task results.
+ * 运行一个线程池,去反序列化并且远程抓取(如果需要的话)任务的结果
  */
 private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedulerImpl)
   extends Logging {
 
-  private val THREADS = sparkEnv.conf.getInt("spark.resultGetter.threads", 4)
+  private val THREADS = sparkEnv.conf.getInt("spark.resultGetter.threads", 4) //线程数量
   private val getTaskResultExecutor = ThreadUtils.newDaemonFixedThreadPool(
-    THREADS, "task-result-getter")
+    THREADS, "task-result-getter") //线程池
 
+  //本地序列化对象
   protected val serializer = new ThreadLocal[SerializerInstance] {
     override def initialValue(): SerializerInstance = {
       sparkEnv.closureSerializer.newInstance()
     }
   }
 
+  //入队--成功执行完的任务
   def enqueueSuccessfulTask(
     taskSetManager: TaskSetManager, tid: Long, serializedData: ByteBuffer) {
     getTaskResultExecutor.execute(new Runnable {
       override def run(): Unit = Utils.logUncaughtExceptions {
         try {
+          //序列化对象进行反序列化.结果是TaskResult对象,参数serializedData是结果字节内容
           val (result, size) = serializer.get().deserialize[TaskResult[_]](serializedData) match {
             case directResult: DirectTaskResult[_] =>
-              if (!taskSetManager.canFetchMoreResults(serializedData.limit())) {
+              if (!taskSetManager.canFetchMoreResults(serializedData.limit())) {//说明超出范围了
                 return
               }
               // deserialize "value" without holding any lock so that it won't block other threads.
@@ -67,7 +71,7 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
               }
               logDebug("Fetching indirect task result for TID %s".format(tid))
               scheduler.handleTaskGettingResult(taskSetManager, tid)
-              val serializedTaskResult = sparkEnv.blockManager.getRemoteBytes(blockId)
+              val serializedTaskResult = sparkEnv.blockManager.getRemoteBytes(blockId) //远程读取字节内容
               if (!serializedTaskResult.isDefined) {
                 /* We won't be able to get the task result if the machine that ran the task failed
                  * between when the task ended and when we tried to fetch the result, or if the
@@ -97,6 +101,7 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
     })
   }
 
+  //入队--失败执行的任务
   def enqueueFailedTask(taskSetManager: TaskSetManager, tid: Long, taskState: TaskState,
     serializedData: ByteBuffer) {
     var reason : TaskEndReason = UnknownReason
@@ -127,6 +132,6 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
   }
 
   def stop() {
-    getTaskResultExecutor.shutdownNow()
+    getTaskResultExecutor.shutdownNow() //关闭线程池
   }
 }

@@ -37,6 +37,7 @@ sealed trait SparkListenerEvent
 case class SparkListenerStageSubmitted(stageInfo: StageInfo, properties: Properties = null)
   extends SparkListenerEvent
 
+//一个阶段完成(正常完成、失败完成都是完成)
 @DeveloperApi
 case class SparkListenerStageCompleted(stageInfo: StageInfo) extends SparkListenerEvent
 

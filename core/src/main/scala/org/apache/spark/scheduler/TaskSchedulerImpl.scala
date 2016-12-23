@@ -76,7 +76,7 @@ private[spark] class TaskSchedulerImpl(
 
   // TaskSetManagers are not thread safe, so any access to one should be synchronized
   // on this class.
-  //ket是阶段ID,StageId value的key是该阶段的Attempt尝试次数,value是该尝试次数对应的任务集合
+  //key是阶段ID,StageId value的key是该阶段的Attempt尝试次数,value是该尝试次数对应的任务集合
   private val taskSetsByStageIdAndAttempt = new HashMap[Int, HashMap[Int, TaskSetManager]]
 
   private[scheduler] val taskIdToTaskSetManager = new HashMap[Long, TaskSetManager]
@@ -107,7 +107,7 @@ private[spark] class TaskSchedulerImpl(
 
   val mapOutputTracker = SparkEnv.get.mapOutputTracker
   
-  var schedulableBuilder: SchedulableBuilder = null //调度器
+  var schedulableBuilder: SchedulableBuilder = null //调度器池子
   var rootPool: Pool = null //rootPool调度池
   
   // default scheduler is FIFO 调度模式
@@ -407,6 +407,7 @@ private[spark] class TaskSchedulerImpl(
     taskSetManager.handleTaskGettingResult(tid)
   }
 
+  //任务成功
   def handleSuccessfulTask(
       taskSetManager: TaskSetManager,
       tid: Long,
@@ -414,6 +415,7 @@ private[spark] class TaskSchedulerImpl(
     taskSetManager.handleSuccessfulTask(tid, taskResult)
   }
 
+  //任务失败
   def handleFailedTask(
       taskSetManager: TaskSetManager,
       tid: Long,
@@ -464,6 +466,7 @@ private[spark] class TaskSchedulerImpl(
   override def defaultParallelism(): Int = backend.defaultParallelism()
 
   // Check for speculatable tasks in all our active jobs.
+  //检查推测任务
   def checkSpeculatableTasks() {
     var shouldRevive = false
     synchronized {
@@ -523,6 +526,7 @@ private[spark] class TaskSchedulerImpl(
     dagScheduler.executorAdded(execId, host)
   }
 
+  //获取该host上有哪些executor集合
   def getExecutorsAliveOnHost(host: String): Option[Set[String]] = synchronized {
     executorsByHost.get(host).map(_.toSet)
   }
@@ -565,7 +569,7 @@ private[spark] class TaskSchedulerImpl(
       stageAttemptId: Int): Option[TaskSetManager] = {
     for {
       attempts <- taskSetsByStageIdAndAttempt.get(stageId)
-      manager <- attempts.get(stageAttemptId)
+      manager <- attempts.get(stageAttemptId) //获取对应的TaskSetManager对象
     } yield {
       manager
     }

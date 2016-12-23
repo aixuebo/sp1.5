@@ -25,7 +25,7 @@ package org.apache.spark.scheduler
 private[spark] class JobWaiter[T](//T是task的结果集
     dagScheduler: DAGScheduler,
     val jobId: Int,//job所属id
-    totalTasks: Int,//该job总共多少个task任务
+    totalTasks: Int,//该job总共多少个task任务,即有多少个partition分区
     resultHandler: (Int, T) => Unit)//该函数说明该index的任务完成了,第二个参数是task的返回值
   extends JobListener {
 

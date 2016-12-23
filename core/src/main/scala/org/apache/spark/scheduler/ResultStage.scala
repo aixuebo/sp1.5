@@ -27,7 +27,7 @@ import org.apache.spark.util.CallSite
 private[spark] class ResultStage(
     id: Int,//该阶段的ID
     rdd: RDD[_],//该阶段依赖的RDD输入源
-    numTasks: Int,//rdd的partition数量
+    numTasks: Int,//rdd的partition数量,即多少个并行任务去执行
     parents: List[Stage],//该阶段依赖哪些父Stage集合
     firstJobId: Int,//该阶段属于哪个jobid
     callSite: CallSite)

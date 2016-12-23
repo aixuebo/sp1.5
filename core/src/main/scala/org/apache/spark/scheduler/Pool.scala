@@ -27,10 +27,11 @@ import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 
 /**
  * An Schedulable entity that represent collection of Pools or TaskSetManagers
+ * 更多的代表一个树上非叶子节点
  */
 private[spark] class Pool(
-    val poolName: String,
-    val schedulingMode: SchedulingMode,
+    val poolName: String,//调度的name
+    val schedulingMode: SchedulingMode,//调度模式是先进先出,还是公平模式
     initMinShare: Int,
     initWeight: Int)
   extends Schedulable
@@ -40,6 +41,7 @@ private[spark] class Pool(
   val schedulableQueue = new ConcurrentLinkedQueue[Schedulable]
   //调度的name与调度的映射关系
   val schedulableNameToSchedulable = new ConcurrentHashMap[String, Schedulable]
+
   var weight = initWeight
   var minShare = initMinShare
   var runningTasks = 0 //该队列的子子孙孙中正在运行的任务数量
@@ -47,8 +49,9 @@ private[spark] class Pool(
 
   // A pool's stage id is used to break the tie in scheduling.
   var stageId = -1
-  var name = poolName
-  var parent: Pool = null
+
+  var name = poolName //队列名字
+  var parent: Pool = null //父队列
 
   //调度的算法
   var taskSetSchedulingAlgorithm: SchedulingAlgorithm = {
@@ -108,6 +111,7 @@ private[spark] class Pool(
     sortedTaskSetQueue
   }
 
+  //增加队列中包含任务数量
   def increaseRunningTasks(taskNum: Int) {
     runningTasks += taskNum
     if (parent != null) {
@@ -115,6 +119,7 @@ private[spark] class Pool(
     }
   }
 
+  //减少队列中包含任务数量
   def decreaseRunningTasks(taskNum: Int) {
     runningTasks -= taskNum
     if (parent != null) {

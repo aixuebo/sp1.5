@@ -48,16 +48,25 @@ private[spark] class FIFOSchedulingAlgorithm extends SchedulingAlgorithm {
 
 private[spark] class FairSchedulingAlgorithm extends SchedulingAlgorithm {
   override def comparator(s1: Schedulable, s2: Schedulable): Boolean = {
+    //该队列的最小资源
     val minShare1 = s1.minShare
     val minShare2 = s2.minShare
+    //该队列上存在运行中的任务数量
     val runningTasks1 = s1.runningTasks
     val runningTasks2 = s2.runningTasks
+
     val s1Needy = runningTasks1 < minShare1 //true表示缺乏,即运行的task没有达到最小值,可以继续运行
     val s2Needy = runningTasks2 < minShare2
+
+    //当前任务数量是最小资源的多少倍,该比值越大,说明当前队列任务越重
     val minShareRatio1 = runningTasks1.toDouble / math.max(minShare1, 1.0).toDouble
     val minShareRatio2 = runningTasks2.toDouble / math.max(minShare2, 1.0).toDouble
+
+    //表示单位权重下的任务数量,越大,表示任务越重
     val taskToWeightRatio1 = runningTasks1.toDouble / s1.weight.toDouble
     val taskToWeightRatio2 = runningTasks2.toDouble / s2.weight.toDouble
+
+    //比较最终结果
     var compare: Int = 0
 
     if (s1Needy && !s2Needy) {//如果s1缺乏,而s2满足了,则就让给s1运行

@@ -2396,7 +2396,7 @@ object SparkContext extends Logging {
   }
 
   private[spark] val SPARK_JOB_DESCRIPTION = "spark.job.description"
-  private[spark] val SPARK_JOB_GROUP_ID = "spark.jobGroup.id"
+  private[spark] val SPARK_JOB_GROUP_ID = "spark.jobGroup.id"//该job属于哪个job组
   private[spark] val SPARK_JOB_INTERRUPT_ON_CANCEL = "spark.job.interruptOnCancel"
   private[spark] val RDD_SCOPE_KEY = "spark.rdd.scope"
   private[spark] val RDD_SCOPE_NO_OVERRIDE_KEY = "spark.rdd.scope.noOverride"

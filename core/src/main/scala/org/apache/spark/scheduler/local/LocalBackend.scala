@@ -30,6 +30,7 @@ import org.apache.spark.scheduler.cluster.ExecutorInfo
 
 private case class ReviveOffers()
 
+//任务更新状态
 private case class StatusUpdate(taskId: Long, state: TaskState, serializedData: ByteBuffer)
 
 private case class KillTask(taskId: Long, interruptThread: Boolean)
@@ -46,10 +47,10 @@ private[spark] class LocalEndpoint(
     userClassPath: Seq[URL],
     scheduler: TaskSchedulerImpl,
     executorBackend: LocalBackend,
-    private val totalCores: Int)
+    private val totalCores: Int)//总cpu数
   extends ThreadSafeRpcEndpoint with Logging {
 
-  private var freeCores = totalCores
+  private var freeCores = totalCores //剩余cup数
 
   val localExecutorId = SparkContext.DRIVER_IDENTIFIER //driver
   val localExecutorHostname = "localhost"
