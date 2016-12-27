@@ -35,14 +35,16 @@ import org.apache.spark.util.Utils
  * A unit of execution. We have two kinds of Task's in Spark:
  * - [[org.apache.spark.scheduler.ShuffleMapTask]]
  * - [[org.apache.spark.scheduler.ResultTask]]
- *
+ * 执行的最基本单元,有ShuffleMapTask和ResultTask两种类型任务
  * A Spark job consists of one or more stages. The very last stage in a job consists of multiple
  * ResultTasks, while earlier stages consist of ShuffleMapTasks. A ResultTask executes the task
  * and sends the task output back to the driver application. A ShuffleMapTask executes the task
  * and divides the task output to multiple buckets (based on the task's partitioner).
- *
- * @param stageId id of the stage this task belongs to
- * @param partitionId index of the number in the RDD
+ * 一个spark的job由多个阶段组成,最后一个阶段由多个ResultTasks任务组成,其他阶段由ShuffleMapTasks组成
+ * ResultTask执行任务,并且发送输出到driver
+ * ShuffleMapTask执行任务,并且拆分输出到多个桶中,拆分规则是任务的partitioner决定的
+ * @param stageId id of the stage this task belongs to 该任务属于第几个阶段
+ * @param partitionId index of the number in the RDD 该任务执行RDD的哪个partition
  */
 private[spark] abstract class Task[T](
     val stageId: Int,
