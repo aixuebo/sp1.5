@@ -49,7 +49,7 @@ private[spark] object MapStatus {
   /**
    *
    * @param loc
-   * @param uncompressedSizes 数据块字节数组,数组索引代表的是partition的ID,每一个元素表示该partition对应的文件大小预估值
+   * @param uncompressedSizes 数据块字节数组,数组索引代表的是每一个reduce对应的文件大小预估值
    * @return
    */
   def apply(loc: BlockManagerId, uncompressedSizes: Array[Long]): MapStatus = {

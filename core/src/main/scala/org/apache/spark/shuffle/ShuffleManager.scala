@@ -30,18 +30,22 @@ import org.apache.spark.{TaskContext, ShuffleDependency}
 private[spark] trait ShuffleManager {
   /**
    * Register a shuffle with the manager and obtain a handle for it to pass to tasks.
+   * 注册一个shuffle信息,产生一个注册对象ShuffleHandle
    */
   def registerShuffle[K, V, C](
-      shuffleId: Int,
-      numMaps: Int,
-      dependency: ShuffleDependency[K, V, C]): ShuffleHandle
+      shuffleId: Int,//shuffle的唯一ID
+      numMaps: Int,//RDD的partiton数量
+      dependency: ShuffleDependency[K, V, C]): ShuffleHandle //该rdd最终被分发成多少个reduce等操作记录
 
-  /** Get a writer for a given partition. Called on executors by map tasks. */
+  /** Get a writer for a given partition. Called on executors by map tasks.
+    *   map任务写入数据到多个reduce文件中
+    **/
   def getWriter[K, V](handle: ShuffleHandle, mapId: Int, context: TaskContext): ShuffleWriter[K, V]
 
   /**
    * Get a reader for a range of reduce partitions (startPartition to endPartition-1, inclusive).
    * Called on executors by reduce tasks.
+   * reduce要获取一组map区间的输出
    */
   def getReader[K, C](
       handle: ShuffleHandle,
@@ -52,14 +56,18 @@ private[spark] trait ShuffleManager {
   /**
     * Remove a shuffle's metadata from the ShuffleManager.
     * @return true if the metadata removed successfully, otherwise false.
+    * 删除一个shuffle,即该shuffle完成了
     */
   def unregisterShuffle(shuffleId: Int): Boolean
 
   /**
    * Return a resolver capable of retrieving shuffle block data based on block coordinates.
+   * 如何获取shuffle的结果
    */
   def shuffleBlockResolver: ShuffleBlockResolver
 
-  /** Shut down this ShuffleManager. */
+  /** Shut down this ShuffleManager.
+    * 停止该shuffle过程
+    **/
   def stop(): Unit
 }

@@ -60,6 +60,7 @@ case class RDDBlockId(rddId: Int, splitIndex: Int) extends BlockId {
 
 // Format of the shuffle block ids (including data and index) should be kept in sync with
 // org.apache.spark.network.shuffle.ExternalShuffleBlockResolver#getBlockData().
+//一个shufffleid表示该阶段是一个shuffler阶段,那么RDD有多少个partition,就有多少个map,有多少个reduce,每一个map就有多少个输出分区,因此一个map在shuffer阶段的输出就是若干个ShuffleBlockId
 @DeveloperApi
 case class ShuffleBlockId(shuffleId: Int, mapId: Int, reduceId: Int) extends BlockId {
   override def name: String = "shuffle_" + shuffleId + "_" + mapId + "_" + reduceId

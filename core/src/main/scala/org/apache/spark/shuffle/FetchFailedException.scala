@@ -26,6 +26,7 @@ import org.apache.spark.util.Utils
  * back to DAGScheduler (through TaskEndReason) so we'd resubmit the previous stage.
  *
  * Note that bmAddress can be null.
+ * 表示抓去shuffler结果失败了
  */
 private[spark] class FetchFailedException(
     bmAddress: BlockManagerId,
@@ -51,6 +52,9 @@ private[spark] class FetchFailedException(
 
 /**
  * Failed to get shuffle metadata from [[org.apache.spark.MapOutputTracker]].
+ * 抓去shuffle的元数据失败
+ *
+ * 即哪个reduce抓去哪个shuffler时候失败了
  */
 private[spark] class MetadataFetchFailedException(
     shuffleId: Int,

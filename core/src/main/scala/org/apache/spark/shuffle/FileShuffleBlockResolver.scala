@@ -35,7 +35,7 @@ import org.apache.spark.util.collection.{PrimitiveKeyOpenHashMap, PrimitiveVecto
 
 /** A group of writers for a ShuffleMapTask, one writer per reducer. */
 private[spark] trait ShuffleWriterGroup {
-  val writers: Array[DiskBlockObjectWriter]
+  val writers: Array[DiskBlockObjectWriter]//每一个reduce对应一个DiskBlockObjectWriter对象
 
   /** @param success Indicates all writes were successful. If false, no blocks will be recorded. */
   def releaseWriters(success: Boolean)
@@ -61,6 +61,8 @@ private[spark] trait ShuffleWriterGroup {
  * ShuffleBlockIds directly to FileSegments, each ShuffleFileGroup maintains a list of offsets for
  * each block stored in each file. In order to find the location of a shuffle block, we search the
  * files within a ShuffleFileGroups associated with the block's reducer.
+ *
+ * 用于管理mapshuffle时候,每一个map给每一个reduce分配一个文件,或者每一个reduce公用同一个文件
  */
 // Note: Changes to the format in this file should be kept in sync with
 // org.apache.spark.network.shuffle.ExternalShuffleBlockResolver#getHashBasedShuffleBlockData().
@@ -74,7 +76,7 @@ private[spark] class FileShuffleBlockResolver(conf: SparkConf)
   // Turning off shuffle file consolidation causes all shuffle Blocks to get their own file.
   // TODO: Remove this once the shuffle file consolidation feature is stable.
   private val consolidateShuffleFiles =
-    conf.getBoolean("spark.shuffle.consolidateFiles", false)
+    conf.getBoolean("spark.shuffle.consolidateFiles", false)//true表示每一个map对应的reduce都要产生一个文件,false表示reduce可以公用同一个文件
 
   // Use getSizeAsKb (not bytes) to maintain backwards compatibility if no units are provided
   private val bufferSize = conf.getSizeAsKb("spark.shuffle.file.buffer", "32k").toInt * 1024
@@ -82,19 +84,22 @@ private[spark] class FileShuffleBlockResolver(conf: SparkConf)
   /**
    * Contains all the state related to a particular shuffle. This includes a pool of unused
    * ShuffleFileGroups, as well as all ShuffleFileGroups that have been created for the shuffle.
+   * 参数numBuckets表示结果一共多少个reduce
    */
   private class ShuffleState(val numBuckets: Int) {
     val nextFileId = new AtomicInteger(0)
-    val unusedFileGroups = new ConcurrentLinkedQueue[ShuffleFileGroup]()
-    val allFileGroups = new ConcurrentLinkedQueue[ShuffleFileGroup]()
+    val unusedFileGroups = new ConcurrentLinkedQueue[ShuffleFileGroup]()//回收的文件组集合
+    val allFileGroups = new ConcurrentLinkedQueue[ShuffleFileGroup]()//所有的文件组
 
     /**
      * The mapIds of all map tasks completed on this Executor for this shuffle.
      * NB: This is only populated if consolidateShuffleFiles is FALSE. We don't need it otherwise.
+     * 表示已经完成的map集合
      */
     val completedMapTasks = new ConcurrentLinkedQueue[Int]()
   }
 
+  //每一个shuffleId对应一个该shuffle的状态对象
   private val shuffleStates = new TimeStampedHashMap[ShuffleId, ShuffleState]
 
   private val metadataCleaner =
@@ -103,26 +108,30 @@ private[spark] class FileShuffleBlockResolver(conf: SparkConf)
   /**
    * Get a ShuffleWriterGroup for the given map task, which will register it as complete
    * when the writers are closed successfully
+   * shuffleId 表示是哪个shuffler
+   * mapId 表示原始RDD的第几个partition
+   * numBuckets 表示一共多少个partition,此时partition是目标reduce的数量
+   * serializer 表示如何序列化数据
    */
   def forMapTask(shuffleId: Int, mapId: Int, numBuckets: Int, serializer: Serializer,
       writeMetrics: ShuffleWriteMetrics): ShuffleWriterGroup = {
     new ShuffleWriterGroup {
-      shuffleStates.putIfAbsent(shuffleId, new ShuffleState(numBuckets))
-      private val shuffleState = shuffleStates(shuffleId)
+      shuffleStates.putIfAbsent(shuffleId, new ShuffleState(numBuckets)) //如果不存在,则添加
+      private val shuffleState = shuffleStates(shuffleId) //获取状态对象
       private var fileGroup: ShuffleFileGroup = null
 
       val openStartTime = System.nanoTime
       val serializerInstance = serializer.newInstance()
-      val writers: Array[DiskBlockObjectWriter] = if (consolidateShuffleFiles) {
+      val writers: Array[DiskBlockObjectWriter] = if (consolidateShuffleFiles) {//共用同一个文件
         fileGroup = getUnusedFileGroup()
         Array.tabulate[DiskBlockObjectWriter](numBuckets) { bucketId =>
-          val blockId = ShuffleBlockId(shuffleId, mapId, bucketId)
+          val blockId = ShuffleBlockId(shuffleId, mapId, bucketId)//创建一个blockId
           blockManager.getDiskWriter(blockId, fileGroup(bucketId), serializerInstance, bufferSize,
             writeMetrics)
         }
-      } else {
+      } else {//为每一个reduce产生一个文件
         Array.tabulate[DiskBlockObjectWriter](numBuckets) { bucketId =>
-          val blockId = ShuffleBlockId(shuffleId, mapId, bucketId)
+          val blockId = ShuffleBlockId(shuffleId, mapId, bucketId) //创建一个blockId
           val blockFile = blockManager.diskBlockManager.getFile(blockId)
           // Because of previous failures, the shuffle file may already exist on this machine.
           // If so, remove it.
@@ -139,13 +148,14 @@ private[spark] class FileShuffleBlockResolver(conf: SparkConf)
       }
       // Creating the file to write to and creating a disk writer both involve interacting with
       // the disk, so should be included in the shuffle write time.
-      writeMetrics.incShuffleWriteTime(System.nanoTime - openStartTime)
+      writeMetrics.incShuffleWriteTime(System.nanoTime - openStartTime) //统计shuffle时间
 
       override def releaseWriters(success: Boolean) {
-        if (consolidateShuffleFiles) {
+        if (consolidateShuffleFiles) {//公用一个文件
           if (success) {
-            val offsets = writers.map(_.fileSegment().offset)
-            val lengths = writers.map(_.fileSegment().length)
+            //属于在该map中属于该reduce的输出开始位置以及总长度
+            val offsets = writers.map(_.fileSegment().offset)//这是一组集合,size大小就是reduce的数量
+            val lengths = writers.map(_.fileSegment().length)//这是一组集合,size大小就是reduce的数量
             fileGroup.recordMapOutput(mapId, offsets, lengths)
           }
           recycleFileGroup(fileGroup)
@@ -155,14 +165,15 @@ private[spark] class FileShuffleBlockResolver(conf: SparkConf)
       }
 
       private def getUnusedFileGroup(): ShuffleFileGroup = {
-        val fileGroup = shuffleState.unusedFileGroups.poll()
+        val fileGroup = shuffleState.unusedFileGroups.poll()//从已经被回收的队列中获取一个,如果该队列为空,则创建一个
         if (fileGroup != null) fileGroup else newFileGroup()
       }
 
       private def newFileGroup(): ShuffleFileGroup = {
         val fileId = shuffleState.nextFileId.getAndIncrement()
+        //产生reduce个文件
         val files = Array.tabulate[File](numBuckets) { bucketId =>
-          val filename = physicalFileName(shuffleId, bucketId, fileId)
+          val filename = physicalFileName(shuffleId, bucketId, fileId) //文件名字
           blockManager.diskBlockManager.getFile(filename)
         }
         val fileGroup = new ShuffleFileGroup(shuffleId, fileId, files)
@@ -170,12 +181,14 @@ private[spark] class FileShuffleBlockResolver(conf: SparkConf)
         fileGroup
       }
 
+      //回收一个文件组
       private def recycleFileGroup(group: ShuffleFileGroup) {
         shuffleState.unusedFileGroups.add(group)
       }
     }
   }
 
+  //获取一个map-reduce的输出
   override def getBlockData(blockId: ShuffleBlockId): ManagedBuffer = {
     if (consolidateShuffleFiles) {
       // Search all file groups associated with this shuffle.
@@ -201,16 +214,18 @@ private[spark] class FileShuffleBlockResolver(conf: SparkConf)
     // Do not change the ordering of this, if shuffleStates should be removed only
     // after the corresponding shuffle blocks have been removed
     val cleaned = removeShuffleBlocks(shuffleId)
-    shuffleStates.remove(shuffleId)
+    shuffleStates.remove(shuffleId)//移除一个shuffle
     cleaned
   }
 
-  /** Remove all the blocks / files related to a particular shuffle. */
+  /** Remove all the blocks / files related to a particular shuffle.
+    * 删除所有的文件内容
+    **/
   private def removeShuffleBlocks(shuffleId: ShuffleId): Boolean = {
     shuffleStates.get(shuffleId) match {
       case Some(state) =>
         if (consolidateShuffleFiles) {
-          for (fileGroup <- state.allFileGroups; file <- fileGroup.files) {
+          for (fileGroup <- state.allFileGroups; file <- fileGroup.files) {//删除该shuffle对应的文件内容
             file.delete()
           }
         } else {
@@ -227,6 +242,7 @@ private[spark] class FileShuffleBlockResolver(conf: SparkConf)
     }
   }
 
+  //物理文件名字 merged_shuffle_${shuffleId}_${bucketId}_${fileId} 即shuffleid+第几个reduce+文件ID
   private def physicalFileName(shuffleId: Int, bucketId: Int, fileId: Int) = {
     "merged_shuffle_%d_%d_%d".format(shuffleId, bucketId, fileId)
   }
@@ -244,13 +260,15 @@ private[spark] object FileShuffleBlockResolver {
   /**
    * A group of shuffle files, one per reducer.
    * A particular mapper will be assigned a single ShuffleFileGroup to write its output to.
+   * 创建一个文件组,该文件组的所有文件都属于一个shuffle,每一个reduce对应一个文件
    */
   private class ShuffleFileGroup(val shuffleId: Int, val fileId: Int, val files: Array[File]) {
-    private var numBlocks: Int = 0
+    private var numBlocks: Int = 0//第几个数据块
 
     /**
      * Stores the absolute index of each mapId in the files of this group. For instance,
      * if mapId 5 is the first block in each file, mapIdToIndex(5) = 0.
+     * key是第几个map,value是该map的结果在第几个数据块里面存储
      */
     private val mapIdToIndex = new PrimitiveKeyOpenHashMap[Int, Int]()
 
@@ -259,24 +277,28 @@ private[spark] object FileShuffleBlockResolver {
      * position in the file.
      * Note: mapIdToIndex(mapId) returns the index of the mapper into the vector for every
      * reducer.
-     * 该数组存储的元素是PrimitiveVector[Long],每一个File对象对应一个该元素,用于存储该文件的一些偏移量
+     * 每一个reduce作为一个元素,即有10个reduce,则有是个元素组成的数组
+     * 每一个元素又是PrimitiveVector类型的向量,向量的每一个元素表示对应每一个map
+     *
+     * 比如PrimitiveVector内容为1，204，308,表示第一个数据块对应的map输出关于该reduce的信息在文件的哪个开始位置开始的
      */
     private val blockOffsetsByReducer = Array.fill[PrimitiveVector[Long]](files.length) {
       new PrimitiveVector[Long]()
     }
 
-    //该数组存储的元素是PrimitiveVector[Long],每一个File对象对应一个该元素,用于存储该文件的一些文件段需要的长度
+    //与blockOffsetsByReducer记录的信息相同,只是记录的是字节长度
     private val blockLengthsByReducer = Array.fill[PrimitiveVector[Long]](files.length) {
       new PrimitiveVector[Long]()
     }
 
-    def apply(bucketId: Int): File = files(bucketId)
+    def apply(bucketId: Int): File = files(bucketId) //返回存储该reduce结果的文件
 
+    //记录该map的输出,每一个reduce的开始位置以及字节长度
     def recordMapOutput(mapId: Int, offsets: Array[Long], lengths: Array[Long]) {
-      assert(offsets.length == lengths.length)
-      mapIdToIndex(mapId) = numBlocks
-      numBlocks += 1
-      for (i <- 0 until offsets.length) {
+      assert(offsets.length == lengths.length)//必须数组大小是相同的
+      mapIdToIndex(mapId) = numBlocks //存储该map是第几个数据块存储
+      numBlocks += 1 //数据块增加
+      for (i <- 0 until offsets.length) {//记录每一个reduce的开始位置以及长度
         blockOffsetsByReducer(i) += offsets(i)
         blockLengthsByReducer(i) += lengths(i)
       }
@@ -284,13 +306,13 @@ private[spark] object FileShuffleBlockResolver {
 
     /** Returns the FileSegment associated with the given map task, or None if no entry exists. */
     def getFileSegmentFor(mapId: Int, reducerId: Int): Option[FileSegment] = {
-      val file = files(reducerId)
-      val blockOffsets = blockOffsetsByReducer(reducerId)
-      val blockLengths = blockLengthsByReducer(reducerId)
-      val index = mapIdToIndex.getOrElse(mapId, -1)
+      val file = files(reducerId) //找到属于该reduce的文件
+      val blockOffsets = blockOffsetsByReducer(reducerId)//找到reduce在该文件的开始位置,返回是PrimitiveVector向量
+      val blockLengths = blockLengthsByReducer(reducerId)//找到reduce在该文件的长度,返回是PrimitiveVector向量
+      val index = mapIdToIndex.getOrElse(mapId, -1)//获取map是第几个数据块
       if (index >= 0) {
-        val offset = blockOffsets(index)
-        val length = blockLengths(index)
+        val offset = blockOffsets(index)//获取该map对应的开始位置
+        val length = blockLengths(index)//获取该map对应的字节长度
         Some(new FileSegment(file, offset, length))
       } else {
         None

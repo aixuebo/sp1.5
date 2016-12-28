@@ -78,7 +78,7 @@ class ShuffleDependency[K, V, C](
     val serializer: Option[Serializer] = None,//使用的序列化对象,shuffle不象map可以在local进行, 往往需要网络传输或存储, 所以需要serializerClass
     val keyOrdering: Option[Ordering[K]] = None,//k的排序对象
     val aggregator: Option[Aggregator[K, V, C]] = None,
-    val mapSideCombine: Boolean = false)
+    val mapSideCombine: Boolean = false)//是否map端进行合并操作,相当于进行combiner操作,然后再进行分发到reduce中
   extends Dependency[Product2[K, V]] {
 
   //父RDD对象

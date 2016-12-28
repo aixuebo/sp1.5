@@ -25,6 +25,6 @@ import org.apache.spark.serializer.Serializer
  */
 private[spark] class BaseShuffleHandle[K, V, C](
     shuffleId: Int,//shuffle的唯一标示ID
-    val numMaps: Int,
-    val dependency: ShuffleDependency[K, V, C])
+    val numMaps: Int,//该RDD数据源有多少个partition,即多少个map任务去执行
+    val dependency: ShuffleDependency[K, V, C]) //最终需要被reduce的信息内容
   extends ShuffleHandle(shuffleId)

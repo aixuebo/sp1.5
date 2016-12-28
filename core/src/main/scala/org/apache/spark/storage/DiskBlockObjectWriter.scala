@@ -32,12 +32,14 @@ import org.apache.spark.util.Utils
  * 能够担保元组操作
  * This class does not support concurrent writes. Also, once the writer has been opened it cannot be
  * reopened again.
+ *
+ * 将key-value的信息被序列化后写入到压缩的输出流compressStream中,该输出流最终会被写入到file文件中
  */
 private[spark] class DiskBlockObjectWriter(
     val blockId: BlockId,
     file: File,//向该文件写入数据
     serializerInstance: SerializerInstance,//写入数据的时候的序列化方式
-    bufferSize: Int,
+    bufferSize: Int,//缓冲区间
     compressStream: OutputStream => OutputStream,//写入数据的时候的压缩方式
     syncWrites: Boolean,
     // These write metrics concurrently shared with other active DiskBlockObjectWriters who
@@ -47,13 +49,14 @@ private[spark] class DiskBlockObjectWriter(
   with Logging {
 
   /** The file channel, used for repositioning / truncating the file. */
-  private var channel: FileChannel = null
-  private var bs: OutputStream = null
-  private var fos: FileOutputStream = null
-  private var ts: TimeTrackingOutputStream = null
-  private var objOut: SerializationStream = null
-  private var initialized = false
-  private var hasBeenClosed = false
+  private var channel: FileChannel = null //文件渠道
+  private var fos: FileOutputStream = null //文件的输出流
+  private var ts: TimeTrackingOutputStream = null //向outputStream中写入字节的时候,封装一层统计,对写入进行统计写入花费的时间,单位是nanoTime
+  private var bs: OutputStream = null //对输出流ts进行BufferedOutputStream包装,并且加入压缩包装,即往该输入流中写入的数据都是进行压缩的
+
+  private var objOut: SerializationStream = null //将序列化的内容写入到bs中,bs是一个缓冲流,并且也是一个压缩的流,即序列化后的字节数组被压缩处理后进入bs流
+  private var initialized = false //初始化完成
+  private var hasBeenClosed = false //是否已经关闭了
   private var commitAndCloseHasBeenCalled = false
 
   /**
@@ -61,9 +64,9 @@ private[spark] class DiskBlockObjectWriter(
    *
    * xxxxxxxx|--------|---       |
    *         ^        ^          ^
-   *         |        |        finalPosition
-   *         |      reportedPosition
-   *       initialPosition
+   *         |        |        finalPosition 最终的字节位置
+   *         |      reportedPosition 每一次更新的字节的位置
+   *       initialPosition初始化的字节位置
    *
    * initialPosition: Offset in the file where we start writing. Immutable.
    * reportedPosition: Position at the time of the last update to the write metrics.
@@ -79,17 +82,17 @@ private[spark] class DiskBlockObjectWriter(
    * Keep track of number of records written and also use this to periodically
    * output bytes written since the latter is expensive to do for each record.
    */
-  private var numRecordsWritten = 0
+  private var numRecordsWritten = 0 //写入多少条记录
 
   def open(): DiskBlockObjectWriter = {
     if (hasBeenClosed) {
       throw new IllegalStateException("Writer already closed. Cannot be reopened.")
     }
-    fos = new FileOutputStream(file, true)
+    fos = new FileOutputStream(file, true)//追加操作流
     ts = new TimeTrackingOutputStream(writeMetrics, fos)
     channel = fos.getChannel()
     bs = compressStream(new BufferedOutputStream(ts, bufferSize))
-    objOut = serializerInstance.serializeStream(bs)
+    objOut = serializerInstance.serializeStream(bs) //将序列化的内容写入到bs中,bs是一个缓冲流,并且也是一个压缩的流,即序列化后的字节数组被压缩处理后进入bs流
     initialized = true
     this
   }
@@ -97,7 +100,7 @@ private[spark] class DiskBlockObjectWriter(
   override def close() {
     if (initialized) {
       Utils.tryWithSafeFinally {
-        if (syncWrites) {
+        if (syncWrites) {//是否加入同步字符
           // Force outstanding writes to disk and track how long it takes
           objOut.flush()
           val start = System.nanoTime()
@@ -145,22 +148,28 @@ private[spark] class DiskBlockObjectWriter(
    * Reverts writes that haven't been flushed yet. Callers should invoke this function
    * when there are runtime exceptions. This method will not throw, though it may be
    * unsuccessful in truncating written data.
+   * 还原已经被写入,但是尚未完成的内容,
+   * 当运行异常的时候被调用该函数
+   * 这个方法不会抛出异常
+   *
    */
   def revertPartialWritesAndClose() {
     // Discard current writes. We do this by flushing the outstanding writes and then
     // truncating the file to its initial position.
     try {
       if (initialized) {
-        writeMetrics.decShuffleBytesWritten(reportedPosition - initialPosition)
-        writeMetrics.decShuffleRecordsWritten(numRecordsWritten)
+        //减少已经统计的内容
+        writeMetrics.decShuffleBytesWritten(reportedPosition - initialPosition) //减少已经统计的字节
+        writeMetrics.decShuffleRecordsWritten(numRecordsWritten) //减少已经统计的记录数
+        //暂时时间没办法还原
         objOut.flush()
         bs.flush()
         close()
       }
 
-      val truncateStream = new FileOutputStream(file, true)
+      val truncateStream = new FileOutputStream(file, true) //追加该文件
       try {
-        truncateStream.getChannel.truncate(initialPosition)
+        truncateStream.getChannel.truncate(initialPosition) //将channel内的文件太大了,进行截断,参数initialPosition字节偏移量位置后面的字节将被删除,不是真的被删除了,数据还在,只是channel不用这部分数据而已
       } finally {
         truncateStream.close()
       }
@@ -178,9 +187,10 @@ private[spark] class DiskBlockObjectWriter(
       open()
     }
 
+    //将key和value进行序列化后,写入到输出流中
     objOut.writeKey(key)
     objOut.writeValue(value)
-    recordWritten()
+    recordWritten()//统计一行记录
   }
 
   override def write(b: Int): Unit = throw new UnsupportedOperationException()
@@ -197,10 +207,10 @@ private[spark] class DiskBlockObjectWriter(
    * Notify the writer that a record worth of bytes has been written with OutputStream#write.
    */
   def recordWritten(): Unit = {
-    numRecordsWritten += 1
-    writeMetrics.incShuffleRecordsWritten(1)
+    numRecordsWritten += 1 //记录增加了一条key-value记录
+    writeMetrics.incShuffleRecordsWritten(1)//增加统计
 
-    if (numRecordsWritten % 32 == 0) {
+    if (numRecordsWritten % 32 == 0) {//每隔32条记录,更新统计一下字节内容
       updateBytesWritten()
     }
   }
@@ -208,9 +218,10 @@ private[spark] class DiskBlockObjectWriter(
   /**
    * Returns the file segment of committed data that this Writer has written.
    * This is only valid after commitAndClose() has been called.
+   * 创建一个文件段,该文件段是file的一个引用,表示file文件从initialPosition位置开始,一共多少个字节
    */
   def fileSegment(): FileSegment = {
-    if (!commitAndCloseHasBeenCalled) {
+    if (!commitAndCloseHasBeenCalled) {//必须是提交后才能创建一个文件
       throw new IllegalStateException(
         "fileSegment() is only valid after commitAndClose() has been called")
     }
@@ -223,7 +234,7 @@ private[spark] class DiskBlockObjectWriter(
    */
   private def updateBytesWritten() {
     val pos = channel.position()
-    writeMetrics.incShuffleBytesWritten(pos - reportedPosition)
+    writeMetrics.incShuffleBytesWritten(pos - reportedPosition)//当前位置-上一次提交的位置,就是被写入多少个字节
     reportedPosition = pos
   }
 

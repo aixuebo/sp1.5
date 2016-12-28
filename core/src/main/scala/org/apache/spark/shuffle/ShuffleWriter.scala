@@ -23,9 +23,12 @@ import org.apache.spark.scheduler.MapStatus
 
 /**
  * Obtained inside a map task to write out records to the shuffle system.
+ * 如何将map的输出写入到多个reduce数据文件中,方便reduce到该节点来获取结果,期间map端可以进行combiner操作
  */
 private[spark] abstract class ShuffleWriter[K, V] {
-  /** Write a sequence of records to this task's output */
+  /** Write a sequence of records to this task's output
+    *  如何将一组key-value集合,分配到不同的reduce文件区域中
+    **/
   @throws[IOException]
   def write(records: Iterator[Product2[K, V]]): Unit
 

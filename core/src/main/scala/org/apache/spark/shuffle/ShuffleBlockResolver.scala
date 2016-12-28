@@ -30,11 +30,12 @@ private[spark]
  * 该trait表示如何去抓取一个shuffle数据块
  */
 trait ShuffleBlockResolver {
-  type ShuffleId = Int
+  type ShuffleId = Int //该shuffle对应的唯一ID
 
   /**
    * Retrieve the data for the specified block. If the data for that block is not available,
    * throws an unspecified exception.
+   * 获取该shuffle在哪个map上的数据,抓去该map上对应于某一个reduce的数据结果集
    */
   def getBlockData(blockId: ShuffleBlockId): ManagedBuffer
 

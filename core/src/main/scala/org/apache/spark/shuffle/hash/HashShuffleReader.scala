@@ -24,10 +24,13 @@ import org.apache.spark.storage.{BlockManager, ShuffleBlockFetcherIterator}
 import org.apache.spark.util.CompletionIterator
 import org.apache.spark.util.collection.ExternalSorter
 
+/**
+ * 读取某一个map的输出shuffler结果
+ */
 private[spark] class HashShuffleReader[K, C](
-    handle: BaseShuffleHandle[K, _, C],
-    startPartition: Int,
-    endPartition: Int,
+    handle: BaseShuffleHandle[K, _, C],//shuffle的定义信息
+    startPartition: Int,//读取哪个partition的数据,即读取哪个map的数据
+    endPartition: Int,//读取到哪个partition结束
     context: TaskContext,
     blockManager: BlockManager = SparkEnv.get.blockManager,
     mapOutputTracker: MapOutputTracker = SparkEnv.get.mapOutputTracker)
@@ -39,7 +42,9 @@ private[spark] class HashShuffleReader[K, C](
 
   private val dep = handle.dependency
 
-  /** Read the combined key-values for this reduce task */
+  /** Read the combined key-values for this reduce task
+    * 读取一个shuffle的结果,返回key-value的键值对元组迭代器
+    **/
   override def read(): Iterator[Product2[K, C]] = {
     val blockFetcherItr = new ShuffleBlockFetcherIterator(
       context,
@@ -57,12 +62,12 @@ private[spark] class HashShuffleReader[K, C](
     val ser = Serializer.getSerializer(dep.serializer)
     val serializerInstance = ser.newInstance()
 
-    // Create a key/value iterator for each stream
+    // Create a key/value iterator for each stream 对每一个流创建key-value元组对象的迭代器
     val recordIter = wrappedStreams.flatMap { wrappedStream =>
       // Note: the asKeyValueIterator below wraps a key/value iterator inside of a
       // NextIterator. The NextIterator makes sure that close() is called on the
       // underlying InputStream when all records have been read.
-      serializerInstance.deserializeStream(wrappedStream).asKeyValueIterator
+      serializerInstance.deserializeStream(wrappedStream).asKeyValueIterator //反序列化
     }
 
     // Update the context task metrics for each record read.
@@ -95,8 +100,9 @@ private[spark] class HashShuffleReader[K, C](
     }
 
     // Sort the output if there is a sort ordering defined.
-    dep.keyOrdering match {
+    dep.keyOrdering match {//排序输出
       case Some(keyOrd: Ordering[K]) =>
+        //key是排序对象,因此要对key进行排序
         // Create an ExternalSorter to sort the data. Note that if spark.shuffle.spill is disabled,
         // the ExternalSorter won't spill to disk.
         val sorter = new ExternalSorter[K, C, C](ordering = Some(keyOrd), serializer = Some(ser))
@@ -107,7 +113,7 @@ private[spark] class HashShuffleReader[K, C](
           InternalAccumulator.PEAK_EXECUTION_MEMORY).add(sorter.peakMemoryUsedBytes)
         sorter.iterator
       case None =>
-        aggregatedIter
+        aggregatedIter //key不是排序对象,则将结果输出即可
     }
   }
 }

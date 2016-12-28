@@ -26,6 +26,7 @@ import org.apache.spark.executor.ShuffleWriteMetrics;
 /**
  * Intercepts write calls and tracks total time spent writing in order to update shuffle write
  * metrics. Not thread safe.
+ * 向outputStream中写入字节的时候,封装一层统计,对写入进行统计写入花费的时间,单位是nanoTime
  */
 @Private
 public final class TimeTrackingOutputStream extends OutputStream {
@@ -42,7 +43,7 @@ public final class TimeTrackingOutputStream extends OutputStream {
   public void write(int b) throws IOException {
     final long startTime = System.nanoTime();
     outputStream.write(b);
-    writeMetrics.incShuffleWriteTime(System.nanoTime() - startTime);
+    writeMetrics.incShuffleWriteTime(System.nanoTime() - startTime); //写入花费时间,单位 nanoTime
   }
 
   @Override

@@ -344,6 +344,7 @@ case class OutputMetrics(writeMethod: DataWriteMethod.Value) {
 /**
  * :: DeveloperApi ::
  * Metrics pertaining to shuffle data read in a given task.
+ * shuffle读的统计
  */
 @DeveloperApi
 class ShuffleReadMetrics extends Serializable {
@@ -410,11 +411,13 @@ class ShuffleReadMetrics extends Serializable {
 /**
  * :: DeveloperApi ::
  * Metrics pertaining to shuffle data written in a given task.
+ * shuffle写的统计
  */
 @DeveloperApi
 class ShuffleWriteMetrics extends Serializable {
   /**
    * Number of bytes written for the shuffle by this task
+   * 该任务多少字节被写入了
    */
   @volatile private var _shuffleBytesWritten: Long = _
   def shuffleBytesWritten: Long = _shuffleBytesWritten
@@ -423,6 +426,7 @@ class ShuffleWriteMetrics extends Serializable {
 
   /**
    * Time the task spent blocking on writes to disk or buffer cache, in nanoseconds
+   * 花费时间,单位System.nanoTime
    */
   @volatile private var _shuffleWriteTime: Long = _
   def shuffleWriteTime: Long = _shuffleWriteTime
@@ -431,6 +435,7 @@ class ShuffleWriteMetrics extends Serializable {
 
   /**
    * Total number of records written to the shuffle by this task
+   * 多少条记录
    */
   @volatile private var _shuffleRecordsWritten: Long = _
   def shuffleRecordsWritten: Long = _shuffleRecordsWritten

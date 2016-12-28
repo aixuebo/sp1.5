@@ -36,7 +36,7 @@ import org.apache.spark.util.random.{XORShiftRandom, SamplingUtils}
  * 如果是key-value键值对的RDD,则仅仅通过key去判断属于哪个partition
  */
 abstract class Partitioner extends Serializable {
-  def numPartitions: Int //一共多少个partition
+  def numPartitions: Int //一共多少个partition,此时partition是目标reduce的数量
   def getPartition(key: Any): Int //将key分配到第几个partition上
 }
 

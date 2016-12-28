@@ -88,9 +88,9 @@ import org.apache.spark.storage.{BlockId, DiskBlockObjectWriter}
  * - Users are expected to call stop() at the end to delete all the intermediate files.
  */
 private[spark] class ExternalSorter[K, V, C](
-    aggregator: Option[Aggregator[K, V, C]] = None,
-    partitioner: Option[Partitioner] = None,
-    ordering: Option[Ordering[K]] = None,
+    aggregator: Option[Aggregator[K, V, C]] = None,//将key-value进行combine操作成key-c对象
+    partitioner: Option[Partitioner] = None,//如何对key进行分配到哪个reduce中
+    ordering: Option[Ordering[K]] = None,//key按照什么方式排序
     serializer: Option[Serializer] = None)
   extends Logging
   with Spillable[WritablePartitionedPairCollection[K, C]]
@@ -98,8 +98,10 @@ private[spark] class ExternalSorter[K, V, C](
 
   private val conf = SparkEnv.get.conf
 
-  private val numPartitions = partitioner.map(_.numPartitions).getOrElse(1)
+  private val numPartitions = partitioner.map(_.numPartitions).getOrElse(1) //一共多少个reduce,默认是1个
   private val shouldPartition = numPartitions > 1
+
+  //对key进行分配到哪个reduce
   private def getPartition(key: K): Int = {
     if (shouldPartition) partitioner.get.getPartition(key) else 0
   }
@@ -116,7 +118,7 @@ private[spark] class ExternalSorter[K, V, C](
   private val ser = Serializer.getSerializer(serializer)
   private val serInstance = ser.newInstance()
 
-  private val spillingEnabled = conf.getBoolean("spark.shuffle.spill", true)
+  private val spillingEnabled = conf.getBoolean("spark.shuffle.spill", true) //是否允许数据从内存中溢出到磁盘上
 
   // Use getSizeAsKb (not bytes) to maintain backwards compatibility if no units are provided
   private val fileBufferSize = conf.getSizeAsKb("spark.shuffle.file.buffer", "32k").toInt * 1024
@@ -135,6 +137,7 @@ private[spark] class ExternalSorter[K, V, C](
       conf.getBoolean("spark.shuffle.sort.serializeMapOutputs", true) &&
       ser.supportsRelocationOfSerializedObjects
   private val kvChunkSize = conf.getInt("spark.shuffle.sort.kvChunkSize", 1 << 22) // 4 MB
+
   private def newBuffer(): WritablePartitionedPairCollection[K, C] with SizeTracker = {
     if (useSerializedPairBuffer) {
       new PartitionedSerializedPairBuffer(metaInitialRecords = 256, kvChunkSize, serInstance)
@@ -142,6 +145,7 @@ private[spark] class ExternalSorter[K, V, C](
       new PartitionedPairBuffer[K, C]
     }
   }
+
   // Data structures to store in-memory objects before we spill. Depending on whether we have an
   // Aggregator set, we either put objects into an AppendOnlyMap where we combine them, or we
   // store them in an array buffer.
@@ -196,7 +200,7 @@ private[spark] class ExternalSorter[K, V, C](
 
   override def insertAll(records: Iterator[Product2[K, V]]): Unit = {
     // TODO: stop combining if we find that the reduction factor isn't high
-    val shouldCombine = aggregator.isDefined
+    val shouldCombine = aggregator.isDefined //是否应该进行combine操作
 
     if (shouldCombine) {
       // Combine values in-memory first using our AppendOnlyMap
@@ -212,24 +216,24 @@ private[spark] class ExternalSorter[K, V, C](
         map.changeValue((getPartition(kv._1), kv._1), update)
         maybeSpillCollection(usingMap = true)
       }
-    } else {
+    } else {//不进行合并操作
       // Stick values into our buffer
       while (records.hasNext) {
         addElementsRead()
-        val kv = records.next()
-        buffer.insert(getPartition(kv._1), kv._1, kv._2.asInstanceOf[C])
-        maybeSpillCollection(usingMap = false)
+        val kv = records.next() //key-value信息
+        buffer.insert(getPartition(kv._1), kv._1, kv._2.asInstanceOf[C]) //向哪个reduce中添加key-value信息
+        maybeSpillCollection(usingMap = false) //如果需要的话,将内存的数据写入到磁盘上
       }
     }
   }
 
   /**
    * Spill the current in-memory collection to disk if needed.
-   *
+   * 如果需要的话,将内存的数据写入到磁盘上
    * @param usingMap whether we're using a map or buffer as our current in-memory collection
    */
   private def maybeSpillCollection(usingMap: Boolean): Unit = {
-    if (!spillingEnabled) {
+    if (!spillingEnabled) {//不允许写入到磁盘,则直接返回
       return
     }
 

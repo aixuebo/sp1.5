@@ -26,9 +26,12 @@ import org.apache.spark.shuffle._
  */
 private[spark] class HashShuffleManager(conf: SparkConf) extends ShuffleManager {
 
+  //使用文件的方式存储map的输出内容
   private val fileShuffleBlockResolver = new FileShuffleBlockResolver(conf)
 
-  /* Register a shuffle with the manager and obtain a handle for it to pass to tasks. */
+  /* Register a shuffle with the manager and obtain a handle for it to pass to tasks.
+   * 注册一个shuffle信息,产生一个注册对象ShuffleHandle
+    **/
   override def registerShuffle[K, V, C](
       shuffleId: Int,//shuffle唯一的ID
       numMaps: Int,//父RDD一共多少个partition
@@ -39,6 +42,7 @@ private[spark] class HashShuffleManager(conf: SparkConf) extends ShuffleManager 
   /**
    * Get a reader for a range of reduce partitions (startPartition to endPartition-1, inclusive).
    * Called on executors by reduce tasks.
+   * reduce要获取一组map区间的输出
    */
   override def getReader[K, C](
       handle: ShuffleHandle,
@@ -49,14 +53,19 @@ private[spark] class HashShuffleManager(conf: SparkConf) extends ShuffleManager 
       handle.asInstanceOf[BaseShuffleHandle[K, _, C]], startPartition, endPartition, context)
   }
 
-  /** Get a writer for a given partition. Called on executors by map tasks. */
+  /** Get a writer for a given partition. Called on executors by map tasks.
+    * map任务写入数据到多个reduce文件中
+    * mapId 表示原始RDD的第几个partition
+    **/
   override def getWriter[K, V](handle: ShuffleHandle, mapId: Int, context: TaskContext)
       : ShuffleWriter[K, V] = {
     new HashShuffleWriter(
       shuffleBlockResolver, handle.asInstanceOf[BaseShuffleHandle[K, V, _]], mapId, context)
   }
 
-  /** Remove a shuffle's metadata from the ShuffleManager. */
+  /** Remove a shuffle's metadata from the ShuffleManager.
+    * 删除一个shuffle,即该shuffle完成了
+    **/
   override def unregisterShuffle(shuffleId: Int): Boolean = {
     shuffleBlockResolver.removeShuffle(shuffleId)
   }
@@ -65,7 +74,9 @@ private[spark] class HashShuffleManager(conf: SparkConf) extends ShuffleManager 
     fileShuffleBlockResolver
   }
 
-  /** Shut down this ShuffleManager. */
+  /** Shut down this ShuffleManager.
+    * 停止该shuffle过程
+    **/
   override def stop(): Unit = {
     shuffleBlockResolver.stop()
   }

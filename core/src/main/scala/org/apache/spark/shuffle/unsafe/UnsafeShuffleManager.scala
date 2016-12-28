@@ -27,6 +27,7 @@ import org.apache.spark.shuffle.sort.SortShuffleManager
 
 /**
  * Subclass of [[BaseShuffleHandle]], used to identify when we've chosen to use the new shuffle.
+ * 不安全的shuffle,被用于选择使用一个新的shuffle时候使用
  */
 private[spark] class UnsafeShuffleHandle[K, V](
     shuffleId: Int,

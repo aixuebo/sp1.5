@@ -29,7 +29,7 @@ import org.apache.spark.shuffle.ShuffleWriter
 /**
 * A ShuffleMapTask divides the elements of an RDD into multiple buckets (based on a partitioner
 * specified in the ShuffleDependency).
-*
+* ShuffleMapTask拆分RDD的一个元素到不同的桶中
 * See [[org.apache.spark.scheduler.Task]] for more information.
 *
  * @param stageId id of the stage this task belongs to 该task属于哪个阶段ID
@@ -62,21 +62,21 @@ private[spark] class ShuffleMapTask(
     val deserializeStartTime = System.currentTimeMillis()
     val ser = SparkEnv.get.closureSerializer.newInstance()
     val (rdd, dep) = ser.deserialize[(RDD[_], ShuffleDependency[_, _, _])](
-      ByteBuffer.wrap(taskBinary.value), Thread.currentThread.getContextClassLoader)
-    _executorDeserializeTime = System.currentTimeMillis() - deserializeStartTime
+      ByteBuffer.wrap(taskBinary.value), Thread.currentThread.getContextClassLoader)//将taskBinary的字节数组内容反序列化,反序列化后的对象是一个元组,由(RDD[_], ShuffleDependency[_, _, _])组成
+    _executorDeserializeTime = System.currentTimeMillis() - deserializeStartTime //反序列化时间
 
     metrics = Some(context.taskMetrics)
     var writer: ShuffleWriter[Any, Any] = null
     try {
       val manager = SparkEnv.get.shuffleManager
-      writer = manager.getWriter[Any, Any](dep.shuffleHandle, partitionId, context)
-      writer.write(rdd.iterator(partition, context).asInstanceOf[Iterator[_ <: Product2[Any, Any]]])
+      writer = manager.getWriter[Any, Any](dep.shuffleHandle, partitionId, context) //创建该RDD的map任务对应的输出内容
+      writer.write(rdd.iterator(partition, context).asInstanceOf[Iterator[_ <: Product2[Any, Any]]]) //处理RDD的一个partition
       writer.stop(success = true).get
     } catch {
       case e: Exception =>
         try {
           if (writer != null) {
-            writer.stop(success = false)
+            writer.stop(success = false)//说明执行该shuffle操作失败
           }
         } catch {
           case e: Exception =>

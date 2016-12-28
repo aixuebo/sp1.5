@@ -29,6 +29,7 @@ import org.apache.spark.storage.BlockId;
 
 /**
  * Interface for objects that {@link SortShuffleWriter} uses to write its output files.
+ *
  */
 @Private
 public interface SortShuffleFileWriter<K, V> {

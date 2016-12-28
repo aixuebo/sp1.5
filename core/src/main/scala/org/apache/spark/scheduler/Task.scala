@@ -130,7 +130,7 @@ private[spark] abstract class Task[T](
   // initialized when kill() is invoked.
   @volatile @transient private var _killed = false
 
-  protected var _executorDeserializeTime: Long = 0
+  protected var _executorDeserializeTime: Long = 0 //反序列化时间
 
   /**
    * Whether the task has been killed.
