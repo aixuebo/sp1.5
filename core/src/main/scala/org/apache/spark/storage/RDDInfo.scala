@@ -21,21 +21,27 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.{RDDOperationScope, RDD}
 import org.apache.spark.util.Utils
 
+/**
+ * 描述一个RDD内容
+ */
 @DeveloperApi
 class RDDInfo(
-    val id: Int,
-    val name: String,
-    val numPartitions: Int,
-    var storageLevel: StorageLevel,
-    val parentIds: Seq[Int],
+    val id: Int,//rdd的id
+    val name: String,//rdd的名字
+    val numPartitions: Int,//rdd有多少个map
+    var storageLevel: StorageLevel,//rdd的存储级别
+    val parentIds: Seq[Int],//RDD是哪些父RDD创建的,这个集合是父RDD的ID集合
     val scope: Option[RDDOperationScope] = None)
-  extends Ordered[RDDInfo] {
+  extends Ordered[RDDInfo] {//rdd支持排序,按照rdd的id进行排序
 
-  var numCachedPartitions = 0
+  var numCachedPartitions = 0 //多少个缓存的partition
+
+  //该RDD使用内存、磁盘、额外存储的字节数量
   var memSize = 0L
   var diskSize = 0L
   var externalBlockStoreSize = 0L
 
+  //是否被缓存了,前提是该RDD已经有字节了,并且已经产生缓存了,则说明该数据已经缓存了
   def isCached: Boolean =
     (memSize + diskSize + externalBlockStoreSize > 0) && numCachedPartitions > 0
 
@@ -47,6 +53,7 @@ class RDDInfo(
         bytesToString(memSize), bytesToString(externalBlockStoreSize), bytesToString(diskSize))
   }
 
+  //rdd支持排序,按照rdd的id进行排序
   override def compare(that: RDDInfo): Int = {
     this.id - that.id
   }

@@ -350,6 +350,7 @@ case class OutputMetrics(writeMethod: DataWriteMethod.Value) {
 class ShuffleReadMetrics extends Serializable {
   /**
    * Number of remote blocks fetched in this shuffle by this task
+   * 成功抓取了多少个数据块
    */
   private var _remoteBlocksFetched: Int = _
   def remoteBlocksFetched: Int = _remoteBlocksFetched
@@ -376,6 +377,7 @@ class ShuffleReadMetrics extends Serializable {
 
   /**
    * Total number of remote bytes read from the shuffle by this task
+   * 读取了远程多少字节
    */
   private var _remoteBytesRead: Long = _
   def remoteBytesRead: Long = _remoteBytesRead

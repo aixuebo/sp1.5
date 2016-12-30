@@ -54,15 +54,18 @@ private[spark] class HashShuffleReader[K, C](
       // Note: we use getSizeAsMb when no suffix is provided for backwards compatibility
       SparkEnv.get.conf.getSizeAsMb("spark.reducer.maxSizeInFlight", "48m") * 1024 * 1024)
 
-    // Wrap the streams for compression based on configuration
+    // Wrap the streams for compression based on configuration 如果数据是压缩的,对数据解压缩
+    //对每一个数据块转换成解压缩后的数据流
     val wrappedStreams = blockFetcherItr.map { case (blockId, inputStream) =>
       blockManager.wrapForCompression(blockId, inputStream)
     }
 
+    //实例化一个反序列化对象
     val ser = Serializer.getSerializer(dep.serializer)
     val serializerInstance = ser.newInstance()
 
     // Create a key/value iterator for each stream 对每一个流创建key-value元组对象的迭代器
+    //对解压缩后的数据流进行反序列化,得到反序列化后的key-value信息
     val recordIter = wrappedStreams.flatMap { wrappedStream =>
       // Note: the asKeyValueIterator below wraps a key/value iterator inside of a
       // NextIterator. The NextIterator makes sure that close() is called on the
@@ -83,7 +86,7 @@ private[spark] class HashShuffleReader[K, C](
     val interruptibleIter = new InterruptibleIterator[(Any, Any)](context, metricIter)
 
     val aggregatedIter: Iterator[Product2[K, C]] = if (dep.aggregator.isDefined) {
-      if (dep.mapSideCombine) {
+      if (dep.mapSideCombine) {//map端combine
         // We are reading values that are already combined
         val combinedKeyValuesIterator = interruptibleIter.asInstanceOf[Iterator[(K, C)]]
         dep.aggregator.get.combineCombinersByKey(combinedKeyValuesIterator, context)

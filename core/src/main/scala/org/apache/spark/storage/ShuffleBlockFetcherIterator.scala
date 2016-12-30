@@ -98,7 +98,9 @@ final class ShuffleBlockFetcherIterator(
    */
   private[this] val fetchRequests = new Queue[FetchRequest]
 
-  /** Current bytes in flight from our requests */
+  /** Current bytes in flight from our requests
+    * 当前请求正在抓去的字节大小--估计的字节数
+    **/
   private[this] var bytesInFlight = 0L
 
   private[this] val shuffleMetrics = context.taskMetrics().createShuffleReadMetricsForDependency()
@@ -139,19 +141,20 @@ final class ShuffleBlockFetcherIterator(
     }
   }
 
+  //发送抓去字节的请求
   private[this] def sendRequest(req: FetchRequest) {
     logDebug("Sending request for %d blocks (%s) from %s".format(
-      req.blocks.size, Utils.bytesToString(req.size), req.address.hostPort))
-    bytesInFlight += req.size
+      req.blocks.size, Utils.bytesToString(req.size), req.address.hostPort)) //从req.address.hostPort节点发送抓去数据块请求,大约抓取多少个字节
+    bytesInFlight += req.size //大约抓去多少个字节
 
     // so we can look up the size of each blockID
     val sizeMap = req.blocks.map { case (blockId, size) => (blockId.toString, size) }.toMap
-    val blockIds = req.blocks.map(_._1.toString)
+    val blockIds = req.blocks.map(_._1.toString) //要抓去哪些数据块集合
 
     val address = req.address
     shuffleClient.fetchBlocks(address.host, address.port, address.executorId, blockIds.toArray,
       new BlockFetchingListener {
-        override def onBlockFetchSuccess(blockId: String, buf: ManagedBuffer): Unit = {
+        override def onBlockFetchSuccess(blockId: String, buf: ManagedBuffer): Unit = {//表示数据块成功抓取
           // Only add the buffer to results queue if the iterator is not zombie,
           // i.e. cleanup() has not been called yet.
           if (!isZombie) {
@@ -159,12 +162,13 @@ final class ShuffleBlockFetcherIterator(
             // This needs to be released after use.
             buf.retain()
             results.put(new SuccessFetchResult(BlockId(blockId), address, sizeMap(blockId), buf))
-            shuffleMetrics.incRemoteBytesRead(buf.size)
-            shuffleMetrics.incRemoteBlocksFetched(1)
+            shuffleMetrics.incRemoteBytesRead(buf.size) //抓取多少个字节
+            shuffleMetrics.incRemoteBlocksFetched(1) //抓取多少个数据块
           }
-          logTrace("Got remote block " + blockId + " after " + Utils.getUsedTimeMs(startTime))
+          logTrace("Got remote block " + blockId + " after " + Utils.getUsedTimeMs(startTime)) //获得一个数据块
         }
 
+        //抓取失败
         override def onBlockFetchFailure(blockId: String, e: Throwable): Unit = {
           logError(s"Failed to get block(s) from ${req.address.host}:${req.address.port}", e)
           results.put(new FailureFetchResult(BlockId(blockId), address, e))
@@ -359,18 +363,19 @@ private class BufferReleasingInputStream(
 
   override def reset(): Unit = delegate.reset()
 }
-
+//抓去数据块的接口
 private[storage]
 object ShuffleBlockFetcherIterator {
 
   /**
    * A request to fetch blocks from a remote BlockManager.
-   * @param address remote BlockManager to fetch from.
+   * 远程的节点BlockManager发送一个请求抓去数据块
+   * @param address remote BlockManager to fetch from. 远程节点
    * @param blocks Sequence of tuple, where the first element is the block id,
-   *               and the second element is the estimated size, used to calculate bytesInFlight.
+   *               and the second element is the estimated size, used to calculate bytesInFlight. 一个集合,包含要抓去的(数据块ID,估计大小)组成的元组
    */
   case class FetchRequest(address: BlockManagerId, blocks: Seq[(BlockId, Long)]) {
-    val size = blocks.map(_._2).sum
+    val size = blocks.map(_._2).sum //估算要抓去的总大小
   }
 
   /**
@@ -388,12 +393,13 @@ object ShuffleBlockFetcherIterator {
    * @param size estimated size of the block, used to calculate bytesInFlight.
    *             Note that this is NOT the exact bytes.
    * @param buf [[ManagedBuffer]] for the content.
+   * 成功抓取一个数据块
    */
   private[storage] case class SuccessFetchResult(
-      blockId: BlockId,
-      address: BlockManagerId,
-      size: Long,
-      buf: ManagedBuffer)
+      blockId: BlockId,//成功抓去的数据块ID
+      address: BlockManagerId,//该数据块从哪个节点上抓取的
+      size: Long,//该数据块的估算大小
+      buf: ManagedBuffer) //抓去的真正数据内容
     extends FetchResult {
     require(buf != null)
     require(size >= 0)
@@ -402,8 +408,9 @@ object ShuffleBlockFetcherIterator {
   /**
    * Result of a fetch from a remote block unsuccessfully.
    * @param blockId block id
-   * @param address BlockManager that the block was attempted to be fetched from
+   * @param address BlockManager that the block was attempted to be fetched from 该数据块在哪个节点上抓取失败的
    * @param e the failure exception
+   * 抓取一个数据块失败
    */
   private[storage] case class FailureFetchResult(
       blockId: BlockId,
