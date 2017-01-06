@@ -35,6 +35,10 @@ import org.apache.spark.util.{ThreadUtils, Utils}
  * BlockManagerMasterEndpoint is an [[ThreadSafeRpcEndpoint]] on the master node to track statuses
  * of all slaves' block managers.
  * 该类在driver上执行,是一个线程安全的终端,用于跟踪所有slave上的数据块管理器的状态
+ *
+ * 1.一个executor在一个节点上运行,因此需要一个内存映射blockManagerIdByExecutor = new mutable.HashMap[String, BlockManagerId],可以知道该executor在哪个节点上运行
+ * 2.一个executor所在节点管理的数据块信息,因此也需要一个映射blockManagerInfo = new mutable.HashMap[BlockManagerId, BlockManagerInfo]
+ * 3.一个数据块存在多个节点上备份,因此blockLocations = new JHashMap[BlockId, mutable.HashSet[BlockManagerId]]
  */
 private[spark]
 class BlockManagerMasterEndpoint(
@@ -66,6 +70,8 @@ class BlockManagerMasterEndpoint(
 
       /**
        * 更新一个数据块信息--包含该数据块所在节点、数据块ID、该数据块存储级别、该数据块所占内存、磁盘大小
+       *
+       * _updateBlockInfo 是UpdateBlockInfo对象的别名
        */
     case _updateBlockInfo @ UpdateBlockInfo(
       blockManagerId, blockId, storageLevel, deserializedSize, size, externalBlockStoreSize) =>
@@ -98,12 +104,12 @@ class BlockManagerMasterEndpoint(
     case GetRpcHostPortForExecutor(executorId) =>
       context.reply(getRpcHostPortForExecutor(executorId))
 
-    //删除一个执行节点
+    //删除一个执行节点,说明此时该executor执行节点已经不可用了
     case RemoveExecutor(execId) =>
       removeExecutor(execId)
       context.reply(true)
 
-      //停止该driver节点
+      //停止该driver节点,说明该driver任务已经结束了
     case StopBlockManagerMaster =>
       context.reply(true)
       stop()
@@ -161,6 +167,25 @@ class BlockManagerMasterEndpoint(
 
     //从master节点发送数据到slaves节点 end
 
+  }
+
+  // Remove a block from the slaves that have it. This can only be used to remove
+  // blocks that the master knows about.
+  //将该数据块从work节点移除
+  private def removeBlockFromWorkers(blockId: BlockId) {
+    val locations = blockLocations.get(blockId) //找到该数据块在哪些节点上存在
+    if (locations != null) {
+      //循环每一个节点
+      locations.foreach { blockManagerId: BlockManagerId =>
+        val blockManager = blockManagerInfo.get(blockManagerId)//找到该节点对应的对象
+        if (blockManager.isDefined) {
+          // Remove the block from the slave's BlockManager.
+          // Doesn't actually wait for a confirmation and the message might get lost.
+          // If message loss becomes frequent, we should add retry logic here.
+          blockManager.get.slaveEndpoint.ask[Boolean](RemoveBlock(blockId)) //通知该节点删除该数据块
+        }
+      }
+    }
   }
 
   //删除一个RDD
@@ -224,36 +249,6 @@ class BlockManagerMasterEndpoint(
     )
   }
 
-  //删除一个executor节点
-  private def removeBlockManager(blockManagerId: BlockManagerId) {
-    val info = blockManagerInfo(blockManagerId)//返回对应的内存对象BlockManagerInfo
-
-    // Remove the block manager from blockManagerIdByExecutor.
-    blockManagerIdByExecutor -= blockManagerId.executorId //删除内存映射
-
-    // Remove it from blockManagerInfo and remove all the blocks.
-    blockManagerInfo.remove(blockManagerId) //删除内存映射
-    val iterator = info.blocks.keySet.iterator //循环该节点上所有数据块
-    while (iterator.hasNext) {
-      val blockId = iterator.next
-      val locations = blockLocations.get(blockId) //每一个要删除的数据块对应的其他节点集合
-      locations -= blockManagerId //从节点集合中删除这次要删除的节点
-      if (locations.size == 0) {
-        blockLocations.remove(blockId) //说明该数据块没有节点存储
-      }
-    }
-
-    //发送事件
-    listenerBus.post(SparkListenerBlockManagerRemoved(System.currentTimeMillis(), blockManagerId))
-    logInfo(s"Removing block manager $blockManagerId")
-  }
-
-  //删除一个executor节点
-  private def removeExecutor(execId: String) {
-    logInfo("Trying to remove executor " + execId + " from BlockManagerMaster.")
-    blockManagerIdByExecutor.get(execId).foreach(removeBlockManager)
-  }
-
   /**
    * Return true if the driver knows about the given block manager. Otherwise, return false,
    * indicating that the block manager should re-register.
@@ -266,43 +261,6 @@ class BlockManagerMasterEndpoint(
       blockManagerInfo(blockManagerId).updateLastSeenMs()
       true
     }
-  }
-
-  // Remove a block from the slaves that have it. This can only be used to remove
-  // blocks that the master knows about.
-  //将该数据块从work节点移除
-  private def removeBlockFromWorkers(blockId: BlockId) {
-    val locations = blockLocations.get(blockId) //找到该数据块在哪些节点上存在
-    if (locations != null) {
-      //循环每一个节点
-      locations.foreach { blockManagerId: BlockManagerId =>
-        val blockManager = blockManagerInfo.get(blockManagerId)//找到该节点对应的对象
-        if (blockManager.isDefined) {
-          // Remove the block from the slave's BlockManager.
-          // Doesn't actually wait for a confirmation and the message might get lost.
-          // If message loss becomes frequent, we should add retry logic here.
-          blockManager.get.slaveEndpoint.ask[Boolean](RemoveBlock(blockId)) //通知该节点删除该数据块
-        }
-      }
-    }
-  }
-
-  // Return a map from the block manager id to max memory and remaining memory.
-  //返回所有的BlockManagerId,与之该BlockManagerId相关的最大内存和剩余内存,即Map[BlockManagerId, (Long, Long)]
-  private def memoryStatus: Map[BlockManagerId, (Long, Long)] = {
-    blockManagerInfo.map { case(blockManagerId, info) =>
-      (blockManagerId, (info.maxMem, info.remainingMem))
-    }.toMap
-  }
-
-  /**
-   * 1.循环HashMap[BlockManagerId, BlockManagerInfo]
-   * 2.每一个BlockManagerId对应一个StorageStatus被返回,因此返回的是 Array[StorageStatus]数组
-   */
-  private def storageStatus: Array[StorageStatus] = {
-    blockManagerInfo.map { case (blockManagerId, info) =>
-      new StorageStatus(blockManagerId, info.maxMem, info.blocks)
-    }.toArray
   }
 
   /**
@@ -323,10 +281,11 @@ class BlockManagerMasterEndpoint(
      * Rather than blocking on the block status query, master endpoint should simply return
      * Futures to avoid potential deadlocks. This can arise if there exists a block manager
      * that is also waiting for this master endpoint's response to a previous message.
+     * 循环所有的executor所在的节点(内存中存在的节点)
      */
     blockManagerInfo.values.map { info =>
       val blockStatusFuture =
-        if (askSlaves) {
+        if (askSlaves) {//是否要去问一下该数据块的状态
           info.slaveEndpoint.ask[Option[BlockStatus]](getBlockStatus)
         } else {
           Future { info.getStatus(blockId) }
@@ -480,16 +439,66 @@ class BlockManagerMasterEndpoint(
    */
   private def getRpcHostPortForExecutor(executorId: String): Option[(String, Int)] = {
     for (
-      blockManagerId <- blockManagerIdByExecutor.get(executorId);
-      info <- blockManagerInfo.get(blockManagerId)
+      blockManagerId <- blockManagerIdByExecutor.get(executorId);//找到该executor对应的BlockManagerId
+      info <- blockManagerInfo.get(blockManagerId) //通过BlockManagerId找到driver对应BlockManagerId的本地对象BlockManagerInfo
     ) yield {
-      (info.slaveEndpoint.address.host, info.slaveEndpoint.address.port)
+      (info.slaveEndpoint.address.host, info.slaveEndpoint.address.port) //因此可以产生客户端的host和port
     }
+  }
+
+
+  //删除一个executor节点，此时肯定是该executor已经不存在了,不可用了
+  private def removeBlockManager(blockManagerId: BlockManagerId) {
+    val info = blockManagerInfo(blockManagerId)//返回对应的内存对象BlockManagerInfo
+
+    // Remove the block manager from blockManagerIdByExecutor.
+    blockManagerIdByExecutor -= blockManagerId.executorId //删除内存映射
+
+    // Remove it from blockManagerInfo and remove all the blocks.
+    blockManagerInfo.remove(blockManagerId) //删除内存映射
+    val iterator = info.blocks.keySet.iterator //循环该节点上所有数据块
+    while (iterator.hasNext) {
+      val blockId = iterator.next
+      val locations = blockLocations.get(blockId) //每一个要删除的数据块对应的其他节点集合
+      locations -= blockManagerId //从节点集合中删除这次要删除的节点
+      if (locations.size == 0) {
+        blockLocations.remove(blockId) //说明该数据块没有节点存储
+      }
+    }
+
+    //发送事件
+    listenerBus.post(SparkListenerBlockManagerRemoved(System.currentTimeMillis(), blockManagerId))
+    logInfo(s"Removing block manager $blockManagerId")
+  }
+
+  //通过executor去删除一个executor节点
+  private def removeExecutor(execId: String) {
+    logInfo("Trying to remove executor " + execId + " from BlockManagerMaster.")
+    blockManagerIdByExecutor.get(execId).foreach(removeBlockManager)
   }
 
   override def onStop(): Unit = {
     askThreadPool.shutdownNow()
   }
+
+  // Return a map from the block manager id to max memory and remaining memory.
+  //返回所有的BlockManagerId,与之该BlockManagerId相关的最大内存和剩余内存,即Map[BlockManagerId, (Long, Long)]
+  private def memoryStatus: Map[BlockManagerId, (Long, Long)] = {
+    blockManagerInfo.map { case(blockManagerId, info) =>
+      (blockManagerId, (info.maxMem, info.remainingMem))
+    }.toMap
+  }
+
+  /**
+   * 1.循环HashMap[BlockManagerId, BlockManagerInfo]
+   * 2.每一个BlockManagerId对应一个StorageStatus被返回,因此返回的是 Array[StorageStatus]数组
+   */
+  private def storageStatus: Array[StorageStatus] = {
+    blockManagerInfo.map { case (blockManagerId, info) =>
+      new StorageStatus(blockManagerId, info.maxMem, info.blocks) //将每一个executor对应的数据块管理器循环,以及该管理器最大内存量，以及此时持有的数据块集合
+    }.toArray
+  }
+
 }
 
 @DeveloperApi
@@ -527,7 +536,7 @@ private[spark] class BlockManagerInfo(
   // Cached blocks held by this BlockManager. This does not include broadcast blocks.
   private val _cachedBlocks = new mutable.HashSet[BlockId]
 
-  //获取给定的BlockId对应的状态
+  //获取给定的BlockId在该节点上对应的状态
   def getStatus(blockId: BlockId): Option[BlockStatus] = Option(_blocks.get(blockId))
 
   //更新最后访问时间
@@ -619,16 +628,16 @@ private[spark] class BlockManagerInfo(
     _cachedBlocks -= blockId
   }
 
-  def remainingMem: Long = _remainingMem
+  def remainingMem: Long = _remainingMem //该节点剩余多少内存
 
-  def lastSeenMs: Long = _lastSeenMs
+  def lastSeenMs: Long = _lastSeenMs //该节点最后一次访问时间
 
   def blocks: JHashMap[BlockId, BlockStatus] = _blocks
 
   // This does not include broadcast blocks.
   def cachedBlocks: collection.Set[BlockId] = _cachedBlocks
 
-  override def toString: String = "BlockManagerInfo " + timeMs + " " + _remainingMem
+  override def toString: String = "BlockManagerInfo " + timeMs + " " + _remainingMem //该executor节点什么时候创建的以及剩余多少内存可用
 
   def clear() {
     _blocks.clear()

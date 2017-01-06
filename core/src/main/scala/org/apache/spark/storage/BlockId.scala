@@ -92,7 +92,9 @@ case class StreamBlockId(streamId: Int, uniqueId: Long) extends BlockId {
   override def name: String = "input-" + streamId + "-" + uniqueId
 }
 
-/** Id associated with temporary local data managed as blocks. Not serializable. */
+/** Id associated with temporary local data managed as blocks. Not serializable.
+  * 临时数据块
+  **/
 private[spark] case class TempLocalBlockId(id: UUID) extends BlockId {
   override def name: String = "temp_local_" + id
 }

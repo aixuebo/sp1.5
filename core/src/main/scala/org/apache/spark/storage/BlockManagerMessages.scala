@@ -65,7 +65,7 @@ private[spark] object BlockManagerMessages {
       var storageLevel: StorageLevel,//该数据块存储级别
       var memSize: Long,//该数据块所占内存大小
       var diskSize: Long,//该数据块所占磁盘大小
-      var externalBlockStoreSize: Long)
+      var externalBlockStoreSize: Long)//数据块占用外部存储大小
     extends ToBlockManagerMaster
     with Externalizable {
 

@@ -30,19 +30,22 @@ private[spark]
 class ByteBufferInputStream(private var buffer: ByteBuffer, dispose: Boolean = false)
   extends InputStream {
 
+  //从buffer中读取一个字节
   override def read(): Int = {
-    if (buffer == null || buffer.remaining() == 0) {
+    if (buffer == null || buffer.remaining() == 0) {//如果buffer中没有数据了,返回-1
       cleanUp()
       -1
     } else {
-      buffer.get() & 0xFF
+      buffer.get() & 0xFF //从buffer中读取一个字节
     }
   }
 
+  //从buffer中读取dest.length个字节,存储到参数字节数组中
   override def read(dest: Array[Byte]): Int = {
     read(dest, 0, dest.length)
   }
 
+  //从buffer中读取dest.length个字节,存储到参数字节数组中,从offset位置开始存储
   override def read(dest: Array[Byte], offset: Int, length: Int): Int = {
     if (buffer == null || buffer.remaining() == 0) {
       cleanUp()
@@ -54,6 +57,7 @@ class ByteBufferInputStream(private var buffer: ByteBuffer, dispose: Boolean = f
     }
   }
 
+  //跳过若干个字节,返回真正跳过多少个字节
   override def skip(bytes: Long): Long = {
     if (buffer != null) {
       val amountToSkip = math.min(bytes, buffer.remaining).toInt
@@ -68,7 +72,7 @@ class ByteBufferInputStream(private var buffer: ByteBuffer, dispose: Boolean = f
   }
 
   /**
-   * Clean up the buffer, and potentially dispose of it using BlockManager.dispose().
+   * Clean up the buffer, and potentially dispose of it using BlockManager.dispose().；
    */
   private def cleanUp() {
     if (buffer != null) {

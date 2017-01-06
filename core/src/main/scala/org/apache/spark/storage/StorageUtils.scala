@@ -31,7 +31,8 @@ import org.apache.spark.annotation.DeveloperApi
  * 每一个BlockManagerId对应一个该对象,表示该blockManagerId对某一个执行者最多允许的内存
  */
 @DeveloperApi
-class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
+class StorageStatus(val blockManagerId: BlockManagerId,//代表远程哪个数据块管理器,即executor所在的管理器
+                    val maxMem: Long) {//该executor最多能允许多少内存
 
   /**
    * Internal representation of the blocks stored in this block manager.
@@ -39,6 +40,7 @@ class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
    * We store RDD blocks and non-RDD blocks separately to allow quick retrievals of RDD blocks.
    * These collections should only be mutated through the add/update/removeBlock methods.
    * RDD数据,与该RDD数据的所有数据块的状态 映射
+   * key是RDD的ID,value是属于该RDD的数据块集合,value的key表示数据块ID,value表示此数据块在该节点上的的状态
    */
   private val _rddBlocks = new mutable.HashMap[Int, mutable.Map[BlockId, BlockStatus]]
   //非RDD数据块ID,数据块的状态 映射
@@ -65,7 +67,7 @@ class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
    **/
   def this(bmid: BlockManagerId, maxMem: Long, initialBlocks: Map[BlockId, BlockStatus]) {
     this(bmid, maxMem)
-    initialBlocks.foreach { case (bid, bstatus) => addBlock(bid, bstatus) }
+    initialBlocks.foreach { case (bid, bstatus) => addBlock(bid, bstatus) }//添加每一个已经存在的数据块
   }
 
   /**
@@ -74,7 +76,7 @@ class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
    * Note that this is somewhat expensive, as it involves cloning the underlying maps and then
    * concatenating them together. Much faster alternatives exist for common operations such as
    * contains, get, and size.
-   * 所有数据块集合
+   * 该节点上的所有数据块集合
    */
   def blocks: Map[BlockId, BlockStatus] = _nonRddBlocks ++ rddBlocks
 
@@ -86,7 +88,7 @@ class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
    * getting the memory, disk, and off-heap memory sizes occupied by this RDD.
    * 返回所有RDD对应的数据块集合Map[BlockId, BlockStatus]
    */
-  def rddBlocks: Map[BlockId, BlockStatus] = _rddBlocks.flatMap { case (_, blocks) => blocks }
+  def rddBlocks: Map[BlockId, BlockStatus] = _rddBlocks.flatMap { case (_, blocks) => blocks } //不考虑属于哪个RDD,将所有RDD的所有数据块以及状态做元组,返回元组集合
 
   /** Return the blocks that belong to the given RDD stored in this block manager.
    *  通过RDDId,获取该rdd对应的所有数据块映射
@@ -108,7 +110,9 @@ class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
     }
   }
 
-  /** Update the given block in this storage status. If it doesn't already exist, add it. */
+  /** Update the given block in this storage status. If it doesn't already exist, add it.
+    * 重新添加一个已经存在的数据块
+    **/
   private[spark] def updateBlock(blockId: BlockId, blockStatus: BlockStatus): Unit = {
     addBlock(blockId, blockStatus)
   }
@@ -161,53 +165,73 @@ class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
   }
 
   /**
-   * Return the number of blocks stored in this block manager in O(RDDs) time.
-   * Note that this is much faster than `this.blocks.size`, which is O(blocks) time.
-   */
-  def numBlocks: Int = _nonRddBlocks.size + numRddBlocks
-
-  /**
    * Return the number of RDD blocks stored in this block manager in O(RDDs) time.
    * Note that this is much faster than `this.rddBlocks.size`, which is O(RDD blocks) time.
+   * 循环每一个rdd有多少个数据块,然后求所有的RDD的数据块之和
    */
   def numRddBlocks: Int = _rddBlocks.values.map(_.size).sum
+
+  /**
+   * Return the number of blocks stored in this block manager in O(RDDs) time.
+   * Note that this is much faster than `this.blocks.size`, which is O(blocks) time.
+   * 总的数据块之和:RDD的数据块和+非RDD的数据块和
+   */
+  def numBlocks: Int = _nonRddBlocks.size + numRddBlocks
 
   /**
    * Return the number of blocks that belong to the given RDD in O(1) time.
    * Note that this is much faster than `this.rddBlocksById(rddId).size`, which is
    * O(blocks in this RDD) time.
+   * 获取一个RDD有多少个数据块
    */
   def numRddBlocksById(rddId: Int): Int = _rddBlocks.get(rddId).map(_.size).getOrElse(0)
 
-  /** Return the memory remaining in this block manager. */
+  /** Return the memory remaining in this block manager.
+    * 剩余内存
+    **/
   def memRemaining: Long = maxMem - memUsed
 
-  /** Return the memory used by this block manager. */
+  /** Return the memory used by this block manager.
+    * 已经使用的内存
+    * 非RDD的内存+每一个RDD的每一个数据块内存之和
+    **/
   def memUsed: Long = _nonRddStorageInfo._1 + _rddBlocks.keys.toSeq.map(memUsedByRdd).sum
 
-  /** Return the disk space used by this block manager. */
+  /** Return the disk space used by this block manager.
+    * 已经使用的磁盘空间
+    **/
   def diskUsed: Long = _nonRddStorageInfo._2 + _rddBlocks.keys.toSeq.map(diskUsedByRdd).sum
 
-  /** Return the off-heap space used by this block manager. */
+  /** Return the off-heap space used by this block manager.
+    * 已经使用的额外内存
+    **/
   def offHeapUsed: Long = _nonRddStorageInfo._3 + _rddBlocks.keys.toSeq.map(offHeapUsedByRdd).sum
 
-  /** Return the memory used by the given RDD in this block manager in O(1) time. */
+  /** Return the memory used by the given RDD in this block manager in O(1) time.
+    * 给定RDD使用的内存
+    **/
   def memUsedByRdd(rddId: Int): Long = _rddStorageInfo.get(rddId).map(_._1).getOrElse(0L)
 
-  /** Return the disk space used by the given RDD in this block manager in O(1) time. */
+  /** Return the disk space used by the given RDD in this block manager in O(1) time.
+    * 给定RDD使用的磁盘
+    **/
   def diskUsedByRdd(rddId: Int): Long = _rddStorageInfo.get(rddId).map(_._2).getOrElse(0L)
 
-  /** Return the off-heap space used by the given RDD in this block manager in O(1) time. */
+  /** Return the off-heap space used by the given RDD in this block manager in O(1) time.
+    * 给定RDD使用的额外空间
+    **/
   def offHeapUsedByRdd(rddId: Int): Long = _rddStorageInfo.get(rddId).map(_._3).getOrElse(0L)
 
-  /** Return the storage level, if any, used by the given RDD in this block manager. */
+  /** Return the storage level, if any, used by the given RDD in this block manager.
+    * 给定RDD对应存储级别
+    **/
   def rddStorageLevel(rddId: Int): Option[StorageLevel] = _rddStorageInfo.get(rddId).map(_._4)
 
   /**
    * Update the relevant storage info, taking into account any existing status for this block.
    */
   private def updateStorageInfo(blockId: BlockId, newBlockStatus: BlockStatus): Unit = {
-    val oldBlockStatus = getBlock(blockId).getOrElse(BlockStatus.empty)
+    val oldBlockStatus = getBlock(blockId).getOrElse(BlockStatus.empty)//获取该数据块以前的状态
     val changeInMem = newBlockStatus.memSize - oldBlockStatus.memSize
     val changeInDisk = newBlockStatus.diskSize - oldBlockStatus.diskSize
     val changeInExternalBlockStore =
@@ -271,11 +295,15 @@ private[spark] object StorageUtils {
 
   /**
    * Return a mapping from block ID to its locations for each block that belongs to the given RDD.
+   * 获取给定RDD的所有数据块(statuses范围内)存在哪些host上
    */
   def getRddBlockLocations(rddId: Int, statuses: Seq[StorageStatus]): Map[BlockId, Seq[String]] = {
+    //key是数据块ID,value是该数据块在哪些节点host上存在,这些host都是在statuses集合中获取
     val blockLocations = new mutable.HashMap[BlockId, mutable.ListBuffer[String]]
     statuses.foreach { status =>
+      //获取该rdd在一个节点上对应的所有数据块映射
       status.rddBlocksById(rddId).foreach { case (bid, _) =>
+        //每一个数据块
         val location = status.blockManagerId.hostPort
         blockLocations.getOrElseUpdate(bid, mutable.ListBuffer.empty) += location
       }

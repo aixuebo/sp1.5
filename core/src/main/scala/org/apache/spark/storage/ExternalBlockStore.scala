@@ -67,6 +67,7 @@ private[spark] class ExternalBlockStore(blockManager: BlockManager, executorId: 
     putIntoExternalBlockStore(blockId, values, returnValues)
   }
 
+  //存储一组对象到外部存储中
   private def putIntoExternalBlockStore(
       blockId: BlockId,
       values: Iterator[_],
@@ -75,11 +76,11 @@ private[spark] class ExternalBlockStore(blockManager: BlockManager, executorId: 
     // we should never hit here if externalBlockManager is None. Handle it anyway for safety.
     try {
       val startTime = System.currentTimeMillis
-      if (externalBlockManager.isDefined) {
-        externalBlockManager.get.putValues(blockId, values)
-        val size = getSize(blockId)
+      if (externalBlockManager.isDefined) {//定义了外部存储
+        externalBlockManager.get.putValues(blockId, values) //将对象集合序列化成字节数组,然后存储
+        val size = getSize(blockId)//返回存储后的字节大小
         val data = if (returnValues) {
-          Left(getValues(blockId).get)
+          Left(getValues(blockId).get)//存储后的字节数组内容,要被返回
         } else {
           null
         }
@@ -98,6 +99,7 @@ private[spark] class ExternalBlockStore(blockManager: BlockManager, executorId: 
     }
   }
 
+  //存储一个数据块ID对应的数据块字节数组到外部存储中
   private def putIntoExternalBlockStore(
       blockId: BlockId,
       bytes: ByteBuffer,
@@ -106,13 +108,13 @@ private[spark] class ExternalBlockStore(blockManager: BlockManager, executorId: 
     // we should never hit here if externalBlockManager is None. Handle it anyway for safety.
     try {
       val startTime = System.currentTimeMillis
-      if (externalBlockManager.isDefined) {
-        val byteBuffer = bytes.duplicate()
+      if (externalBlockManager.isDefined) {//已经定义了外部存储
+        val byteBuffer = bytes.duplicate()//数据块内容
         byteBuffer.rewind()
-        externalBlockManager.get.putBytes(blockId, byteBuffer)
-        val size = bytes.limit()
+        externalBlockManager.get.putBytes(blockId, byteBuffer)//存储数据块
+        val size = bytes.limit() //数据块内容所占用的字节大小
         val data = if (returnValues) {
-          Right(bytes)
+          Right(bytes)//保存字节数组内容,作为返回值
         } else {
           null
         }
@@ -132,6 +134,7 @@ private[spark] class ExternalBlockStore(blockManager: BlockManager, executorId: 
   }
 
   // We assume the block is removed even if exception thrown
+  //删除一个数据块,如果出现异常,我们假设我们成功删除了数据块
   override def remove(blockId: BlockId): Boolean = {
     try {
       externalBlockManager.map(_.removeBlock(blockId)).getOrElse(true)
@@ -142,9 +145,10 @@ private[spark] class ExternalBlockStore(blockManager: BlockManager, executorId: 
     }
   }
 
+  //将该数据块对应的字节数组反序列化成对象集合
   override def getValues(blockId: BlockId): Option[Iterator[Any]] = {
     try {
-      externalBlockManager.flatMap(_.getValues(blockId))
+      externalBlockManager.flatMap(_.getValues(blockId))//将该数据块对应的字节数组反序列化成对象集合
     } catch {
       case NonFatal(t) =>
         logError(s"Error in getValues($blockId)", t)
@@ -152,6 +156,7 @@ private[spark] class ExternalBlockStore(blockManager: BlockManager, executorId: 
     }
   }
 
+  //获取该数据块对应的字节内容
   override def getBytes(blockId: BlockId): Option[ByteBuffer] = {
     try {
       externalBlockManager.flatMap(_.getBytes(blockId))
@@ -164,10 +169,10 @@ private[spark] class ExternalBlockStore(blockManager: BlockManager, executorId: 
 
   override def contains(blockId: BlockId): Boolean = {
     try {
-      val ret = externalBlockManager.map(_.blockExists(blockId)).getOrElse(false)
+      val ret = externalBlockManager.map(_.blockExists(blockId)).getOrElse(false)//是否包含该数据块
       if (!ret) {
         logInfo(s"Remove block $blockId")
-        blockManager.removeBlock(blockId, true)
+        blockManager.removeBlock(blockId, true) //不包含,则删除该数据块
       }
       ret
     } catch {
@@ -187,14 +192,15 @@ private[spark] class ExternalBlockStore(blockManager: BlockManager, executorId: 
   }
 
   // Create concrete block manager and fall back to Tachyon by default for backward compatibility.
+  //创建外部存储实例
   private def createBlkManager(): Option[ExternalBlockManager] = {
     val clsName = blockManager.conf.getOption(ExternalBlockStore.BLOCK_MANAGER_NAME)
-      .getOrElse(ExternalBlockStore.DEFAULT_BLOCK_MANAGER_NAME)
+      .getOrElse(ExternalBlockStore.DEFAULT_BLOCK_MANAGER_NAME)//找到外部存储的class全路径
 
     try {
       val instance = Utils.classForName(clsName)
         .newInstance()
-        .asInstanceOf[ExternalBlockManager]
+        .asInstanceOf[ExternalBlockManager]//实例化该外部存储
       instance.init(blockManager, executorId)
       addShutdownHook();
       Some(instance)
@@ -212,6 +218,6 @@ private[spark] object ExternalBlockStore extends Logging {
   val BASE_DIR = "spark.externalBlockStore.baseDir"
   val FOLD_NAME = "spark.externalBlockStore.folderName"
   val MASTER_URL = "spark.externalBlockStore.url"
-  val BLOCK_MANAGER_NAME = "spark.externalBlockStore.blockManager"
-  val DEFAULT_BLOCK_MANAGER_NAME = "org.apache.spark.storage.TachyonBlockManager"
+  val BLOCK_MANAGER_NAME = "spark.externalBlockStore.blockManager"//可以自己实现外部存储对象,这个是key,value就是具体的实现类的全路径
+  val DEFAULT_BLOCK_MANAGER_NAME = "org.apache.spark.storage.TachyonBlockManager" //默认外部存储对象
 }

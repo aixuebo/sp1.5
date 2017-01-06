@@ -32,9 +32,9 @@ case class BlockUpdatedInfo(
     blockManagerId: BlockManagerId,//数据块所在管理器ID
     blockId: BlockId,//数据块ID
     storageLevel: StorageLevel, //数据块的详细信息
-    memSize: Long,
-    diskSize: Long,
-    externalBlockStoreSize: Long)
+    memSize: Long,//内存占用空间
+    diskSize: Long,//磁盘占用空间
+    externalBlockStoreSize: Long)//外部存储占用空间
 
 private[spark] object BlockUpdatedInfo {
 

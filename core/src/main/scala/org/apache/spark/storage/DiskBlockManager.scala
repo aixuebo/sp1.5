@@ -47,6 +47,26 @@ private[spark] class DiskBlockManager(blockManager: BlockManager, conf: SparkCon
    **/
   private[spark] val localDirs: Array[File] = createLocalDirs(conf)
 
+  /**
+   * Create local directories for storing block data. These directories are
+   * located inside configured local directories and won't
+   * be deleted on JVM exit when using the external shuffle service.
+   * 创建path/blockmgr目录数组,可以多个磁盘下创建该目录
+   */
+  private def createLocalDirs(conf: SparkConf): Array[File] = {
+    Utils.getConfiguredLocalDirs(conf).flatMap { rootDir =>
+      try {
+        val localDir = Utils.createDirectory(rootDir, "blockmgr")
+        logInfo(s"Created local directory at $localDir")
+        Some(localDir)
+      } catch {
+        case e: IOException =>
+          logError(s"Failed to create local dir in $rootDir. Ignoring this directory.", e)
+          None
+      }
+    }
+  }
+
   //如果没有存储的本地目录,则打印日志后,停止程序运行
   if (localDirs.isEmpty) {
     logError("Failed to create any local dir.")
@@ -137,26 +157,6 @@ private[spark] class DiskBlockManager(blockManager: BlockManager, conf: SparkCon
       blockId = new TempShuffleBlockId(UUID.randomUUID())
     }
     (blockId, getFile(blockId))
-  }
-
-  /**
-   * Create local directories for storing block data. These directories are
-   * located inside configured local directories and won't
-   * be deleted on JVM exit when using the external shuffle service.
-   * 创建path/blockmgr目录数组,可以多个磁盘下创建该目录
-   */
-  private def createLocalDirs(conf: SparkConf): Array[File] = {
-    Utils.getConfiguredLocalDirs(conf).flatMap { rootDir =>
-      try {
-        val localDir = Utils.createDirectory(rootDir, "blockmgr")
-        logInfo(s"Created local directory at $localDir")
-        Some(localDir)
-      } catch {
-        case e: IOException =>
-          logError(s"Failed to create local dir in $rootDir. Ignoring this directory.", e)
-          None
-      }
-    }
   }
 
   //设置钩子

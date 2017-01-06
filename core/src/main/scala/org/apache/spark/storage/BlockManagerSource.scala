@@ -26,6 +26,7 @@ private[spark] class BlockManagerSource(val blockManager: BlockManager)
   override val metricRegistry = new MetricRegistry()
   override val sourceName = "BlockManager"
 
+  //所有executor的最大内存之和
   metricRegistry.register(MetricRegistry.name("memory", "maxMem_MB"), new Gauge[Long] {
     override def getValue: Long = {
       val storageStatusList = blockManager.master.getStorageStatus
@@ -34,6 +35,7 @@ private[spark] class BlockManagerSource(val blockManager: BlockManager)
     }
   })
 
+  //所有executor的剩余内存之和
   metricRegistry.register(MetricRegistry.name("memory", "remainingMem_MB"), new Gauge[Long] {
     override def getValue: Long = {
       val storageStatusList = blockManager.master.getStorageStatus
@@ -42,6 +44,7 @@ private[spark] class BlockManagerSource(val blockManager: BlockManager)
     }
   })
 
+  //所有executor的已经使用的内存之和
   metricRegistry.register(MetricRegistry.name("memory", "memUsed_MB"), new Gauge[Long] {
     override def getValue: Long = {
       val storageStatusList = blockManager.master.getStorageStatus
@@ -50,6 +53,7 @@ private[spark] class BlockManagerSource(val blockManager: BlockManager)
     }
   })
 
+  //所有executor的已经使用的磁盘空间之和
   metricRegistry.register(MetricRegistry.name("disk", "diskSpaceUsed_MB"), new Gauge[Long] {
     override def getValue: Long = {
       val storageStatusList = blockManager.master.getStorageStatus

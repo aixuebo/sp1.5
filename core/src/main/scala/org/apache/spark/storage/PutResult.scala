@@ -28,6 +28,6 @@ import java.nio.ByteBuffer
  *   (3) A list of blocks dropped as a result of this put. This is always empty for DiskStore.
  */
 private[spark] case class PutResult(
-    size: Long,//文件大小
+    size: Long,//文件大小(反序列化后的大小)
     data: Either[Iterator[_], ByteBuffer],//文件的具体内容,要么是迭代器,要么是具体的内容组成的ByteBuffer数组
     droppedBlocks: Seq[(BlockId, BlockStatus)] = Seq.empty)//数据块ID和该数据块状态组成的集合

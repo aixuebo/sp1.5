@@ -50,7 +50,7 @@ private[spark] class DiskStore(blockManager: BlockManager, diskManager: DiskBloc
     val file = diskManager.getFile(blockId) //获取该数据块要存储的File对象
     val channel = new FileOutputStream(file).getChannel //对File对象进行写入数据
     Utils.tryWithSafeFinally {
-      while (bytes.remaining > 0) {
+      while (bytes.remaining > 0) {//只要还有字节没有写入完,就不断的写入
         channel.write(bytes)
       }
     } {
@@ -154,7 +154,7 @@ private[spark] class DiskStore(blockManager: BlockManager, diskManager: DiskBloc
 
   //将blockId对应的文件内容bytes,进行反序列化成一组数据
   override def getValues(blockId: BlockId): Option[Iterator[Any]] = {
-    getBytes(blockId).map(buffer => blockManager.dataDeserialize(blockId, buffer))
+    getBytes(blockId).map(buffer => blockManager.dataDeserialize(blockId, buffer))//对字节数组进行反序列化操作
   }
 
   /**
@@ -165,7 +165,7 @@ private[spark] class DiskStore(blockManager: BlockManager, diskManager: DiskBloc
   def getValues(blockId: BlockId, serializer: Serializer): Option[Iterator[Any]] = {
     // TODO: Should bypass getBytes and use a stream based implementation, so that
     // we won't use a lot of memory during e.g. external sort merge.
-    getBytes(blockId).map(bytes => blockManager.dataDeserialize(blockId, bytes, serializer))
+    getBytes(blockId).map(bytes => blockManager.dataDeserialize(blockId, bytes, serializer))//对字节数组进行反序列化操作
   }
 
   //删除BlockId对应的物理文件

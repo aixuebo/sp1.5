@@ -74,12 +74,13 @@ private[spark] abstract class ExternalBlockManager {
    * should be thrown.
    *
    * @throws java.io.IOException if there is any file system failure in putting the block.
+   * 如何存储字节数组
    */
   def putBytes(blockId: BlockId, bytes: ByteBuffer): Unit
 
   def putValues(blockId: BlockId, values: Iterator[_]): Unit = {
-    val bytes = blockManager.dataSerialize(blockId, values)
-    putBytes(blockId, bytes)
+    val bytes = blockManager.dataSerialize(blockId, values) //将对象集合序列化成字节数组
+    putBytes(blockId, bytes)//存储字节数组
   }
 
   /**
@@ -88,6 +89,7 @@ private[spark] abstract class ExternalBlockManager {
    *         None if the block does not exist in the external block store.
    *
    * @throws java.io.IOException if there is any file system failure in getting the block.
+   * 获取一个数据块对应的字节数组
    */
   def getBytes(blockId: BlockId): Option[ByteBuffer]
 
@@ -97,6 +99,7 @@ private[spark] abstract class ExternalBlockManager {
    *         None if the block does not exist in the external block store.
    *
    * @throws java.io.IOException if there is any file system failure in getting the block.
+   * 获取一个数据块对应的字节数组,然后反序列化成对象集合
    */
   def getValues(blockId: BlockId): Option[Iterator[_]] = {
     getBytes(blockId).map(buffer => blockManager.dataDeserialize(blockId, buffer))

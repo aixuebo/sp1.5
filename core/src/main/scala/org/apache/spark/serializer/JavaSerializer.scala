@@ -33,9 +33,11 @@ import org.apache.spark.util.Utils
  * @counterReset 序列化多少个对象后,要进行重置
  */
 private[spark] class JavaSerializationStream(
-    out: OutputStream, counterReset: Int, extraDebugInfo: Boolean)
+    out: OutputStream,
+    counterReset: Int,//多少个元素后进行重置
+    extraDebugInfo: Boolean) //是否要debug详细信息
   extends SerializationStream {
-  private val objOut = new ObjectOutputStream(out)
+  private val objOut = new ObjectOutputStream(out) //java的序列化对象
   private var counter = 0 //当前已经序列化了多少个对象
 
   /**
@@ -43,6 +45,7 @@ private[spark] class JavaSerializationStream(
    * http://stackoverflow.com/questions/1281549/memory-leak-traps-in-the-java-standard-api
    * But only call it every 100th time to avoid bloated serialization streams (when
    * the stream 'resets' object class descriptions have to be re-written)
+   * 将一个java系列化对象写入到输出流中
    */
   def writeObject[T: ClassTag](t: T): SerializationStream = {
     try {
@@ -52,7 +55,7 @@ private[spark] class JavaSerializationStream(
         throw SerializationDebugger.improveException(t, e)
     }
     counter += 1
-    if (counterReset > 0 && counter >= counterReset) {
+    if (counterReset > 0 && counter >= counterReset) {//重置流
       objOut.reset()
       counter = 0
     }
@@ -63,54 +66,60 @@ private[spark] class JavaSerializationStream(
   def close() { objOut.close() }
 }
 
+//JAVA对象反序列化  输入参数是有序列化内容的字节数组流
 private[spark] class JavaDeserializationStream(in: InputStream, loader: ClassLoader)
   extends DeserializationStream {
 
   private val objIn = new ObjectInputStream(in) {
-    override def resolveClass(desc: ObjectStreamClass): Class[_] = {
+    override def resolveClass(desc: ObjectStreamClass): Class[_] = {//序列化成什么类型的对象,即javaBean
       // scalastyle:off classforname
       Class.forName(desc.getName, false, loader)
       // scalastyle:on classforname
     }
   }
 
-  def readObject[T: ClassTag](): T = objIn.readObject().asInstanceOf[T]
+  def readObject[T: ClassTag](): T = objIn.readObject().asInstanceOf[T] //读取一个对象
   def close() { objIn.close() }
 }
 
-
+//序列化
 private[spark] class JavaSerializerInstance(
-    counterReset: Int, extraDebugInfo: Boolean, defaultClassLoader: ClassLoader)
+    counterReset: Int,
+    extraDebugInfo: Boolean,
+    defaultClassLoader: ClassLoader)
   extends SerializerInstance {
 
-  override def serialize[T: ClassTag](t: T): ByteBuffer = {
+  override def serialize[T: ClassTag](t: T): ByteBuffer = {//将对象序列化成字节数组,存储在ByteBuffer中
     val bos = new ByteArrayOutputStream()
     val out = serializeStream(bos)
-    out.writeObject(t)
+    out.writeObject(t)//序列化
     out.close()
-    ByteBuffer.wrap(bos.toByteArray)
+    ByteBuffer.wrap(bos.toByteArray)//返回序列化结果
   }
 
-  override def deserialize[T: ClassTag](bytes: ByteBuffer): T = {
+  override def deserialize[T: ClassTag](bytes: ByteBuffer): T = {//将字节数组反序列化成对象
     val bis = new ByteBufferInputStream(bytes)
-    val in = deserializeStream(bis)
-    in.readObject()
+    val in = deserializeStream(bis)//反序列化
+    in.readObject()//返回对象
   }
 
-  override def deserialize[T: ClassTag](bytes: ByteBuffer, loader: ClassLoader): T = {
+  override def deserialize[T: ClassTag](bytes: ByteBuffer, loader: ClassLoader): T = {//将字节数组反序列化成对象
     val bis = new ByteBufferInputStream(bytes)
     val in = deserializeStream(bis, loader)
     in.readObject()
   }
 
+  //序列化
   override def serializeStream(s: OutputStream): SerializationStream = {
     new JavaSerializationStream(s, counterReset, extraDebugInfo)
   }
 
+  //反序列化
   override def deserializeStream(s: InputStream): DeserializationStream = {
     new JavaDeserializationStream(s, defaultClassLoader)
   }
 
+  //反序列化
   def deserializeStream(s: InputStream, loader: ClassLoader): DeserializationStream = {
     new JavaDeserializationStream(s, loader)
   }
@@ -126,6 +135,9 @@ private[spark] class JavaSerializerInstance(
  */
 @DeveloperApi
 class JavaSerializer(conf: SparkConf) extends Serializer with Externalizable {
+  /**
+  当序列化方式使用JavaSerializer时，序列化器会缓存对象以免写入冗余的数据，但这会使垃圾回收器停止对这些对象进行垃圾收集。所以当使用reset序列化器后就会使垃圾回收器重新收集那些旧对象。该值设置为-1则表示禁止周期性的reset，默认情况下每100个对象就会被reset一次序列化器
+    */
   private var counterReset = conf.getInt("spark.serializer.objectStreamReset", 100)
   private var extraDebugInfo = conf.getBoolean("spark.serializer.extraDebugInfo", true)
 

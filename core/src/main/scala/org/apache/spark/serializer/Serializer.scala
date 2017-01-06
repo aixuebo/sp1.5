@@ -132,9 +132,9 @@ abstract class SerializerInstance {
 
   def deserialize[T: ClassTag](bytes: ByteBuffer, loader: ClassLoader): T //反序列化,将ByteBuffer转换成对象
 
-  def serializeStream(s: OutputStream): SerializationStream //序列化,将OutputStream转换成SerializationStream
+  def serializeStream(s: OutputStream): SerializationStream //序列化,将OutputStream转换成SerializationStream,用于存放一个对象集合
 
-  def deserializeStream(s: InputStream): DeserializationStream//反序列化,将SerializationStream转换成OutputStream
+  def deserializeStream(s: InputStream): DeserializationStream//反序列化,将SerializationStream转换成OutputStream,用于存放一个对象集合
 }
 
 /**
@@ -144,7 +144,9 @@ abstract class SerializerInstance {
  */
 @DeveloperApi
 abstract class SerializationStream {
-  /** The most general-purpose method to write an object. */
+  /** The most general-purpose method to write an object.
+    * 将一个对象序列化成字节
+    **/
   def writeObject[T: ClassTag](t: T): SerializationStream
   /** Writes the object representing the key of a key-value pair. */
   def writeKey[T: ClassTag](key: T): SerializationStream = writeObject(key)
@@ -153,6 +155,7 @@ abstract class SerializationStream {
   def flush(): Unit
   def close(): Unit
 
+  //将一个对象集合序列化起来
   def writeAll[T: ClassTag](iter: Iterator[T]): SerializationStream = {
     while (iter.hasNext) {
       writeObject(iter.next())
@@ -169,7 +172,9 @@ abstract class SerializationStream {
  */
 @DeveloperApi
 abstract class DeserializationStream {
-  /** The most general-purpose method to read an object. */
+  /** The most general-purpose method to read an object.
+    * 将字节数组反序列化成对象
+    **/
   def readObject[T: ClassTag](): T
   /** Reads the object representing the key of a key-value pair. */
   def readKey[T: ClassTag](): T = readObject[T]()
@@ -180,6 +185,7 @@ abstract class DeserializationStream {
   /**
    * Read the elements of this stream through an iterator. This can only be called once, as
    * reading each element will consume data from the input source.
+   * 反序列化每一个对象
    */
   def asIterator: Iterator[Any] = new NextIterator[Any] {
     override protected def getNext() = {
@@ -200,6 +206,8 @@ abstract class DeserializationStream {
   /**
    * Read the elements of this stream through an iterator over key-value pairs. This can only be
    * called once, as reading each element will consume data from the input source.
+   * 返回key-value形式的迭代器
+   * 将字节数组转换成对象,对象是一个元组,由key-value组成的元组
    */
   def asKeyValueIterator: Iterator[(Any, Any)] = new NextIterator[(Any, Any)] {
     override protected def getNext() = {
