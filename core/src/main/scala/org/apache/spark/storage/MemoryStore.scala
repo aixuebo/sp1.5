@@ -75,6 +75,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
   /**
    * The amount of space ensured for unrolling values in memory, shared across all cores.
    * This space is not reserved in advance, but allocated dynamically by dropping existing blocks.
+    * 展开内存最大值
    */
   private val maxUnrollMemory: Long = {
     val unrollFraction = conf.getDouble("spark.storage.unrollFraction", 0.2)
@@ -201,6 +202,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
         PutResult(res.size, res.data, droppedBlocks)
       case Right(iteratorValues) =>
         // Not enough space to unroll this block; drop to disk if applicable
+        //说明不够空间去展开了,因此要存储到磁盘
         if (level.useDisk && allowPersistToDisk) {
           logWarning(s"Persisting block $blockId to disk instead.")
           val res = blockManager.diskStore.putIterator(blockId, iteratorValues, level, returnValues)
@@ -283,11 +285,11 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
     : Either[Array[Any], Iterator[Any]] = {
 
     // Number of elements unrolled so far
-    var elementsUnrolled = 0
+    var elementsUnrolled = 0 //当前元素数量
     // Whether there is still enough memory for us to continue unrolling this block
     var keepUnrolling = true
     // Initial per-task memory to request for unrolling blocks (bytes). Exposed for testing.
-    val initialMemoryThreshold = unrollMemoryThreshold
+    val initialMemoryThreshold = unrollMemoryThreshold //初始化为分配多少展开内存
     // How often to check whether we need to request more memory 多久我们要请求更多的内存
     val memoryCheckPeriod = 16
     // Memory currently reserved by this task for this particular unrolling operation 需要的内存阈值
@@ -319,10 +321,10 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
             // Hold the accounting lock, in case another thread concurrently puts a block that
             // takes up the unrolling space we just ensured here
             accountingLock.synchronized {
-              if (!reserveUnrollMemoryForThisTask(amountToRequest)) {
+              if (!reserveUnrollMemoryForThisTask(amountToRequest)) {//说明内存不足
                 // If the first request is not granted, try again after ensuring free space
                 // If there is still not enough space, give up and drop the partition
-                val spaceToEnsure = maxUnrollMemory - currentUnrollMemory
+                val spaceToEnsure = maxUnrollMemory - currentUnrollMemory //展开内存最大值 - 已经使用内存,等于剩余可以用的内存
                 if (spaceToEnsure > 0) {
                   val result = ensureFreeSpace(blockId, spaceToEnsure)
                   droppedBlocks ++= result.droppedBlocks
