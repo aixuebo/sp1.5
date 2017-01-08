@@ -1042,7 +1042,7 @@ private[spark] class BlockManager(
   //释放该数据块ID与之对应的数据内容,返回数据块的状态
   def dropFromMemory(
       blockId: BlockId,
-      data: Either[Array[Any], ByteBuffer]): Option[BlockStatus] = {
+      data: Either[Array[Any], ByteBuffer]): Option[BlockStatus] = {//释放的内容可能是对象,也可能是字节数组
     dropFromMemory(blockId, () => data)
   }
 
