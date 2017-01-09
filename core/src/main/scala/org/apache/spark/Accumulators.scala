@@ -81,13 +81,13 @@ class Accumulable[R, T] private[spark] (
 
   /**
    * Add more data to this accumulator / accumulable
-   * @param term the data to add
+   * @param term the data to add 添加一个元素term
    */
   def += (term: T) { value_ = param.addAccumulator(value_, term) }
 
   /**
    * Add more data to this accumulator / accumulable
-   * @param term the data to add
+   * @param term the data to add 添加一个元素term
    */
   def add(term: T) { value_ = param.addAccumulator(value_, term) }
 
@@ -96,6 +96,7 @@ class Accumulable[R, T] private[spark] (
    *
    * Normally, a user will not want to use this version, but will instead call `+=`.
    * @param term the other `R` that will get merged with this
+   * 添加一个R,即两个R做合并
    */
   def ++= (term: R) { value_ = param.addInPlace(value_, term)}
 
@@ -104,6 +105,7 @@ class Accumulable[R, T] private[spark] (
    *
    * Normally, a user will not want to use this version, but will instead call `add`.
    * @param term the other `R` that will get merged with this
+   * 添加一个R,即两个R做合并
    */
   def merge(term: R) { value_ = param.addInPlace(value_, term)}
 
@@ -178,9 +180,10 @@ trait AccumulableParam[R, T] extends Serializable {
    * Add additional data to the accumulator value. Is allowed to modify and return `r`
    * for efficiency (to avoid allocating objects).
    *
-   * @param r the current value of the accumulator
-   * @param t the data to be added to the accumulator
-   * @return the new value of the accumulator
+   * @param r the current value of the accumulator 当前累积的值
+   * @param t the data to be added to the accumulator 要添加的值
+   * @return the new value of the accumulator 返回新的值
+   * 追加一个数据到
    */
   def addAccumulator(r: R, t: T): R
 
@@ -191,6 +194,7 @@ trait AccumulableParam[R, T] extends Serializable {
    * @param r1 one set of accumulated data
    * @param r2 another set of accumulated data
    * @return both data sets merged together
+   * 合并两个值
    */
   def addInPlace(r1: R, r2: R): R
 
@@ -205,11 +209,13 @@ private[spark] class
 GrowableAccumulableParam[R <% Growable[T] with TraversableOnce[T] with Serializable: ClassTag, T]
   extends AccumulableParam[R, T] {
 
+  //将ele元素添加到growable中
   def addAccumulator(growable: R, elem: T): R = {
     growable += elem
     growable
   }
 
+  //将t2集合的数据添加到t1里面
   def addInPlace(t1: R, t2: R): R = {
     t1 ++= t2
     t1
@@ -218,9 +224,12 @@ GrowableAccumulableParam[R <% Growable[T] with TraversableOnce[T] with Serializa
   def zero(initialValue: R): R = {
     // We need to clone initialValue, but it's hard to specify that R should also be Cloneable.
     // Instead we'll serialize it to a buffer and load it back.
-    val ser = new JavaSerializer(new SparkConf(false)).newInstance()
+    //我们需要去复制一个初始化值,但是很困难指定R也是克隆对象接口的实现类,
+    //因此我们的方式是,将他序列化成字节数组,然后在将字节数字反序列化成R对象
+    val ser = new JavaSerializer(new SparkConf(false)).newInstance() //序列化对象
+    //ser.serialize(initialValue) 先将对象转换成字节数组,ser.deserialize[R]将字节数组转换成R,完成复制
     val copy = ser.deserialize[R](ser.serialize(initialValue))
-    copy.clear()   // In case it contained stuff
+    copy.clear()   // In case it contained stuff,如果对象有内容,则要将其删除,因为我们的方法是zero,因为R是Growable类型的,因此clear说的是将队列元素清空
     copy
   }
 }
@@ -279,6 +288,7 @@ class Accumulator[T] private[spark] (
  * @tparam T type of value to accumulate
  */
 trait AccumulatorParam[T] extends AccumulableParam[T, T] {
+  //积累t1和t2
   def addAccumulator(t1: T, t2: T): T = {
     addInPlace(t1, t2)
   }
@@ -290,7 +300,7 @@ object AccumulatorParam {
   // `import SparkContext._` to enable them. Now we move them here to make the compiler find
   // them automatically. However, as there are duplicate codes in SparkContext for backward
   // compatibility, please update them accordingly if you modify the following implicit objects.
-
+ //定义若干个隐式转换
   implicit object DoubleAccumulatorParam extends AccumulatorParam[Double] {
     def addInPlace(t1: Double, t2: Double): Double = t1 + t2
     def zero(initialValue: Double): Double = 0.0
@@ -321,20 +331,23 @@ private[spark] object Accumulators extends Logging {
    * This global map holds the original accumulator objects that are created on the driver.
    * It keeps weak references to these objects so that accumulators can be garbage-collected
    * once the RDDs and user-code that reference them are cleaned up.
+   * key是Accumulable的主键id,value是WeakReference[Accumulable[_, _]对象
    */
   val originals = mutable.Map[Long, WeakReference[Accumulable[_, _]]]()
 
-  private var lastId: Long = 0
+  private var lastId: Long = 0 //唯一ID
 
   def newId(): Long = synchronized {
     lastId += 1
     lastId
   }
 
+  //注册一个Accumulable对象
   def register(a: Accumulable[_, _]): Unit = synchronized {
     originals(a.id) = new WeakReference[Accumulable[_, _]](a)
   }
 
+  //移除一个ID对应的对象
   def remove(accId: Long) {
     synchronized {
       originals.remove(accId)
@@ -342,30 +355,32 @@ private[spark] object Accumulators extends Logging {
   }
 
   // Add values to the original accumulators with some given IDs
+  //添加一组数据集合
   def add(values: Map[Long, Any]): Unit = synchronized {
     for ((id, value) <- values) {
-      if (originals.contains(id)) {
+      if (originals.contains(id)) {//包含
         // Since we are now storing weak references, we must check whether the underlying data
         // is valid.
         originals(id).get match {
-          case Some(accum) => accum.asInstanceOf[Accumulable[Any, Any]] ++= value
+          case Some(accum) => accum.asInstanceOf[Accumulable[Any, Any]] ++= value //追加一个对象
           case None =>
             throw new IllegalAccessError("Attempted to access garbage collected Accumulator.")
         }
       } else {
-        logWarning(s"Ignoring accumulator update for unknown accumulator id $id")
+        logWarning(s"Ignoring accumulator update for unknown accumulator id $id") //未知的ID要去忽略掉
       }
     }
   }
 
 }
-
+//内部积累器
 private[spark] object InternalAccumulator {
   val PEAK_EXECUTION_MEMORY = "peakExecutionMemory"
   val TEST_ACCUMULATOR = "testAccumulator"
 
   // For testing only.
   // This needs to be a def since we don't want to reuse the same accumulator across stages.
+  //用于测试
   private def maybeTestAccumulator: Option[Accumulator[Long]] = {
     if (sys.props.contains("spark.testing")) {
       Some(new Accumulator(

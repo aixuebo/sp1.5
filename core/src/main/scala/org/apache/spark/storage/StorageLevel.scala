@@ -43,7 +43,7 @@ class StorageLevel private(
     private var _useDisk: Boolean,//使用磁盘存储
     private var _useMemory: Boolean,//使用内存存储
     private var _useOffHeap: Boolean,//使用额外的存储
-    private var _deserialized: Boolean,
+    private var _deserialized: Boolean,//反序列化
     private var _replication: Int = 1)//备份到多少个节点上
   extends Externalizable {
 
@@ -59,7 +59,7 @@ class StorageLevel private(
   def useDisk: Boolean = _useDisk
   def useMemory: Boolean = _useMemory
   def useOffHeap: Boolean = _useOffHeap
-  def deserialized: Boolean = _deserialized
+  def deserialized: Boolean = _deserialized //反序列化
   def replication: Int = _replication
 
   //约束数据的备份数不能多于40个

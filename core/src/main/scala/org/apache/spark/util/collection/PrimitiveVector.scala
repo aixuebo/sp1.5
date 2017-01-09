@@ -27,7 +27,7 @@ import scala.reflect.ClassTag
 private[spark]
 class PrimitiveVector[@specialized(Long, Int, Double) V: ClassTag](initialSize: Int = 64) {
   private var _numElements = 0 //元素数量
-  private var _array: Array[V] = _
+  private var _array: Array[V] = _ //V是一个元组
 
   // NB: This must be separate from the declaration, otherwise the specialized parent class
   // will get its own array with the same initial size.

@@ -55,10 +55,10 @@ private[spark] trait Spillable[C] extends Logging {
   // Number of elements read from input since last spill
   private[this] var _elementsRead = 0L
 
-  // Number of bytes spilled in total
+  // Number of bytes spilled in total 磁盘上已经写入了多少字节
   private[this] var _memoryBytesSpilled = 0L
 
-  // Number of spills
+  // Number of spills 写出到磁盘的次数
   private[this] var _spillCount = 0
 
   /**
@@ -100,10 +100,11 @@ private[spark] trait Spillable[C] extends Logging {
 
   /**
    * Release our memory back to the shuffle pool so that other threads can grab it.
+   * 已经数据已经写入到磁盘上了,因此内存中可以清除一部分内存
    */
   private def releaseMemoryForThisThread(): Unit = {
     // The amount we requested does not include the initial memory tracking threshold
-    shuffleMemoryManager.release(myMemoryThreshold - initialMemoryThreshold)
+    shuffleMemoryManager.release(myMemoryThreshold - initialMemoryThreshold) //只保留初始化内存大小即可
     myMemoryThreshold = initialMemoryThreshold
   }
 

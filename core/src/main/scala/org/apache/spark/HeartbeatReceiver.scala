@@ -32,10 +32,11 @@ import org.apache.spark.util.{Clock, SystemClock, ThreadUtils, Utils}
  * A heartbeat from executors to the driver. This is a shared message used by several internal
  * components to convey liveness or execution information for in-progress tasks. It will also
  * expire the hosts that have not heartbeated for more than spark.network.timeout.
+ * 表示一个executor要去报告给driver心跳
  */
 private[spark] case class Heartbeat(
-    executorId: String,
-    taskMetrics: Array[(Long, TaskMetrics)], // taskId -> TaskMetrics
+    executorId: String,//哪一个executor的报告
+    taskMetrics: Array[(Long, TaskMetrics)], // taskId -> TaskMetrics 每一个任务对应的统计信息
     blockManagerId: BlockManagerId)
 
 /**

@@ -1781,6 +1781,7 @@ private[spark] object Utils extends Logging {
    * Execute the given block, logging and re-throwing any uncaught exception.
    * This is particularly useful for wrapping code that runs in a thread, to ensure
    * that exceptions are printed, and to avoid having to catch Throwable.
+   * 执行f函数,并且出现异常的时候,要记录日志并且继续向上抛出异常
    */
   def logUncaughtExceptions[T](f: => T): T = {
     try {

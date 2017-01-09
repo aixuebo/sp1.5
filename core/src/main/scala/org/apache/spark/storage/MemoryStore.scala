@@ -125,7 +125,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
       val values = blockManager.dataDeserialize(blockId, bytes)//对bytes进行反序列化处理,返回一个一个对象的迭代器
       putIterator(blockId, values, level, returnValues = true)
     } else {//没有经过反序列化处理
-      val putAttempt = tryToPut(blockId, bytes, bytes.limit, deserialized = false)
+      val putAttempt = tryToPut(blockId, bytes, bytes.limit, deserialized = false)//直接存储到内存中,如果内存空间不足,则删除一部分数据块
       PutResult(bytes.limit(), Right(bytes.duplicate()), putAttempt.droppedBlocks)
     }
   }
@@ -139,7 +139,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
   def putBytes(blockId: BlockId, size: Long, _bytes: () => ByteBuffer): PutResult = {
     // Work on a duplicate - since the original input might be used elsewhere.
     lazy val bytes = _bytes().duplicate().rewind().asInstanceOf[ByteBuffer]
-    val putAttempt = tryToPut(blockId, () => bytes, size, deserialized = false)
+    val putAttempt = tryToPut(blockId, () => bytes, size, deserialized = false)////直接存储到内存中,如果内存空间不足,则删除一部分数据块
     val data =
       if (putAttempt.success) {
         assert(bytes.limit == size)
@@ -176,15 +176,18 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
 
   /**
    * Attempt to put the given block in memory store.
-   *
+   * 尝试放置给定的数据块到内存中
    * There may not be enough space to fully unroll the iterator in memory, in which case we
    * optionally drop the values to disk if
-   *   (1) the block's storage level specifies useDisk, and
-   *   (2) `allowPersistToDisk` is true.
+   * 可能没有足够的空间全部存储数据到内存中,因此我们选择是否写入到磁盘中
+   *   (1) the block's storage level specifies useDisk, and 如果数据块的存储级别中有存储到磁盘上
+   *   (2) `allowPersistToDisk` is true. 参数为true也可以存储到磁盘上
    *
    * One scenario in which `allowPersistToDisk` is false is when the BlockManager reads a block
    * back from disk and attempts to cache it in memory. In this case, we should not persist the
    * block back on disk again, as it is already in disk store.
+   * 一个是allowPersistToDisk=false的场景,
+   * 如果BlockManager从磁盘上读取一个数据块,然后尝试缓存到内存中,这个时候我们不应该存储到磁盘上了,因为他已经在磁盘上存在了
    */
   private[storage] def putIterator(
       blockId: BlockId,
@@ -196,7 +199,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
     val unrolledValues = unrollSafely(blockId, values, droppedBlocks)
     unrolledValues match {
       case Left(arrayValues) =>
-        // Values are fully unrolled in memory, so store them as an array
+        // Values are fully unrolled in memory, so store them as an array 可以全部存储在内存中
         val res = putArray(blockId, arrayValues, level, returnValues)
         droppedBlocks ++= res.droppedBlocks
         PutResult(res.size, res.data, droppedBlocks)
@@ -274,6 +277,8 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
    * checking whether the memory restrictions for unrolling blocks are still satisfied,
    * stopping immediately if not. This check is a safeguard against the scenario in which
    * there is not enough free memory to accommodate the entirety of a single block.
+   * 这是安全的操作,避免潜在的OOM异常产生,
+   * 通过定期的检查是否内存限制
    *
    * This method returns either an array with the contents of the entire block or an iterator
    * containing the values of the block (if the array would have exceeded available memory).
@@ -339,12 +344,12 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
         elementsUnrolled += 1
       }
 
-      if (keepUnrolling) {
-        // We successfully unrolled the entirety of this block
+      if (keepUnrolling) {//true表示内存充足
+        // We successfully unrolled the entirety of this block 我们可以成功的展开该数据块的所有字节内容
         Left(vector.toArray)
       } else {
-        // We ran out of space while unrolling the values for this block
-        logUnrollFailureMessage(blockId, vector.estimateSize())
+        // We ran out of space while unrolling the values for this block 当该数据块被展开的时候,超出字节空间了
+        logUnrollFailureMessage(blockId, vector.estimateSize()) //记录日志.第二个参数是预估值
         Right(vector.iterator ++ values)
       }
 
@@ -353,11 +358,11 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
       // In this case, we should release the memory after we cache the block there.
       // Otherwise, if we return an iterator, we release the memory reserved here
       // later when the task finishes.
-      if (keepUnrolling) {
+      if (keepUnrolling) {//true表示内存充足
         accountingLock.synchronized {
-          val amountToRelease = currentUnrollMemoryForThisTask - previousMemoryReserved
-          releaseUnrollMemoryForThisTask(amountToRelease)
-          reservePendingUnrollMemoryForThisTask(amountToRelease)
+          val amountToRelease = currentUnrollMemoryForThisTask - previousMemoryReserved //本次展开的内存量
+          releaseUnrollMemoryForThisTask(amountToRelease)//释放该内存量
+          reservePendingUnrollMemoryForThisTask(amountToRelease)//等待该内存量
         }
       }
     }

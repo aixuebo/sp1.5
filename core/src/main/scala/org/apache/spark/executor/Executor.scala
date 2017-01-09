@@ -54,6 +54,7 @@ private[spark] class Executor(
 
   // Application dependencies (added through SparkContext) that we've fetched so far on this node.
   // Each map holds the master's timestamp for the version of that file or JAR we got.
+  //每一个文件和jar对应的时间戳
   private val currentFiles: HashMap[String, Long] = new HashMap[String, Long]()
   private val currentJars: HashMap[String, Long] = new HashMap[String, Long]()
 
@@ -61,9 +62,9 @@ private[spark] class Executor(
 
   private val conf = env.conf
 
-  // No ip or host:port - just hostname
+  // No ip or host:port - just hostname 校验参数一定是host,不能有port
   Utils.checkHost(executorHostname, "Expected executed slave to be a hostname")
-  // must not have port specified.
+  // must not have port specified.必须没有端口号,只有host
   assert (0 == Utils.parseHostPort(executorHostname)._2)
 
   // Make sure the local hostname we report matches the cluster scheduler's name for this host
@@ -76,7 +77,7 @@ private[spark] class Executor(
     Thread.setDefaultUncaughtExceptionHandler(SparkUncaughtExceptionHandler)
   }
 
-  // Start worker thread pool
+  // Start worker thread pool 开启一个线程池
   private val threadPool = ThreadUtils.newDaemonCachedThreadPool("Executor task launch worker")
   private val executorSource = new ExecutorSource(threadPool, executorId)
 
@@ -107,10 +108,10 @@ private[spark] class Executor(
   // Limit of bytes for total size of results (default is 1GB)
   private val maxResultSize = Utils.getMaxResultSize(conf)
 
-  // Maintains the list of running tasks.
+  // Maintains the list of running tasks.正在运行的任务集合
   private val runningTasks = new ConcurrentHashMap[Long, TaskRunner]
 
-  // Executor for the heartbeat task.
+  // Executor for the heartbeat task.返回执行心跳的线程池
   private val heartbeater = ThreadUtils.newDaemonSingleThreadScheduledExecutor("driver-heartbeater")
 
   startDriverHeartbeater()
@@ -145,7 +146,9 @@ private[spark] class Executor(
     }
   }
 
-  /** Returns the total amount of time this JVM process has spent in garbage collection. */
+  /** Returns the total amount of time this JVM process has spent in garbage collection.
+    * 返回JVM运行的总GC时间(垃圾回收)
+    **/
   private def computeTotalGcTime(): Long = {
     ManagementFactory.getGarbageCollectorMXBeans.map(_.getCollectionTime).sum
   }
@@ -190,8 +193,8 @@ private[spark] class Executor(
 
       try {
         val (taskFiles, taskJars, taskBytes) = Task.deserializeWithDependencies(serializedTask)
-        updateDependencies(taskFiles, taskJars)
-        task = ser.deserialize[Task[Any]](taskBytes, Thread.currentThread.getContextClassLoader)
+        updateDependencies(taskFiles, taskJars) //抓去缺失的文件或者文件已经被更改了,抓去最新的文件
+        task = ser.deserialize[Task[Any]](taskBytes, Thread.currentThread.getContextClassLoader) //反序列化
         task.setTaskMemoryManager(taskMemoryManager)
 
         // If this task has been killed before we deserialized it, let's quit now. Otherwise,
@@ -382,6 +385,7 @@ private[spark] class Executor(
   /**
    * Download any missing dependencies if we receive a new set of files and JARs from the
    * SparkContext. Also adds any new JARs we fetched to the class loader.
+   * 抓去缺失的文件或者文件已经被更改了,抓去最新的文件
    */
   private def updateDependencies(newFiles: HashMap[String, Long], newJars: HashMap[String, Long]) {
     lazy val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
@@ -419,11 +423,15 @@ private[spark] class Executor(
   private val heartbeatReceiverRef =
     RpcUtils.makeDriverRef(HeartbeatReceiver.ENDPOINT_NAME, conf, env.rpcEnv)
 
-  /** Reports heartbeat and metrics for active tasks to the driver. */
+  /** Reports heartbeat and metrics for active tasks to the driver.
+    * 心跳函数,将统计信息报告给driver
+    **/
   private def reportHeartBeat(): Unit = {
     // list of (task id, metrics) to send back to the driver
+    //每一个taskid和统计信息组成的元组作为元素,组成数组
     val tasksMetrics = new ArrayBuffer[(Long, TaskMetrics)]()
-    val curGCTime = computeTotalGcTime()
+
+    val curGCTime = computeTotalGcTime() //返回JVM运行的总GC时间(垃圾回收)
 
     for (taskRunner <- runningTasks.values()) {
       if (taskRunner.task != null) {
@@ -446,9 +454,6 @@ private[spark] class Executor(
         }
       }
     }
-    /**
-
-      */
     val message = Heartbeat(executorId, tasksMetrics.toArray, env.blockManager.blockManagerId)
     try {
       val response = heartbeatReceiverRef.askWithRetry[HeartbeatResponse](message)
@@ -463,6 +468,7 @@ private[spark] class Executor(
 
   /**
    * Schedules a task to report heartbeat and partial metrics for active tasks to driver.
+   * 打开一个调度器,去定期心跳给driver信息
    */
   private def startDriverHeartbeater(): Unit = {
     val intervalMs = conf.getTimeAsMs("spark.executor.heartbeatInterval", "10s")
@@ -470,9 +476,10 @@ private[spark] class Executor(
     // Wait a random interval so the heartbeats don't end up in sync
     val initialDelay = intervalMs + (math.random * intervalMs).asInstanceOf[Int]
 
+    //心跳线程任务
     val heartbeatTask = new Runnable() {
-      override def run(): Unit = Utils.logUncaughtExceptions(reportHeartBeat())
+      override def run(): Unit = Utils.logUncaughtExceptions(reportHeartBeat()) //执行reportHeartBeat函数,并且出现异常的时候,要记录日志并且继续向上抛出异常
     }
-    heartbeater.scheduleAtFixedRate(heartbeatTask, initialDelay, intervalMs, TimeUnit.MILLISECONDS)
+    heartbeater.scheduleAtFixedRate(heartbeatTask, initialDelay, intervalMs, TimeUnit.MILLISECONDS)  //添加定时器调度,每隔一定周期就发生一次心跳
   }
 }
