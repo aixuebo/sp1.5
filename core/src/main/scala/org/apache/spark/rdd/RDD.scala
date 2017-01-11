@@ -359,6 +359,7 @@ abstract class RDD[T: ClassTag](
    * Note: Return statements are NOT allowed in the given body.
     * 执行body代码块在一个单独的scope中,所有在body中被创建的RDD都是有相同的scope
     * body是返回U的,因此该返回值也是返回U
+   * 执行一个无法参数的函数体,有返回值
    */
   private[spark] def withScope[U](body: => U): U = RDDOperationScope.withScope[U](sc)(body)
 
@@ -1134,6 +1135,7 @@ res4: Int = 55
 
 
     var jobResult: Option[T] = None //最终的结果
+
     //合并每一个partition的结果集,参数是第几个partition,对应的结果集
     val mergeResult = (index: Int, taskResult: Option[T]) => {
       if (taskResult.isDefined) {

@@ -118,7 +118,7 @@ class HadoopRDD[K, V](
   extends RDD[(K, V)](sc, Nil) with Logging {
 
   if (initLocalJobConfFuncOpt.isDefined) {
-    sc.clean(initLocalJobConfFuncOpt.get)
+    sc.clean(initLocalJobConfFuncOpt.get) //执行initLocalJobConfFuncOpt的函数
   }
 
   def this(
@@ -228,7 +228,7 @@ class HadoopRDD[K, V](
     array
   }
 
-  //返回一个可中断的迭代器对象
+  //返回一个可中断的迭代器对象,读取一个split分区
   override def compute(theSplit: Partition, context: TaskContext): InterruptibleIterator[(K, V)] = {
     val iter = new NextIterator[(K, V)] {//每次迭代的返回值是一个key-value组成的元组
 

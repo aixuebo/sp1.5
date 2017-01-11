@@ -38,9 +38,9 @@ private[spark] class ShuffledRDDPartition(val idx: Int) extends Partition {
 // TODO: Make this return RDD[Product2[K, C]] or have some way to configure mutable pairs
 @DeveloperApi
 class ShuffledRDD[K, V, C](
-    @transient var prev: RDD[_ <: Product2[K, V]],
-    part: Partitioner)
-  extends RDD[(K, C)](prev.context, Nil) {
+    @transient var prev: RDD[_ <: Product2[K, V]],//说明该RDD要进行shuffle处理,比如该RDD进行reduceByKey方法处理,即key相同的对其进行函数处理
+    part: Partitioner)//如果分发到不同的reduce中
+  extends RDD[(K, C)](prev.context, Nil) {//该RDD返回结果是key,C的结果,即处理后的结果
 
   private var serializer: Option[Serializer] = None
 
@@ -48,7 +48,7 @@ class ShuffledRDD[K, V, C](
 
   private var aggregator: Option[Aggregator[K, V, C]] = None
 
-  private var mapSideCombine: Boolean = false
+  private var mapSideCombine: Boolean = false //是否要在map端进行预先合并
 
   /** Set a serializer for this RDD's shuffle, or null to use the default (spark.serializer) */
   def setSerializer(serializer: Serializer): ShuffledRDD[K, V, C] = {

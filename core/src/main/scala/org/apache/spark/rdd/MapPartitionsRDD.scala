@@ -37,5 +37,5 @@ private[spark] class MapPartitionsRDD[U: ClassTag, T: ClassTag](
 
   //计算某一个partition,默认逻辑是调用父partition,父类的一行记录一行记录的输入流,流入f函数中,转成新的U对象
   override def compute(split: Partition, context: TaskContext): Iterator[U] =
-    f(context, split.index, firstParent[T].iterator(split, context))
+    f(context, split.index, firstParent[T].iterator(split, context)) //firstParent[T].iterator(split, context) 表示父RDD处理一个split数据块
 }

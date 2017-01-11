@@ -2024,6 +2024,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   /**
    * :: DeveloperApi ::
    * Run a job that can return approximate results.
+   * 返回一个估算的值
    */
   @DeveloperApi
   def runApproximateJob[T, U, R](

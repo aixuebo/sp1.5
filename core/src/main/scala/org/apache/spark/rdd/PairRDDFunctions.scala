@@ -341,6 +341,9 @@ res7: Array[(Int, Int)] = Array((1,2), (3,10))
    * before sending results to a reducer, similarly to a "combiner" in MapReduce.
    * 在一个partition节点上,使用reduce函数,合并每一个key相同的value值,在每一个mapper上本地进行merge合并操作,然后在发送结果到reducer节点上,类似于mapreduce中的combiner操作
    * 参数:func,表示如果key存在,则将存在的value值以及新的value值分别为两个函数,调用f,返回新的值
+   *
+   * 在本地执行map--combine--reduce一整套算法,
+   * 有内存问题,因为reducePartition方法将一个迭代器传递进来,在内部维护一个map,如果迭代器内容很多,导致map会很大
    */
   def reduceByKeyLocally(func: (V, V) => V): Map[K, V] = self.withScope {
     val cleanedF = self.sparkContext.clean(func)
@@ -350,6 +353,7 @@ res7: Array[(Int, Int)] = Array((1,2), (3,10))
     }
 
     //迭代每一个partition的k-v键值对.返回新的key-value值,key还是原来的key,value经过func计算的value值
+    //函数参数是迭代器,
     val reducePartition = (iter: Iterator[(K, V)]) => {
       val map = new JHashMap[K, V]
       
@@ -362,7 +366,7 @@ res7: Array[(Int, Int)] = Array((1,2), (3,10))
         map.put(pair._1, if (old == null) pair._2 else cleanedF(old, pair._2))//如果value已经存在,则要新老value进行运算
       }
       Iterator(map)//最终返回该partition上运算后的key-value
-    } : Iterator[JHashMap[K, V]]
+    } : Iterator[JHashMap[K, V]] //即对合并相同的key对应的value内容,参数func就是合并value的算法
 
       /**
        * 合并多个partition结果
@@ -381,7 +385,7 @@ res7: Array[(Int, Int)] = Array((1,2), (3,10))
          * 1.先计算每一个partition,生成key-value
          * 2.合并每一个partition的值
          */
-    self.mapPartitions(reducePartition).reduce(mergeMaps)
+    self.mapPartitions(reducePartition).reduce(mergeMaps) //直接出发reduce的这个action,直接将结果输出到driver
   }
 
   /** Alias for reduceByKeyLocally */
@@ -422,7 +426,7 @@ res7: Array[(Int, Int)] = Array((1,2), (3,10))
    * :: Experimental ::
    *
    * Return approximate number of distinct values for each key in this RDD.
-   *
+   * 返回RDD中每一个key对应的value的不重复的次数的近似值
    * The algorithm used is based on streamlib's implementation of "HyperLogLog in Practice:
    * Algorithmic Engineering of a State of The Art Cardinality Estimation Algorithm", available
    * <a href="http://dx.doi.org/10.1145/2452376.2452456">here</a>.
@@ -442,9 +446,10 @@ res7: Array[(Int, Int)] = Array((1,2), (3,10))
       p: Int,
       sp: Int,
       partitioner: Partitioner): RDD[(K, Long)] = self.withScope {
-    require(p >= 4, s"p ($p) must be >= 4")
-    require(sp <= 32, s"sp ($sp) must be <= 32")
-    require(sp == 0 || p <= sp, s"p ($p) cannot be greater than sp ($sp)")
+    require(p >= 4, s"p ($p) must be >= 4") //必须大于4
+    require(sp <= 32, s"sp ($sp) must be <= 32") //必须小于32
+    require(sp == 0 || p <= sp, s"p ($p) cannot be greater than sp ($sp)") //sp必须大于4
+
     val createHLL = (v: V) => {
       val hll = new HyperLogLogPlus(p, sp)
       hll.offer(v)
@@ -598,7 +603,7 @@ res7: Array[(Int, Int)] = Array((1,2), (3,10))
       if (pair._2.isEmpty) {//如果就没有右边的数据,因此直接输出即可
         pair._1.iterator.map(v => (v, None))
       } else {//说明如果有右边的对象,则笛卡尔乘积关联
-        for (v <- pair._1.iterator; w <- pair._2.iterator) yield (v, Some(w))
+        for (v <- pair._1.iterator; w <- pair._2.iterator) yield (v, Some(w)) //一般发生左关联的时候,都是左边1个记录,右边多条记录情况,很少发生笛卡尔乘积
       }
     }
   }
@@ -615,7 +620,7 @@ res7: Array[(Int, Int)] = Array((1,2), (3,10))
       if (pair._1.isEmpty) {//右边是空,则直接输出
         pair._2.iterator.map(w => (None, w))
       } else {
-        for (v <- pair._1.iterator; w <- pair._2.iterator) yield (Some(v), w)
+        for (v <- pair._1.iterator; w <- pair._2.iterator) yield (Some(v), w) //一般发生右关联的时候,都是右边1个记录,左边多条记录情况,很少发生笛卡尔乘积
       }
     }
   }
@@ -914,7 +919,7 @@ res7: Array[(Int, Int)] = Array((1,2), (3,10))
     cogroup(other1, other2, other3, new HashPartitioner(numPartitions))
   }
 
-  /** Alias for cogroup. */
+  /** Alias for cogroup. cogroup与groupWith是同一个函数,只是groupWith是别名而已 */
   def groupWith[W](other: RDD[(K, W)]): RDD[(K, (Iterable[V], Iterable[W]))] = self.withScope {
     cogroup(other, defaultPartitioner(self, other))
   }
@@ -936,19 +941,24 @@ res7: Array[(Int, Int)] = Array((1,2), (3,10))
    *
    * Uses `this` partitioner/partition size, because even if `other` is huge, the resulting
    * RDD will be <= us.
+   * 对两个rdd进行交互,获取RDD1存在,RDD2不存在数据,即差异的元素
    */
   def subtractByKey[W: ClassTag](other: RDD[(K, W)]): RDD[(K, V)] = self.withScope {
     subtractByKey(other, self.partitioner.getOrElse(new HashPartitioner(self.partitions.length)))
   }
 
-  /** Return an RDD with the pairs from `this` whose keys are not in `other`. */
+  /** Return an RDD with the pairs from `this` whose keys are not in `other`.
+    * 对两个rdd进行交互,获取RDD1存在,RDD2不存在数据,即差异的元素
+    **/
   def subtractByKey[W: ClassTag](
       other: RDD[(K, W)],
       numPartitions: Int): RDD[(K, V)] = self.withScope {
     subtractByKey(other, new HashPartitioner(numPartitions))
   }
 
-  /** Return an RDD with the pairs from `this` whose keys are not in `other`. */
+  /** Return an RDD with the pairs from `this` whose keys are not in `other`.
+    * 对两个rdd进行交互,获取RDD1存在,RDD2不存在数据,即差异的元素
+    **/
   def subtractByKey[W: ClassTag](other: RDD[(K, W)], p: Partitioner): RDD[(K, V)] = self.withScope {
     new SubtractedRDD[K, V, W](self, other, p)
   }
@@ -1117,7 +1127,7 @@ res7: Array[(Int, Int)] = Array((1,2), (3,10))
       val config = wrappedConf.value
       /* "reduce task" <split #> <attempt # = spark task #> */
       val attemptId = newTaskAttemptID(jobtrackerID, stageId, isMap = false, context.partitionId,
-        context.attemptNumber)
+        context.attemptNumber)//我们是知道partitionID的,因此可以知道该文件的全路径
       val hadoopContext = newTaskAttemptContext(config, attemptId)
       val format = outfmt.newInstance
       format match {
@@ -1204,7 +1214,7 @@ res7: Array[(Int, Int)] = Array((1,2), (3,10))
       val (outputMetrics, bytesWrittenCallback) = initHadoopOutputMetrics(context)
 
       writer.setup(context.stageId, context.partitionId, taskAttemptId)
-      writer.open()
+      writer.open() //根据该任务ID和文件路径,找到对应的存储文件全路径,创建该文件
       var recordsWritten = 0L //总记录数
 
       Utils.tryWithSafeFinally {

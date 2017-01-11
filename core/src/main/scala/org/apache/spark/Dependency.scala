@@ -74,7 +74,7 @@ abstract class NarrowDependency[T](_rdd: RDD[T]) extends Dependency[T] {
 @DeveloperApi
 class ShuffleDependency[K, V, C](
     @transient _rdd: RDD[_ <: Product2[K, V]],//k-v结构的父RDD
-    val partitioner: Partitioner,//使用的partition对象
+    val partitioner: Partitioner,//如何对参数_rdd的key结果进行分配到不同reduce中
     val serializer: Option[Serializer] = None,//使用的序列化对象,shuffle不象map可以在local进行, 往往需要网络传输或存储, 所以需要serializerClass
     val keyOrdering: Option[Ordering[K]] = None,//k的排序对象
     val aggregator: Option[Aggregator[K, V, C]] = None,

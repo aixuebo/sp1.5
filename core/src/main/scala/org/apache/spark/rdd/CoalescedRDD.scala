@@ -207,12 +207,17 @@ private class PartitionCoalescer(maxPartitions: Int, prev: RDD[_], balanceSlack:
 
     // initializes/resets to start iterating from the beginning
     def resetIterator(): Iterator[(String, Partition)] = {//key是partition所在host,value是partition对象
+      /**
+       * 0 1 2三个元素组成集合
+       * 每一个元素都循环全部partition,如果该数据块对应的host集合大于(0,1,2)之一,则转换成(host,p)组成的元组,其中host来自于集合的下标(0,1,2),否则是None
+       * 因此最终得到(host,partition)元组集合
+       */
       val iterators = (0 to 2).map( x =>
         prev.partitions.iterator.flatMap(p => {
           if (currPrefLocs(p).size > x) Some((currPrefLocs(p)(x), p)) else None
         } )
       )
-      iterators.reduceLeft((x, y) => x ++ y)
+      iterators.reduceLeft((x, y) => x ++ y) //x是一个(host,partition)元组,y也是(host,partition)元组,因此最终得到的就是元组集合
     }
 
     // hasNext() is false iff there are no preferredLocations for any of the partitions of the RDD

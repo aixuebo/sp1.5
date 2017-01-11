@@ -47,6 +47,7 @@ import org.apache.spark.serializer.Serializer
  * This is particularly helpful when `rdd1` is much smaller than `rdd2`, as
  * you can use `rdd1`'s partitioner/partition size and not worry about running
  * out of memory because of the size of `rdd2`.
+ * 对两个rdd进行交互,获取RDD1存在,RDD2不存在数据,即差异的元素
  */
 private[spark] class SubtractedRDD[K: ClassTag, V: ClassTag, W: ClassTag](
     @transient var rdd1: RDD[_ <: Product2[K, V]],//K-V键值对的RDD1
@@ -62,6 +63,11 @@ private[spark] class SubtractedRDD[K: ClassTag, V: ClassTag, W: ClassTag](
     this
   }
 
+  /**
+   * 因为两个RDD,因此每一个RDD都有自己的partitioner,而SubtractedRDD已经定义好了自己的partitioner了
+   * 因此如果两个RDD分别看,如果与SubtractedRDD提供的partitioner相同,那么就是一对一的,
+   * 如果RDD的partitioner与SubtractedRDD的不一样,则要进行一次shuffle处理
+   */
   override def getDependencies: Seq[Dependency[_]] = {
     Seq(rdd1, rdd2).map { rdd =>
       if (rdd.partitioner == Some(part)) {
@@ -74,12 +80,13 @@ private[spark] class SubtractedRDD[K: ClassTag, V: ClassTag, W: ClassTag](
     }
   }
 
+  //每一个Partition是CoGroupPartition类型的
   override def getPartitions: Array[Partition] = {
-    val array = new Array[Partition](part.numPartitions)
-    for (i <- 0 until array.length) {
+    val array = new Array[Partition](part.numPartitions) //一共多少个分区
+    for (i <- 0 until array.length) {//循环每一个分区
       // Each CoGroupPartition will depend on rdd1 and rdd2
       array(i) = new CoGroupPartition(i, Seq(rdd1, rdd2).zipWithIndex.map { case (rdd, j) =>
-        dependencies(j) match {
+        dependencies(j) match {//获取该RDD对应的序号,即是RDD1还是RDD2,对应的是哪一个依赖
           case s: ShuffleDependency[_, _, _] =>
             None
           case _ =>
@@ -94,7 +101,10 @@ private[spark] class SubtractedRDD[K: ClassTag, V: ClassTag, W: ClassTag](
 
   override def compute(p: Partition, context: TaskContext): Iterator[(K, V)] = {
     val partition = p.asInstanceOf[CoGroupPartition]
-    val map = new JHashMap[K, ArrayBuffer[V]]
+
+    val map = new JHashMap[K, ArrayBuffer[V]] //最终存储rdd1中存在,rdd2中不存在的元素内容
+
+    //返回key对应的一个数组集合
     def getSeq(k: K): ArrayBuffer[V] = {
       val seq = map.get(k)
       if (seq != null) {
@@ -105,26 +115,33 @@ private[spark] class SubtractedRDD[K: ClassTag, V: ClassTag, W: ClassTag](
         seq
       }
     }
+
+    //第一个参数可以知道是RDD1还是RDD2
+    //第二个参数传入一个key-value元组,无返回值的函数
     def integrate(depNum: Int, op: Product2[K, V] => Unit) = {
+      //depNum=0 表示RDD1 depNum=1 表示RDD2
       dependencies(depNum) match {
         case oneToOneDependency: OneToOneDependency[_] =>
           val dependencyPartition = partition.narrowDeps(depNum).get.split
           oneToOneDependency.rdd.iterator(dependencyPartition, context)
-            .asInstanceOf[Iterator[Product2[K, V]]].foreach(op)
+            .asInstanceOf[Iterator[Product2[K, V]]].foreach(op) //循环每一个元素,让其调用op函数
 
         case shuffleDependency: ShuffleDependency[_, _, _] =>
           val iter = SparkEnv.get.shuffleManager
             .getReader(
               shuffleDependency.shuffleHandle, partition.index, partition.index + 1, context)
-            .read()
-          iter.foreach(op)
+            .read() //先做shuffle处理,然后找到对应的partition读取数据
+          iter.foreach(op) //循环每一个元素,让其调用op函数
       }
     }
 
     // the first dep is rdd1; add all values to the map
-    integrate(0, t => getSeq(t._1) += t._2)
+    integrate(0, t => getSeq(t._1) += t._2) //添加value到给定的key对应的数组中
     // the second dep is rdd2; remove all of its keys
-    integrate(1, t => map.remove(t._1))
+    integrate(1, t => map.remove(t._1)) //如果发现,从map中移除对应的key,说明没差异,因此从map中删除该key
+
+    //其中t表示(K, ArrayBuffer[V])组成的元组
+    //因此每一个k被循环后,value数组转换成(key,value)元组集合
     map.iterator.map { t => t._2.iterator.map { (t._1, _) } }.flatten
   }
 
