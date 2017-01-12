@@ -211,10 +211,21 @@ private class PartitionCoalescer(maxPartitions: Int, prev: RDD[_], balanceSlack:
        * 0 1 2三个元素组成集合
        * 每一个元素都循环全部partition,如果该数据块对应的host集合大于(0,1,2)之一,则转换成(host,p)组成的元组,其中host来自于集合的下标(0,1,2),否则是None
        * 因此最终得到(host,partition)元组集合
+       *
+       *
+       * scala demo
+val d = List("host1","host2","host3")
+val iterators = (0 to 2).map( x =>
+d.iterator.flatMap(p => {Some( (p, 1) )} )
+)
+var it:Iterator[(String, Int)] = iterators.reduceLeft((x, y) => x ++ y)
+it.foreach(print(_))
+
+可以将flatMap换成map,测试是不通过的,原因就是iterators产生的是Some<String,Int>的迭代器
        */
       val iterators = (0 to 2).map( x =>
         prev.partitions.iterator.flatMap(p => {
-          if (currPrefLocs(p).size > x) Some((currPrefLocs(p)(x), p)) else None
+          if (currPrefLocs(p).size > x) Some((currPrefLocs(p)(x), p)) else None //注意,此时为什么是flatMap,而不是map呢,是因为里面套用的是Some,因此使用循环的时候必须将some去掉,因此用的是flatMap
         } )
       )
       iterators.reduceLeft((x, y) => x ++ y) //x是一个(host,partition)元组,y也是(host,partition)元组,因此最终得到的就是元组集合
