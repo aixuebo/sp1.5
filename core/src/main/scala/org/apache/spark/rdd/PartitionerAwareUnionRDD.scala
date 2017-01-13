@@ -30,10 +30,11 @@ import org.apache.spark.util.Utils
  */
 private[spark]
 class PartitionerAwareUnionRDDPartition(
-    @transient val rdds: Seq[RDD[_]],
-    val idx: Int
+    @transient val rdds: Seq[RDD[_]],//父RDD集合,因为union是需要依赖多个父RDD的
+    val idx: Int //该RDD是第几个RDD,即依赖第几个父RDD
   ) extends Partition {
-  var parents = rdds.map(_.partitions(idx)).toArray
+
+  var parents = rdds.map(_.partitions(idx)).toArray //该partition需要父RDD的partition集合
 
   override val index = idx
   override def hashCode(): Int = idx
@@ -53,40 +54,46 @@ class PartitionerAwareUnionRDDPartition(
  * location for each partition of the unified RDD will be the most common preferred location
  * of the corresponding partitions of the parent RDDs. For example, location of partition 0
  * of the unified RDD will be where most of partition 0 of the parent RDDs are located.
+ * 多个RDD拥有相同的partitioner,将他们合并成一个RDD
+ *
  */
 private[spark]
 class PartitionerAwareUnionRDD[T: ClassTag](
     sc: SparkContext,
-    var rdds: Seq[RDD[T]]
-  ) extends RDD[T](sc, rdds.map(x => new OneToOneDependency(x))) {
-  require(rdds.length > 0)
-  require(rdds.forall(_.partitioner.isDefined))
+    var rdds: Seq[RDD[T]]//要合并的RDD集合
+  ) extends RDD[T](sc, rdds.map(x => new OneToOneDependency(x))) {//该RDD依赖多个父RDD,每一个RDD都是OneToOneDependency依赖的关系
+  require(rdds.length > 0)//RDD集合必须存在
+  require(rdds.forall(_.partitioner.isDefined)) //必须每一个RDD都有partitioner
   require(rdds.flatMap(_.partitioner).toSet.size == 1,
-    "Parent RDDs have different partitioners: " + rdds.flatMap(_.partitioner))
+    "Parent RDDs have different partitioners: " + rdds.flatMap(_.partitioner))//必须所有的RDD使用同一个partitioner
 
-  override val partitioner = rdds.head.partitioner
+  override val partitioner = rdds.head.partitioner //第一个partitioner就是新的RDD的partitioner
 
+  //返回拆分后新的partition集合
   override def getPartitions: Array[Partition] = {
-    val numPartitions = partitioner.get.numPartitions
+    val numPartitions = partitioner.get.numPartitions //一共多少个partition
     (0 until numPartitions).map(index => {
       new PartitionerAwareUnionRDDPartition(rdds, index)
     }).toArray
   }
 
   // Get the location where most of the partitions of parent RDDs are located
+  //选择该partition要在哪个节点上运行
   override def getPreferredLocations(s: Partition): Seq[String] = {
     logDebug("Finding preferred location for " + this + ", partition " + s.index)
-    val parentPartitions = s.asInstanceOf[PartitionerAwareUnionRDDPartition].parents
+    val parentPartitions = s.asInstanceOf[PartitionerAwareUnionRDDPartition].parents //找到需要的父RDD的partition集合
+
+    //返回多个RDD对应的所有host集合,同一个host可以存在多个
     val locations = rdds.zip(parentPartitions).flatMap {
       case (rdd, part) => {
-        val parentLocations = currPrefLocs(rdd, part)
+        val parentLocations = currPrefLocs(rdd, part) //获取某一个rdd的某一个partition所在节点host集合
         logDebug("Location of " + rdd + " partition " + part.index + " = " + parentLocations)
         parentLocations
       }
     }
-    val location = if (locations.isEmpty) {
+    val location = if (locations.isEmpty) {//说明没有节点推荐
       None
-    } else {
+    } else {//按照host排序,获取host最多出现的节点上
       // Find the location that maximum number of parent partitions prefer
       Some(locations.groupBy(x => x).maxBy(_._2.length)._1)
     }
@@ -95,9 +102,9 @@ class PartitionerAwareUnionRDD[T: ClassTag](
   }
 
   override def compute(s: Partition, context: TaskContext): Iterator[T] = {
-    val parentPartitions = s.asInstanceOf[PartitionerAwareUnionRDDPartition].parents
+    val parentPartitions = s.asInstanceOf[PartitionerAwareUnionRDDPartition].parents //找到需要的父RDD的partition集合
     rdds.zip(parentPartitions).iterator.flatMap {
-      case (rdd, p) => rdd.iterator(p, context)
+      case (rdd, p) => rdd.iterator(p, context) //对每一个rdd的partition进行遍历计算
     }
   }
 
@@ -107,6 +114,7 @@ class PartitionerAwareUnionRDD[T: ClassTag](
   }
 
   // Get the *current* preferred locations from the DAGScheduler (as opposed to the static ones)
+  //获取某一个rdd的某一个partition所在节点host集合
   private def currPrefLocs(rdd: RDD[_], part: Partition): Seq[String] = {
     rdd.context.getPreferredLocs(rdd, part.index).map(tl => tl.host)
   }

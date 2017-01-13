@@ -101,6 +101,9 @@ private[spark] class CoalescedRDD[T: ClassTag](
     }
   }
 
+  /**
+   * 计算父RDD中一组partition集合
+   */
   override def compute(partition: Partition, context: TaskContext): Iterator[T] = {
     partition.asInstanceOf[CoalescedRDDPartition].parents.iterator.flatMap { parentPartition =>
       firstParent[T].iterator(parentPartition, context)
@@ -110,7 +113,7 @@ private[spark] class CoalescedRDD[T: ClassTag](
   override def getDependencies: Seq[Dependency[_]] = {
     Seq(new NarrowDependency(prev) {
       def getParents(id: Int): Seq[Int] =
-        partitions(id).asInstanceOf[CoalescedRDDPartition].parentsIndices
+        partitions(id).asInstanceOf[CoalescedRDDPartition].parentsIndices //说明该partition依赖父RDD中一组partition
     })
   }
 
@@ -124,6 +127,7 @@ private[spark] class CoalescedRDD[T: ClassTag](
    * then the preferred machine will be one which most parent splits prefer too.
    * @param partition
    * @return the machine most preferred by split
+   * 获取该partition在哪个节点上运行
    */
   override def getPreferredLocations(partition: Partition): Seq[String] = {
     partition.asInstanceOf[CoalescedRDDPartition].preferredLocation.toSeq
@@ -184,20 +188,24 @@ private class PartitionCoalescer(maxPartitions: Int, prev: RDD[_], balanceSlack:
 
   // determines the tradeoff between load-balancing the partitions sizes and their locality
   // e.g. balanceSlack=0.10 means that it allows up to 10% imbalance in favor of locality
+  //平滑因子
   val slack = (balanceSlack * prev.partitions.length).toInt
 
-  var noLocality = true  // if true if no preferredLocations exists for parent RDD 说明父RDD的partition分配的时候不考虑地址问题
+  var noLocality = true  // if true if no preferredLocations exists for parent RDD ,true表示在父RDD中没有设置预先考虑在哪个节点的存在partition,
 
   // gets the *current* preferred locations from the DAGScheduler (as opposed to the static ones)
-  //获取该partition的host集合
+  //获取该partition的host集合,必须至少有一个(此处有问题,什么逻辑保证必须有一个的)
   def currPrefLocs(part: Partition): Seq[String] = {
     prev.context.getPreferredLocs(prev, part.index).map(tl => tl.host)
   }
 
   // this class just keeps iterating and rotating infinitely over the partitions of the RDD
+  //这个类能够让你保持循环和无限的旋转这个RDD的每一个partition
   // next() returns the next preferred machine that a partition is replicated on
+  //next()方法返回下一个机器的首选host,这个host是一个partition被复制的首选节点
   // the rotator first goes through the first replica copy of each partition, then second, third
-  // the iterators return type is a tuple: (replicaString, partition)
+  //该旋转体首先通过每一个分区的第一个备份  第二个备份 第三个备份
+  // the iterators return type is a tuple: (replicaString, partition) 该迭代器返回的对象是一个元组
   //参数是父RDD
   class LocationIterator(prev: RDD[_]) extends Iterator[(String, Partition)] {
 
@@ -212,7 +220,6 @@ private class PartitionCoalescer(maxPartitions: Int, prev: RDD[_], balanceSlack:
        * 每一个元素都循环全部partition,如果该数据块对应的host集合大于(0,1,2)之一,则转换成(host,p)组成的元组,其中host来自于集合的下标(0,1,2),否则是None
        * 因此最终得到(host,partition)元组集合
        *
-       *
        * scala demo
 val d = List("host1","host2","host3")
 val iterators = (0 to 2).map( x =>
@@ -222,6 +229,8 @@ var it:Iterator[(String, Int)] = iterators.reduceLeft((x, y) => x ++ y)
 it.foreach(print(_))
 
 可以将flatMap换成map,测试是不通过的,原因就是iterators产生的是Some<String,Int>的迭代器
+
+       即返回值是每一个partition第一个备份host和备份块  然后是第二个备份host和备份块 然后是第三个备份host和备份块
        */
       val iterators = (0 to 2).map( x =>
         prev.partitions.iterator.flatMap(p => {
@@ -232,7 +241,7 @@ it.foreach(print(_))
     }
 
     // hasNext() is false iff there are no preferredLocations for any of the partitions of the RDD
-    override def hasNext: Boolean = { !isEmpty }
+    override def hasNext: Boolean = { !isEmpty } //false表示isEmpty为true,即it中没有数据
 
     // return the next preferredLocation of some partition of the RDD
     override def next(): (String, Partition) = {
@@ -283,33 +292,37 @@ it.foreach(print(_))
     noLocality = false
 
     // number of iterations needed to be certain that we've seen most preferred locations
-    val expectedCoupons2 = 2 * (math.log(targetLen)*targetLen + targetLen + 0.5).toInt
-    var numCreated = 0
-    var tries = 0
+   //需要多少次迭代,我们可以确定可能好到最可能的首选地址
+    //math.log 表示e 2.7的运算
+    val expectedCoupons2 = 2 * (math.log(targetLen)*targetLen + targetLen + 0.5).toInt //期望次数
+    var numCreated = 0 //已经分配多少个partition了
+    var tries = 0 //已经尝试的次数,不能比expectedCoupons2期望的大
 
     // rotate through until either targetLen unique/distinct preferred locations have been created
     // OR we've rotated expectedCoupons2, in which case we have likely seen all preferred locations,
     // i.e. likely targetLen >> number of preferred locations (more buckets than there are machines)
-    while (numCreated < targetLen && tries < expectedCoupons2) {
-      tries += 1
+    //此时初步分配组,因此一个host只能分一个组
+    while (numCreated < targetLen && tries < expectedCoupons2) {//只要没有分配完partition,并且尝试次数还没有结束,就一直循环
+      tries += 1 //尝试次数+1
       val (nxt_replica, nxt_part) = rotIt.next()//返回partition所在host和partition本身
       if (!groupHash.contains(nxt_replica)) {//查看该host是否已经分配了分区组,如果没分配则进行分配
-        val pgroup = PartitionGroup(nxt_replica)//设立分区组
+        val pgroup = PartitionGroup(nxt_replica)//在该host上设立分区组
         groupArr += pgroup//添加一个新的组
         addPartToPGroup(nxt_part, pgroup) //添加这个partition到这个组里面
-        groupHash.put(nxt_replica, ArrayBuffer(pgroup)) // list in case we have multiple
-        numCreated += 1
+        groupHash.put(nxt_replica, ArrayBuffer(pgroup)) // list in case we have multiple 让host上产生一个该用户组
+        numCreated += 1 //已经分配了一个partition
       }
     }
 
+    //说明分组还没有分成功
     while (numCreated < targetLen) {  // if we don't have enough partition groups, create duplicates
-      var (nxt_replica, nxt_part) = rotIt.next()
+      var (nxt_replica, nxt_part) = rotIt.next() //继续循环,不保证该partition已经分配成功了
       val pgroup = PartitionGroup(nxt_replica)
       groupArr += pgroup
-      groupHash.getOrElseUpdate(nxt_replica, ArrayBuffer()) += pgroup
+      groupHash.getOrElseUpdate(nxt_replica, ArrayBuffer()) += pgroup //向该host上可以添加多个partition组
       var tries = 0
-      while (!addPartToPGroup(nxt_part, pgroup) && tries < targetLen) { // ensure at least one part
-        nxt_part = rotIt.next()._2
+      while (!addPartToPGroup(nxt_part, pgroup) && tries < targetLen) { // ensure at least one part 确保一个partition,因为可能该partition已经分配成功了
+        nxt_part = rotIt.next()._2 //不断循环
         tries += 1
       }
       numCreated += 1
@@ -326,31 +339,32 @@ it.foreach(print(_))
    * @return partition group (bin to be put in)
    */
   def pickBin(p: Partition): PartitionGroup = {
-    val pref = currPrefLocs(p).map(getLeastGroupHash(_)).sortWith(compare) // least loaded pref locs 拿到该partition的host集合 --- 找到该host存储在哪个partition上---按照partition数量排序
-    val prefPart = if (pref == Nil) None else pref.head //找到最小数量的partition组 或者None
+    val pref = currPrefLocs(p).map(getLeastGroupHash(_)).sortWith(compare) // least loaded pref locs 拿到该partition的host集合 --- 找到该host存储多个组内元素最少的一个组---按照partition数量排序
+    val prefPart = if (pref == Nil) None else pref.head //找到最小数量的partition组 或者None(表示在该数据块对应的这些host上,没有分组的host)
 
-    val r1 = rnd.nextInt(groupArr.size)
+    val r1 = rnd.nextInt(groupArr.size) //在groupArr.size以内随机产生一个数字
     val r2 = rnd.nextInt(groupArr.size)
     val minPowerOfTwo = if (groupArr(r1).size < groupArr(r2).size) groupArr(r1) else groupArr(r2) //随机找两个分组,获取两者中小的分组
-    if (prefPart.isEmpty) {
+    if (prefPart.isEmpty) { //说明该partition所在节点上是没有分组存在的
       // if no preferred locations, just use basic power of two 返回随机的最小的分组即可
       return minPowerOfTwo
     }
 
-    val prefPartActual = prefPart.get
+    //以下说明该partition所在节点上是有分组存在的
+    val prefPartActual = prefPart.get //确定的分组host
 
-    if (minPowerOfTwo.size + slack <= prefPartActual.size) { // more imbalance than the slack allows,说明prefPartActual节点上的partition已经超过伐值了,则分配给随机分配的group
-      minPowerOfTwo  // prefer balance over locality
+    if (minPowerOfTwo.size + slack <= prefPartActual.size) { // more imbalance than the slack allows,说明确定的分组host上已经存在的partition已经超过伐值了,还是选择给数量较小的分组存储
+      minPowerOfTwo  // prefer balance over locality 为就负载均衡 返回较小的
     } else {
-      prefPartActual // prefer locality over balance
+      prefPartActual // prefer locality over balance 返回当前本地节点的
     }
   }
 
   def throwBalls() {
-    if (noLocality) {  // no preferredLocations in parent RDD, no randomization needed 不考虑父RDD的每一个分片的位置情况下
+    if (noLocality) {  // no preferredLocations in parent RDD, no randomization needed 在父RDD中没有设置预先考虑在哪个节点的存在partition,
       if (maxPartitions > groupArr.size) { // just return prev.partitions
         for ((p, i) <- prev.partitions.zipWithIndex) {//基本不会再这里面执行,因为这里面说明新的分区比老得还多,那么就把老的分区依次填充新分区的相同位置即可
-          groupArr(i).arr += p
+          groupArr(i).arr += p //一比一对应关系添加即可
         }
       } else { // no locality available, then simply split partitions based on positions in array
         //很简单的方式,将按照每隔多少个父partition,分配给一个新的partition目标设置
@@ -362,6 +376,7 @@ it.foreach(print(_))
       }
     } else {//考虑父RDD的每一个分片的位置情况
       for (p <- prev.partitions if (!initialHash.contains(p))) { // throw every partition into group 循环每一个父RDD的分区,为该分区没有分组的进行分组
+        //pickBin表示为该partition找到符合的组
         pickBin(p).arr += p //将没有分配的partition进行分配
       }
     }
@@ -376,7 +391,7 @@ it.foreach(print(_))
    * @return array of partition groups
    */
   def run(): Array[PartitionGroup] = {
-    setupGroups(math.min(prev.partitions.length, maxPartitions))   // setup the groups (bins)
+    setupGroups(math.min(prev.partitions.length, maxPartitions))   // setup the groups (bins) 最终产生多少个partition分区
     throwBalls() // assign partitions (balls) to each group (bins)
     getPartitions
   }
@@ -390,7 +405,7 @@ private case class PartitionGroup(prefLoc: Option[String] = None) {//新的parti
 
 private object PartitionGroup {
   def apply(prefLoc: String): PartitionGroup = {
-    require(prefLoc != "", "Preferred location must not be empty")
+    require(prefLoc != "", "Preferred location must not be empty") //建议在哪个host上执行新的partition,这个参数必须存在
     PartitionGroup(Some(prefLoc))
   }
 }

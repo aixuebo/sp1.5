@@ -117,18 +117,24 @@ class OneToOneDependency[T](rdd: RDD[T]) extends NarrowDependency[T](rdd) {
  * 
  * 翻译有误,请稍后查看修改
  * 例如 RDD1有3个partition RDD2有5个partition ,RDD1 union RDD2 之后就会产生新的RDD3,占用8个partition
- * 那么RDD1代表的RangeDependency类,分别rdd为RDD1,inStart=1,outStart=1,length=3
- * 那么RDD2代表的RangeDependency类,分别rdd为RDD2,inStart=1,outStart=4,length=2
- * 加入子类第5个partition作为参数传进来
- * 5 > 4 && 5<4+2,也就是说当前的partition是属于该父RDD2的,则返回5-4+1 = 2
- * 
- * 
-虽然仍然是一一对应, 但是是parent RDD中的某个区间的partitions对应到child RDD中的某个区间的partitions 
+ * 那么RDD1代表的RangeDependency类,分别rdd为RDD1,占用3个partition,因此inStart=0,length=3,outStart=0 ,说明该RDD的三个partiton全在里面,outStart=0表示该RDD的第一个数据块是在总的8个中第0个位置开始的
+ * 那么RDD2代表的RangeDependency类,分别rdd为RDD2,inStart=0,length=5,outStart=4  ,说明该RDD的五个partiton全在里面,outStart=4表示该RDD的第一个数据块是在总的8个中第4个位置开始的
+ *
+ * 这个时候我们要获取第6个partition对应的依赖,他属于RDD2,并且应该是第3个partition
+ * 因此是
+ * partitionId=6
+ * outStart=4
+ * length = 5
+ * 因此 6 >= 4 && 6 <= 4+5 ,因此是满足条件的
+ * 获取的数据块是 6 - 4 + 0 = 2,因此就是第3个数据块,因为是从0开始计数的
+ *
+虽然仍然是一一对应, 但是是parent RDD中的某个区间的partitions对应到child RDD中的某个区间的partitions
 典型的操作是union, 多个parent RDD合并到一个child RDD, 故每个parent RDD都对应到child RDD中的一个区间 
 需要注意的是, 这里的union不会把多个partition合并成一个partition, 而是的简单的把多个RDD中的partitions放到一个RDD里面, partition不会发生变化, 可以参考Spark 源码分析 – RDD 中UnionRDD的实现
 
-由于是range, 所以直接记录起点和length就可以了, 没有必要加入每个中间rdd, 所以RangeDependency优化了空间效率
- */
+
+ RangeDependency表示在一个range范围内，依赖关系是一对一的，所以初始化的时候会有一个范围，范围外的partitionId，传进去之后返回的是Nil。
+*/
 @DeveloperApi
 class RangeDependency[T](rdd: RDD[T], inStart: Int, outStart: Int, length: Int)
   extends NarrowDependency[T](rdd) {

@@ -1439,6 +1439,9 @@ class DAGScheduler(
    * methods (getCacheLocs()); please be careful when modifying this method, because any new
    * DAGScheduler state accessed by it may require additional synchronization.
    * 找到一个RDD的某一个partition在哪台节点上执行为好
+   *
+   * 注意:(后面有依赖该方法的返回值,必须有一个值,否则CoalescedRDD的currPrefLocs方法就会有问题了,因此要好好看这段代码,是否一定会有返回值)
+   * 没有值也是可以的,如果没有值,说明属于一个RDD的所有partition都不能有该值,不能一个RDD的有些partition有该值,有些没有,这样情况下会出异常
    */
   private def getPreferredLocsInternal(
       rdd: RDD[_],

@@ -151,6 +151,8 @@ abstract class RDD[T: ClassTag](
    * be called once, so it is safe to implement a time-consuming computation in it.
    * 子类去实现,该RDD如何依赖父RDD,
    * 这个方法也仅仅被调用一次,也因此安全的去实现一个非常耗时的计算在这里面
+   *
+   * 当一个子RDD对应多个父RDD的时候这个方法最常用,因为该方法返回每一个RDD的依赖
    */
   protected def getDependencies: Seq[Dependency[_]] = deps
 
@@ -455,25 +457,33 @@ scala> val a = sc.parallelize(1 to 4, 2) scala> val b = a.flatMap(x => 1 to x) s
    * say 100, potentially with a few partitions being abnormally large. Calling
    * coalesce(1000, shuffle = true) will result in 1000 partitions with the
    * data distributed using a hash partitioner.
+   * 参数shuffle = true表示要进行一次shuffe操作去重新设置partition
+   * 如果shuffle = false 表示不会进行shuffle,只是一对多的,将多个父RDD的partition合并成一个,虽然有网络IO,但是不涉及key相同的都要在一个节点上存在步骤
+   *
+   * 参数numPartitions 表示最终需要的partition数量
+   * 该函数是将父RDD的partition数量重新调整,一般用于RDD的partition较多又较小的时候,重新规划
    */
   def coalesce(numPartitions: Int, shuffle: Boolean = false)(implicit ord: Ordering[T] = null)
-      : RDD[T] = withScope {
-    if (shuffle) {
-      /** Distributes elements evenly across output partitions, starting from a random partition. */
+  : RDD[T] = withScope {
+    if (shuffle) {//需要shuffle去更改父RDD的partition数量
+      /** Distributes elements evenly across output partitions, starting from a random partition.
+        *  对每一个partition的流进行一个函数处理,返回新的RDD
+        *  index表示第几个partition,迭代器表示该partition的内部元素
+        **/
       val distributePartition = (index: Int, items: Iterator[T]) => {
-        var position = (new Random(index)).nextInt(numPartitions)
+        var position = (new Random(index)).nextInt(numPartitions) //随机找一个新的partition位置
         items.map { t =>
           // Note that the hash code of the key will just be the key itself. The HashPartitioner
           // will mod it with the number of total partitions.
           position = position + 1
           (position, t)
         }
-      } : Iterator[(Int, T)]
+      } : Iterator[(Int, T)] //保证每一个partition的内容转换成顺序的intid以及对应的原始对象T,即增加了一个顺序id,让shuffle根据id作为key的时候更均匀的分布在多个节点上,依然不用保证key相同的都在同一个节点上
 
       // include a shuffle step so that our upstream tasks are still distributed
       new CoalescedRDD(
         new ShuffledRDD[Int, T, T](mapPartitionsWithIndex(distributePartition),
-        new HashPartitioner(numPartitions)),
+          new HashPartitioner(numPartitions)),//先进行shuffle操作,操作后再进行partition调整
         numPartitions).values
     } else {
       new CoalescedRDD(this, numPartitions)
@@ -596,9 +606,9 @@ scala> val a = sc.parallelize(1 to 4, 2) scala> val b = a.flatMap(x => 1 to x) s
    */
   def union(other: RDD[T]): RDD[T] = withScope {
     if (partitioner.isDefined && other.partitioner == partitioner) {
-      new PartitionerAwareUnionRDD(sc, Array(this, other))
+      new PartitionerAwareUnionRDD(sc, Array(this, other)) //一对一的合并,就最终一个partition各读取读取父RDD中一个partition
     } else {
-      new UnionRDD(sc, Array(this, other))
+      new UnionRDD(sc, Array(this, other)) //最终生成两个RDD的partition数量之和
     }
   }
 
@@ -804,6 +814,7 @@ scala> val a = sc.parallelize(1 to 4, 2) scala> val b = a.flatMap(x => 1 to x) s
   /**
    * Return a new RDD by applying a function to each partition of this RDD, while tracking the index
    * of the original partition.
+   * 对每一个partition的流进行一个函数处理,返回新的RDD
    *
    * `preservesPartitioning` indicates whether the input function preserves the partitioner, which
    * should be `false` unless this is a pair RDD and the input function doesn't modify the keys.
@@ -1088,6 +1099,8 @@ res0: Array[(Int, String)] = Array((1,A), (2,B), (3,C), (4,D), (5,E))
   /**
    * Return an RDD with the elements from `this` that are not in `other`.
    * 返回在RDD中出现，并且不在otherRDD中出现的元素，不去重
+   *
+   * 将x变成(x,null) 这样K-V结构的就可以调用的PairRDDFunctions里面<K,V>结构的逻辑
    */
   def subtract(
       other: RDD[T],

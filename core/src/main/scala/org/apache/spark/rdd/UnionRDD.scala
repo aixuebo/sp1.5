@@ -38,13 +38,13 @@ import org.apache.spark.util.Utils
 private[spark] class UnionPartition[T: ClassTag](
     idx: Int,//该UnionPartition的index序号
     @transient rdd: RDD[T],//这部分partition属于哪个RDD的partition
-    val parentRddIndex: Int,//该partition属于union第几个RDD
+    val parentRddIndex: Int,//该partition属于第几个RDD
     @transient parentRddPartitionIndex: Int)//该partition属于那一个RDD的第几个partition
   extends Partition {
 
-  var parentPartition: Partition = rdd.partitions(parentRddPartitionIndex)
+  var parentPartition: Partition = rdd.partitions(parentRddPartitionIndex) //获取对应的partition集合
 
-  def preferredLocations(): Seq[String] = rdd.preferredLocations(parentPartition)
+  def preferredLocations(): Seq[String] = rdd.preferredLocations(parentPartition) //获取该partition所在最佳host节点
 
   override val index: Int = idx
 
@@ -66,8 +66,8 @@ class UnionRDD[T: ClassTag](
   override def getPartitions: Array[Partition] = {
     val array = new Array[Partition](rdds.map(_.partitions.length).sum)//计算所有的RDD集合中一共多少个分区,组成数组
     var pos = 0//新的partition对象的序号
-    for ((rdd, rddIndex) <- rdds.zipWithIndex; split <- rdd.partitions) {
-      array(pos) = new UnionPartition(pos, rdd, rddIndex, split.index) //组装成新的partition对象
+    for ((rdd, rddIndex) <- rdds.zipWithIndex; split <- rdd.partitions) {//双层for循环,先循环每一个RDD,然后在循环每一个rdd对应的partition集合
+      array(pos) = new UnionPartition(pos, rdd, rddIndex, split.index) //组装成新的partition对象,每一个partition都是代表一个父RDD对应的一个partition
       pos += 1
     }
     array
@@ -76,7 +76,7 @@ class UnionRDD[T: ClassTag](
   override def getDependencies: Seq[Dependency[_]] = {
     val deps = new ArrayBuffer[Dependency[_]]
     var pos = 0
-    for (rdd <- rdds) {
+    for (rdd <- rdds) {//这个是每一个父RDD对应的依赖
       deps += new RangeDependency(rdd, 0, pos, rdd.partitions.length)
       pos += rdd.partitions.length
     }
@@ -85,6 +85,8 @@ class UnionRDD[T: ClassTag](
 
   override def compute(s: Partition, context: TaskContext): Iterator[T] = {
     val part = s.asInstanceOf[UnionPartition[T]]
+    //parent[T](part.parentRddIndex)表示查找哪一个父RDD
+    //iterator(part.parentPartition, context) 对该父RDD进行遍历
     parent[T](part.parentRddIndex).iterator(part.parentPartition, context)
   }
 
