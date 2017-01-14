@@ -115,7 +115,7 @@ class HadoopRDD[K, V](
     keyClass: Class[K],//key的类型
     valueClass: Class[V],//value的类型
     minPartitions: Int)//建议每一个分区拆分的大小,这个数值意义不大
-  extends RDD[(K, V)](sc, Nil) with Logging {
+  extends RDD[(K, V)](sc, Nil) with Logging {//参数Nil表示这个RDD是根RDD,没有父RDD存在
 
   if (initLocalJobConfFuncOpt.isDefined) {
     sc.clean(initLocalJobConfFuncOpt.get) //执行initLocalJobConfFuncOpt的函数

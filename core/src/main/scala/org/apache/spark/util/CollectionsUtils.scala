@@ -22,6 +22,8 @@ import java.util
 import scala.reflect.{classTag, ClassTag}
 
 private[spark] object CollectionsUtils {
+
+  //在数组K中查找K是否存在该数组中,因为K是可以排序的,因此采用的是二分法查找原理
   def makeBinarySearch[K : Ordering : ClassTag] : (Array[K], K) => Int = {
     // For primitive keys, we can use the natural ordering. Otherwise, use the Ordering comparator.
     classTag[K] match {

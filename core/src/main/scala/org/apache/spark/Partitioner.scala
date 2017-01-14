@@ -112,8 +112,8 @@ class HashPartitioner(partitions: Int) extends Partitioner {
  * 
  */
 class RangePartitioner[K : Ordering : ClassTag, V](
-    @transient partitions: Int,
-    @transient rdd: RDD[_ <: Product2[K, V]],
+    @transient partitions: Int,//最终要分成多少个partition
+    @transient rdd: RDD[_ <: Product2[K, V]],//rdd输入源
     private var ascending: Boolean = true)//默认升序
   extends Partitioner {
 
@@ -180,7 +180,7 @@ class RangePartitioner[K : Ordering : ClassTag, V](
 
   def numPartitions: Int = rangeBounds.length + 1 //初始化
 
-  private var binarySearch: ((Array[K], K) => Int) = CollectionsUtils.makeBinarySearch[K]
+  private var binarySearch: ((Array[K], K) => Int) = CollectionsUtils.makeBinarySearch[K] //二分法查找K是否在数组K中存在,存在的话,返回下标位置
 
   def getPartition(key: Any): Int = {
     val k = key.asInstanceOf[K]

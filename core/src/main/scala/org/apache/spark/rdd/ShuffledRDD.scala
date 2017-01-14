@@ -44,9 +44,9 @@ class ShuffledRDD[K, V, C](
 
   private var serializer: Option[Serializer] = None
 
-  private var keyOrdering: Option[Ordering[K]] = None
+  private var keyOrdering: Option[Ordering[K]] = None //Key按照什么排序
 
-  private var aggregator: Option[Aggregator[K, V, C]] = None
+  private var aggregator: Option[Aggregator[K, V, C]] = None //shuffle如何聚合相同的key对应的数据
 
   private var mapSideCombine: Boolean = false //是否要在map端进行预先合并
 
@@ -56,13 +56,17 @@ class ShuffledRDD[K, V, C](
     this
   }
 
-  /** Set key ordering for RDD's shuffle. */
+  /** Set key ordering for RDD's shuffle.
+    * Key按照什么排序
+    **/
   def setKeyOrdering(keyOrdering: Ordering[K]): ShuffledRDD[K, V, C] = {
     this.keyOrdering = Option(keyOrdering)
     this
   }
 
-  /** Set aggregator for RDD's shuffle. */
+  /** Set aggregator for RDD's shuffle.
+    * shuffle如何聚合相同的key对应的数据
+    **/
   def setAggregator(aggregator: Aggregator[K, V, C]): ShuffledRDD[K, V, C] = {
     this.aggregator = Option(aggregator)
     this

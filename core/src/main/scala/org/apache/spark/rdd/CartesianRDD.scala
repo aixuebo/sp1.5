@@ -58,27 +58,33 @@ class CartesianRDD[T: ClassTag, U: ClassTag](
 
   val numPartitionsInRdd2 = rdd2.partitions.length //rdd2的partition数量
 
+  /**
+   * 两个RDD的每一个partition两两相交,组成新的partition数量
+   */
   override def getPartitions: Array[Partition] = {
     // create the cross product split
     val array = new Array[Partition](rdd1.partitions.length * rdd2.partitions.length) //最终partition数量是两者乘积
     for (s1 <- rdd1.partitions; s2 <- rdd2.partitions) {//两个for循环嵌套
-      val idx = s1.index * numPartitionsInRdd2 + s2.index //获取最终序号
+      val idx = s1.index * numPartitionsInRdd2 + s2.index //获取最终序号,因为每个rdd1的partition都与rdd2所有的partition相交
       array(idx) = new CartesianPartition(idx, rdd1, rdd2, s1.index, s2.index)
     }
     array
   }
 
+  //计算一个partition对应的建议host位置
   override def getPreferredLocations(split: Partition): Seq[String] = {
     val currSplit = split.asInstanceOf[CartesianPartition]
-    (rdd1.preferredLocations(currSplit.s1) ++ rdd2.preferredLocations(currSplit.s2)).distinct
+    (rdd1.preferredLocations(currSplit.s1) ++ rdd2.preferredLocations(currSplit.s2)).distinct //分别计算rdd1和rdd2中该partiton的位置,然后过滤重复,就是满足的所有host集合
   }
 
+  //计算一个分区
   override def compute(split: Partition, context: TaskContext): Iterator[(T, U)] = {
     val currSplit = split.asInstanceOf[CartesianPartition]
     for (x <- rdd1.iterator(currSplit.s1, context);
-         y <- rdd2.iterator(currSplit.s2, context)) yield (x, y)
+         y <- rdd2.iterator(currSplit.s2, context)) yield (x, y) //拿到rdd1和rdd2中两个partition,元素两两相交
   }
 
+  //该RDD依赖两个rdd,分别对每一个RDD都是一对一的依赖,即该rdd分别依赖rdd1和rdd2各一个partition
   override def getDependencies: Seq[Dependency[_]] = List(
     new NarrowDependency(rdd1) {
       def getParents(id: Int): Seq[Int] = List(id / numPartitionsInRdd2)

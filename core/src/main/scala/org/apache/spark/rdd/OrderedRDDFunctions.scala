@@ -41,10 +41,10 @@ import org.apache.spark.annotation.DeveloperApi
  *   rdd.sortByKey()
  * }}}
  */
-class OrderedRDDFunctions[K : Ordering : ClassTag,
+class OrderedRDDFunctions[K : Ordering : ClassTag,//可以排序的K
                           V: ClassTag,
-                          P <: Product2[K, V] : ClassTag] @DeveloperApi() (
-    self: RDD[P])
+                          P <: Product2[K, V] : ClassTag] @DeveloperApi() ( //输入源
+    self: RDD[P])//包含K,V结果的RDD数据元源
   extends Logging with Serializable
 {
   private val ordering = implicitly[Ordering[K]]
@@ -54,14 +54,15 @@ class OrderedRDDFunctions[K : Ordering : ClassTag,
    * `collect` or `save` on the resulting RDD will return or output an ordered list of records
    * (in the `save` case, they will be written to multiple `part-X` files in the filesystem, in
    * order of the keys).
+   * 对RDD[K,V]结构的数据进行排序,按照K进行排序,返回排序后的RDD[K,V]
    */
   // TODO: this currently doesn't work on P other than Tuple2!
   def sortByKey(ascending: Boolean = true, numPartitions: Int = self.partitions.length)
       : RDD[(K, V)] = self.withScope
   {
     val part = new RangePartitioner(numPartitions, self, ascending)
-    new ShuffledRDD[K, V, V](self, part)
-      .setKeyOrdering(if (ascending) ordering else ordering.reverse)
+    new ShuffledRDD[K, V, V](self, part)//将该RDD作为shuffle的数据源RDD
+      .setKeyOrdering(if (ascending) ordering else ordering.reverse) //设置Key的排序方式
   }
 
   /**
@@ -80,22 +81,25 @@ class OrderedRDDFunctions[K : Ordering : ClassTag,
    * If the RDD has been partitioned using a `RangePartitioner`, then this operation can be
    * performed efficiently by only scanning the partitions that might contain matching elements.
    * Otherwise, a standard `filter` is applied to all partitions.
+   * 设置K的区间范围,即给定该区间的K的最小值和最大值
    */
   def filterByRange(lower: K, upper: K): RDD[P] = self.withScope {
 
+    //true表示参数K在[lower,upper]区间
     def inRange(k: K): Boolean = ordering.gteq(k, lower) && ordering.lteq(k, upper)
 
+    //如何过滤RDD,返回的还是RDD本身,只是过滤了一层
     val rddToFilter: RDD[P] = self.partitioner match {
-      case Some(rp: RangePartitioner[K, V]) => {
+      case Some(rp: RangePartitioner[K, V]) => {//对RDD本身进行过滤
         val partitionIndicies = (rp.getPartition(lower), rp.getPartition(upper)) match {
           case (l, u) => Math.min(l, u) to Math.max(l, u)
         }
         PartitionPruningRDD.create(self, partitionIndicies.contains)
       }
       case _ =>
-        self
+        self //如果不是RangePartitioner,则就返回RDD本身自己
     }
-    rddToFilter.filter { case (k, v) => inRange(k) }
+    rddToFilter.filter { case (k, v) => inRange(k) }//在给定rddToFilter方法的返回值下,继续filter过滤,只要K在[lower,upper]区间的内容
   }
 
 }

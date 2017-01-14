@@ -153,6 +153,8 @@ abstract class RDD[T: ClassTag](
    * 这个方法也仅仅被调用一次,也因此安全的去实现一个非常耗时的计算在这里面
    *
    * 当一个子RDD对应多个父RDD的时候这个方法最常用,因为该方法返回每一个RDD的依赖
+   *
+   * 返回该RDD与父RDD的依赖关系,是一对多还是多对多,以及Dependency中可以让一个partition获取对应的父RDD的若干个匹配的partition
    */
   protected def getDependencies: Seq[Dependency[_]] = deps
 
@@ -622,13 +624,15 @@ scala> val a = sc.parallelize(1 to 4, 2) scala> val b = a.flatMap(x => 1 to x) s
 
   /**
    * Return this RDD sorted by the given key function.
+   * 按照函数f对元素进行排序,返回的RDD还是原来的RDD,只是进行了一次按照f函数来排序的过程
    */
   def sortBy[K](
-      f: (T) => K,
-      ascending: Boolean = true,
+      f: (T) => K,//T转换成K的转换函数
+      ascending: Boolean = true,//是否升序
       numPartitions: Int = this.partitions.length)
-      (implicit ord: Ordering[K], ctag: ClassTag[K]): RDD[T] = withScope {
-    this.keyBy[K](f)
+      (implicit ord: Ordering[K], ctag: ClassTag[K]) //K是有排序功能的
+    : RDD[T] = withScope {
+    this.keyBy[K](f) //T元素通过K转换成元组(K,T)
         .sortByKey(ascending, numPartitions)
         .values
   }
@@ -687,6 +691,7 @@ scala> val a = sc.parallelize(1 to 4, 2) scala> val b = a.flatMap(x => 1 to x) s
    * Return the Cartesian product of this RDD and another one, that is, the RDD of all pairs of
    * elements (a, b) where a is in `this` and b is in `other`.
    * 对两个RDD进行笛卡尔计算,返回RDD[(T, U)],这个函数对内存消耗较大,使用时候需要谨慎
+   * 即两个RDD每一条记录都相互笛卡尔运算
    */
   def cartesian[U: ClassTag](other: RDD[U]): RDD[(T, U)] = withScope {
     new CartesianRDD(sc, this, other)
@@ -954,7 +959,7 @@ res0: Array[(Int, String)] = Array((1,A), (2,B), (3,C), (4,D), (5,E))
    */
   def zip[U: ClassTag](other: RDD[U]): RDD[(T, U)] = withScope {
     //组合相同的partition中元素,按照元素顺序,两列组合
-    zipPartitions(other, preservesPartitioning = false) { (thisIter, otherIter) =>
+    zipPartitions(other, preservesPartitioning = false) { (thisIter, otherIter) => //参数分别是两个RDD对应的partition的迭代器
       new Iterator[(T, U)] {
         def hasNext: Boolean = (thisIter.hasNext, otherIter.hasNext) match {
           case (true, true) => true //必须都有下一个元素的时候才是true

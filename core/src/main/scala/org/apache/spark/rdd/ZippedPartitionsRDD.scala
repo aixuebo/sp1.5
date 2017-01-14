@@ -25,13 +25,13 @@ import org.apache.spark.{OneToOneDependency, Partition, SparkContext, TaskContex
 import org.apache.spark.util.Utils
 
 private[spark] class ZippedPartitionsPartition(
-    idx: Int,
-    @transient rdds: Seq[RDD[_]],
-    @transient val preferredLocations: Seq[String])
+    idx: Int,//表示zip操作后partition的序号
+    @transient rdds: Seq[RDD[_]],//要进行zip操作的RDD集合
+    @transient val preferredLocations: Seq[String])//建议在哪些节点上运行该partition任务,这个参数是host集合
   extends Partition {
 
   override val index: Int = idx
-  var partitionValues = rdds.map(rdd => rdd.partitions(idx))
+  var partitionValues = rdds.map(rdd => rdd.partitions(idx)) //每一个RDD对应的partition组成的集合
   def partitions: Seq[Partition] = partitionValues
 
   @throws(classOf[IOException])
@@ -46,25 +46,27 @@ private[spark] abstract class ZippedPartitionsBaseRDD[V: ClassTag](
     sc: SparkContext,
     var rdds: Seq[RDD[_]],//要合并的一组partition集合
     preservesPartitioning: Boolean = false)
-  extends RDD[V](sc, rdds.map(x => new OneToOneDependency(x))) {
+  extends RDD[V](sc, rdds.map(x => new OneToOneDependency(x))) {// rdds.map(x => new OneToOneDependency(x)) 表示新的RDD依赖所有的父RDD,每一个父RDD都是一对一的依赖,即ZippedPartitionsBaseRDD只是依赖每一个父RDD中的一个partition
 
   override val partitioner =
-    if (preservesPartitioning) firstParent[Any].partitioner else None
+    if (preservesPartitioning) firstParent[Any].partitioner else None //因为所有的父RDD都是相同的partitioner,因此返回第一个partitioner就是ZippedPartitionsBaseRDD需要的partitioner
 
+  //
   override def getPartitions: Array[Partition] = {
     val numParts = rdds.head.partitions.length//计算第一个RDD的partition数量
     if (!rdds.forall(rdd => rdd.partitions.length == numParts)) {//校验每一个RDD的partition数量是否相同
       throw new IllegalArgumentException("Can't zip RDDs with unequal numbers of partitions")
     }
     Array.tabulate[Partition](numParts) { i =>
-      val prefs = rdds.map(rdd => rdd.preferredLocations(rdd.partitions(i)))
+      val prefs = rdds.map(rdd => rdd.preferredLocations(rdd.partitions(i))) //计算每一个RDD对应的partition所建议的host位置
       // Check whether there are any hosts that match all RDDs; otherwise return the union
-    val exactMatchLocations = prefs.reduce((x, y) => x.intersect(y))
-      val locs = if (!exactMatchLocations.isEmpty) exactMatchLocations else prefs.flatten.distinct
+    val exactMatchLocations = prefs.reduce((x, y) => x.intersect(y)) //获取所有host交集,注意:与第一个rdd的partition的交集
+      val locs = if (!exactMatchLocations.isEmpty) exactMatchLocations else prefs.flatten.distinct //如果有交集,说明很多数据块都在该节点上,因此选择交集作为返回值,如果没有交集,则获取所有的节点集合作为返回值
       new ZippedPartitionsPartition(i, rdds, locs)
     }
   }
 
+  //返回在哪个节点上运行该rdd
   override def getPreferredLocations(s: Partition): Seq[String] = {
     s.asInstanceOf[ZippedPartitionsPartition].preferredLocations
   }
@@ -96,8 +98,8 @@ private[spark] class ZippedPartitionsRDD2[A: ClassTag, B: ClassTag, V: ClassTag]
 
   override def compute(s: Partition, context: TaskContext): Iterator[V] = {
     tryPrepareParents()
-    val partitions = s.asInstanceOf[ZippedPartitionsPartition].partitions
-    f(rdd1.iterator(partitions(0), context), rdd2.iterator(partitions(1), context))
+    val partitions = s.asInstanceOf[ZippedPartitionsPartition].partitions //获取对应的partition集合
+    f(rdd1.iterator(partitions(0), context), rdd2.iterator(partitions(1), context)) //迭代第0个 和第1个partition进入f函数
   }
 
   override def clearDependencies() {
