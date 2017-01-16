@@ -779,10 +779,16 @@ scala> val a = sc.parallelize(1 to 4, 2) scala> val b = a.flatMap(x => 1 to x) s
    *                        instead of constructing a huge String to concat all the elements:
    *                        def printRDDElement(record:(String, Seq[String]), f:String=>Unit) =
    *                          for (e <- record._2){f(e)}
-   *                          使用这个函数去自定义如何管道元素,这个函数被调用的时候,第一个参数是每一个RDD元素,第二个元素是可以打印该RDD元素
-   *                          例如 循环每一个record.2这个集合,每一个元素进入f函数中作为参数,输出是无输出
+   *                         使用该函数,可以自定义将原始元素转换一下,第一个参数就是RDD的原始元素,第二个函数类似于out.println(_)这样的函数
+   *                         例如:groupBy之后的数据作为数据流传入到pipe中,格式是record:(String, Seq[String])的,但是很不容易让后续脚本操作,最好脚本操作的都是String类型的,
+   *                         因此代替方案是,将属于一个key的集合转换成String类型,然后在将String类型调用f函数进行输出到输入流中
+   *
    * @param separateWorkingDir Use separate working directories for each task.每一个任务是否使用单独的工作目录,即是否要进行软连接copy
    * @return the result RDD
+   *
+   *  类似与hadoop的streaming方式,让非java和scala的用户也可以使用集群并行的运算数据
+   *  只要服务器上的语言可以支持从标准输入读取数据--运算--输出字符串到标准输出 这种模式,都可以参与到并行计算里面来
+   *
    */
   def pipe(
       command: Seq[String],

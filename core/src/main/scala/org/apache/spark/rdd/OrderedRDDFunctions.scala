@@ -60,9 +60,9 @@ class OrderedRDDFunctions[K : Ordering : ClassTag,//可以排序的K
   def sortByKey(ascending: Boolean = true, numPartitions: Int = self.partitions.length)
       : RDD[(K, V)] = self.withScope
   {
-    val part = new RangePartitioner(numPartitions, self, ascending)
+    val part = new RangePartitioner(numPartitions, self, ascending) //该RDD的partition,采用抽样的方式,根据抽样的key的排列顺序,划分了key的partition区间,从而保证了key会分配到对应的排序好的partition中,即最终的每一个partition都是有顺序的,
     new ShuffledRDD[K, V, V](self, part)//将该RDD作为shuffle的数据源RDD
-      .setKeyOrdering(if (ascending) ordering else ordering.reverse) //设置Key的排序方式
+      .setKeyOrdering(if (ascending) ordering else ordering.reverse) //设置Key的排序方式,shuffle又保证了每一个partition内部又有顺序,因此最终就是按照key排号顺序的,不需要map-reduce中最终一个reduce进行排序方案了
   }
 
   /**

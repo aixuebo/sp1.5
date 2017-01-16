@@ -79,7 +79,7 @@ private[spark] class HadoopPartition(rddId: Int, idx: Int, @transient s: InputSp
       // map_input_file is deprecated in favor of mapreduce_map_input_file but set both
       // since its not removed yet 设置文件的全路径
       Map("map_input_file" -> is.getPath().toString(),
-        "mapreduce_map_input_file" -> is.getPath().toString())
+        "mapreduce_map_input_file" -> is.getPath().toString()) //创建文件路径对应的环境变量
     } else {
       Map()
     }

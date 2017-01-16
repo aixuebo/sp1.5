@@ -109,7 +109,9 @@ class HashPartitioner(partitions: Int) extends Partitioner {
  * 
  * 1.每一个partition内部是无序的,但是partition和partition之间是有顺序的
  * 2.性能上有损耗,因此要先遍历一次RDD,进行抽样
- * 
+ *
+ *
+ * 该RDD的partition,采用抽样的方式,根据抽样的key的排列顺序,划分了key的partition区间,从而保证了key会分配到对应的排序好的partition中,即最终的每一个partition都是有顺序的,但是每一个partition内部是不会按照key排序的,需要在shuffle中加入对key排序的方法,才能保证最终全部结果都是排序好的
  */
 class RangePartitioner[K : Ordering : ClassTag, V](
     @transient partitions: Int,//最终要分成多少个partition
