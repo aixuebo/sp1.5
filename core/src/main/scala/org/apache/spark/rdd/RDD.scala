@@ -262,7 +262,7 @@ abstract class RDD[T: ClassTag](
   // Our dependencies and partitions will be gotten by calling subclass's methods below, and will
   // be overwritten when we're checkpointed
   private var dependencies_ : Seq[Dependency[_]] = null
-  @transient private var partitions_ : Array[Partition] = null//该RDD分成多少个分片
+  @transient private var partitions_ : Array[Partition] = null//该RDD分成多少个分片,如果已经RDD已经checkpoint到HDFS上了,那么也不再需要父RDD的依赖关系了
 
   /** An Option holding our checkpoint RDD, if we are checkpointed 如果我们已经checkPoint了,则获取该RDD的checkPoint对象*/
   private def checkpointRDD: Option[CheckpointRDD[T]] = checkpointData.flatMap(_.checkpointRDD)
@@ -520,30 +520,45 @@ scala> val a = sc.parallelize(1 to 4, 2) scala> val b = a.flatMap(x => 1 to x) s
    * @param seed random seed
    *
    * @return split RDDs in an array
+   *
+scala> val weights = Array[Double](0.3,0.2,0.5)
+weights: Array[Double] = Array(0.3, 0.2, 0.5)
+
+scala> val sum = weights.sum
+sum: Double = 1.0
+
+scala> val normalizedCumWeights = weights.map(_ / sum).scanLeft(0.0d)(_ + _)
+normalizedCumWeights: Array[Double] = Array(0.0, 0.3, 0.5, 1.0)
+
+
+根据权重,数组weights长度是多少,则就对RDD循环抽样多少次,返回RDD数组,每一个数组内容就是抽样的结果RDD
+常用于从原始数据中抽出多少比例的训练集合和测试集合
    */
   def randomSplit(
       weights: Array[Double],
       seed: Long = Utils.random.nextLong): Array[RDD[T]] = withScope {
-    val sum = weights.sum
-    val normalizedCumWeights = weights.map(_ / sum).scanLeft(0.0d)(_ + _)
+    val sum = weights.sum //数组内的数字之和
+    val normalizedCumWeights = weights.map(_ / sum).scanLeft(0.0d)(_ + _) //初始化0.然后每一个数组中的元素与运算后的结果 参与运算得到的值 组成新的数组
+    //normalizedCumWeights.sliding(2) 表示每两个组成一组数据,即将normalizedCumWeights拆分成每一个区间范围
     normalizedCumWeights.sliding(2).map { x =>
-      randomSampleWithRange(x(0), x(1), seed)
+      randomSampleWithRange(x(0), x(1), seed) //区间的最大值和最小值以及种子
     }.toArray
   }
 
   /**
    * Internal method exposed for Random Splits in DataFrames. Samples an RDD given a probability
    * range.
-   * @param lb lower bound to use for the Bernoulli sampler
-   * @param ub upper bound to use for the Bernoulli sampler
-   * @param seed the seed for the Random number generator
-   * @return A random sub-sample of the RDD without replacement.
+   * @param lb lower bound to use for the Bernoulli sampler 区间的最小值
+   * @param ub upper bound to use for the Bernoulli sampler 区间的最大值
+   * @param seed the seed for the Random number generator 种子
+   * @return A random sub-sample of the RDD without replacement. 随机抽取数据,随机数满足最大值和最小值的时候,该数据就是我们要的抽样数据
+   * 该方法会循环一次RDD,产生新的一个RDD抽样结果集
    */
   private[spark] def randomSampleWithRange(lb: Double, ub: Double, seed: Long): RDD[T] = {
     this.mapPartitionsWithIndex( { (index, partition) =>
       val sampler = new BernoulliCellSampler[T](lb, ub)
       sampler.setSeed(seed + index)
-      sampler.sample(partition)
+      sampler.sample(partition) //对该partition的迭代器进行抽样
     }, preservesPartitioning = true)
   }
 
@@ -1027,6 +1042,7 @@ res0: Array[(Int, String)] = Array((1,A), (2,B), (3,C), (4,D), (5,E))
   /**
    * Applies a function f to all elements of this RDD.
    * RDD的每一个元素都作为参数,应用一次f函数,该函数是无输出的
+   * 每一个partition的一行内容,即T,被调用函数f进行处理,可以在f函数中进行打印信息操作
    */
   def foreach(f: T => Unit): Unit = withScope {
     val cleanF = sc.clean(f)
@@ -1041,6 +1057,7 @@ res0: Array[(Int, String)] = Array((1,A), (2,B), (3,C), (4,D), (5,E))
   /**
    * Applies a function f to each partition of this RDD.
    * 将rdd的每一个partition作为参数,给函数f
+   * 每一个partition的所有内容,即Iterator[T],被调用函数f进行处理,可以在f函数中进行打印信息操作
    */
   def foreachPartition(f: Iterator[T] => Unit): Unit = withScope {
     val cleanF = sc.clean(f)
@@ -1049,7 +1066,7 @@ res0: Array[(Int, String)] = Array((1,A), (2,B), (3,C), (4,D), (5,E))
 
   /**
    * Return an array that contains all of the elements in this RDD.
-   * 返回:Array[Array[T]],有多少个partition,就是多少个数组,每一个元素又是一个数组.表示一个partition内部返回的所有结果集
+   * 返回所有运行的结果集,收集每一个partition的结果,每一个partiton的结果都是数组,然后组装成一个大的数组
    */
   def collect(): Array[T] = withScope {
     val results = sc.runJob(this, (iter: Iterator[T]) => iter.toArray) //返回所有运行的结果集
@@ -1066,9 +1083,15 @@ res0: Array[(Int, String)] = Array((1,A), (2,B), (3,C), (4,D), (5,E))
    * recomputing the input RDD should be cached first.
    */
   def toLocalIterator: Iterator[T] = withScope {
+    //该job每次只是读取一个partition的数据
     def collectPartition(p: Int): Array[T] = {
-      sc.runJob(this, (iter: Iterator[T]) => iter.toArray, Seq(p)).head
+      sc.runJob(this, (iter: Iterator[T]) => iter.toArray, Seq(p)).head //因为runJob返回的结果是数组,数组的size是Seq(p)的结果集,此时只有一个partition,因此返回head就是该partition的结果集
     }
+
+    /**
+     * (0 until 5)  输出 a: scala.collection.immutable.Range = Range(0, 1, 2, 3, 4)
+     *  每一个partition都会调用一次job,一共有多少个partition,就有多少个job,每一个返回值都是一个RDD的分区的迭代器
+     */
     (0 until partitions.length).iterator.flatMap(i => collectPartition(i))
   }
 
@@ -1083,6 +1106,10 @@ res0: Array[(Int, String)] = Array((1,A), (2,B), (3,C), (4,D), (5,E))
 
   /**
    * Return an RDD that contains all matching values by applying `f`.
+   * 包含所有匹配的value
+   *
+   *
+   * f: PartialFunction[T, U] 偏函数,其实就是将T转换成U的函数,只是里面有一个filter功能,即T如果不满足的话,不会报错,只是过滤掉该不符合的元素
    */
   def collect[U: ClassTag](f: PartialFunction[T, U]): RDD[U] = withScope {
     val cleanF = sc.clean(f)
@@ -1143,11 +1170,14 @@ res0: Array[(Int, String)] = Array((1,A), (2,B), (3,C), (4,D), (5,E))
 scala> val c = sc.parallelize(1 to 10)
 scala> c.reduce((x, y) => x + y)
 res4: Int = 55
+
+将每一个partition的数据,进行运算,返回一个T对象,然后每一个partition的结果T再参与运算.最终返回一个T
+即RDD所有的元素进行f运算,返回一个值
    */
   def reduce(f: (T, T) => T): T = withScope {
     val cleanF = sc.clean(f)
 
-    //即每一个partition返回一个元素T
+    //如何处理一个partition迭代器,让其经过运算返回一个元素T
     //表示定义reducePartition方法,参数是 Iterator[T]  返回值是T, 实际上函数体是 iter =>...
     val reducePartition: Iterator[T] => Option[T] = iter => {
       if (iter.hasNext) {
@@ -1161,6 +1191,7 @@ res4: Int = 55
     var jobResult: Option[T] = None //最终的结果
 
     //合并每一个partition的结果集,参数是第几个partition,对应的结果集
+    //即如何处理每一个partition的结果集,即参数 第几个partition返回的结果U
     val mergeResult = (index: Int, taskResult: Option[T]) => {
       if (taskResult.isDefined) {
         jobResult = jobResult match {
@@ -1183,7 +1214,7 @@ res4: Int = 55
   def treeReduce(f: (T, T) => T, depth: Int = 2): T = withScope {
     require(depth >= 1, s"Depth must be greater than or equal to 1 but got $depth.")
     val cleanF = context.clean(f)
-    //给定一个迭代器,返回跟参数一个类型的结果,从左到右的,每一个元素进行f函数处理
+    //处理一个partition的所有元素的迭代器,返回一个对象T
     val reducePartition: Iterator[T] => Option[T] = iter => {
       if (iter.hasNext) {
         Some(iter.reduceLeft(cleanF))
@@ -1193,6 +1224,9 @@ res4: Int = 55
     }
     //每一个partition的元素进行f函数处理
     val partiallyReduced = mapPartitions(it => Iterator(reducePartition(it)))
+
+    //op表示两个T参与运算,最终生成一个新的T
+    //c和x分别表示两个T
     val op: (Option[T], Option[T]) => Option[T] = (c, x) => {
       if (c.isDefined && x.isDefined) {
         Some(cleanF(c.get, x.get))
@@ -1260,6 +1294,11 @@ res4: Int = 55
    *
    * @param depth suggested depth of the tree (default: 2)
    * @see [[org.apache.spark.rdd.RDD#aggregate]]
+   *
+另外一种例外情况是在使用 recude 或者 aggregate action 聚集数据到 driver 时，如果数据把很多 partititon 个数的数据，单进程执行的 driver merge 所有 partition 的输出时很容易成为计算的瓶颈。
+为了缓解 driver 的计算压力，可以使用 reduceByKey 或者 aggregateByKey 执行分布式的 aggregate 操作把数据分布到更少的 partition 上。每个 partition 中的数据并行的进行 merge，
+再把 merge 的结果发个 driver 以进行最后一轮 aggregation。查看 treeReduce 和 treeAggregate 查看如何这么使用的例子。
+
    */
   def treeAggregate[U: ClassTag](zeroValue: U)(
       seqOp: (U, T) => U,
@@ -1272,10 +1311,12 @@ res4: Int = 55
       val cleanSeqOp = context.clean(seqOp)
       val cleanCombOp = context.clean(combOp)
       val aggregatePartition =
-        (it: Iterator[T]) => it.aggregate(zeroValue)(cleanSeqOp, cleanCombOp)
-      var partiallyAggregated = mapPartitions(it => Iterator(aggregatePartition(it)))
-      var numPartitions = partiallyAggregated.partitions.length
-      val scale = math.max(math.ceil(math.pow(numPartitions, 1.0 / depth)).toInt, 2)
+        (it: Iterator[T]) => it.aggregate(zeroValue)(cleanSeqOp, cleanCombOp) //如何对一个partition进行合并处理
+
+      var partiallyAggregated = mapPartitions(it => Iterator(aggregatePartition(it))) //每一个partiton如何合并处理,产生新的RDD
+
+      var numPartitions = partiallyAggregated.partitions.length //多少个partition
+      val scale = math.max(math.ceil(math.pow(numPartitions, 1.0 / depth)).toInt, 2) //对numPartitions开depth的根号得到的数据 取整 ,例如 100为numPartitions,6为depth,因此结果是2.15,去整后是3
       // If creating an extra level doesn't help reduce
       // the wall-clock time, we stop tree aggregation.
 
@@ -1284,8 +1325,8 @@ res4: Int = 55
         numPartitions /= scale
         val curNumPartitions = numPartitions
         partiallyAggregated = partiallyAggregated.mapPartitionsWithIndex {
-          (i, iter) => iter.map((i % curNumPartitions, _))
-        }.reduceByKey(new HashPartitioner(curNumPartitions), cleanCombOp).values
+          (i, iter) => iter.map((i % curNumPartitions, _)) //将partition内的元素内容转换成(新的partition组,元素内容)组成的元组
+        }.reduceByKey(new HashPartitioner(curNumPartitions), cleanCombOp).values //按照元组中新的partitionid重新设置元组
       }
       partiallyAggregated.reduce(cleanCombOp)
     }
@@ -1418,6 +1459,10 @@ print Map(5 -> 1, 1 -> 4, 6 -> 1, 9 -> 1, 2 -> 2, 3 -> 1)
    * elements in a partition. The index assigned to each element is therefore not guaranteed,
    * and may even change if the RDD is reevaluated. If a fixed ordering is required to guarantee
    * the same index assignments, you should sort the RDD with sortByKey() or save it to a file.
+   * 为每一个元素产生一个唯一的序号
+   * 该方式不太好,因为他要先扫描所有的partition元素,确定每一个partition中有多少个元素,然后设置每一个partition序号的最小值,然后算出来的序号
+   * 比如3个partition,第一个partition有3个记录,第二个partition有5条记录,第三个partition有2条记录
+   * 因此第一个partition的序号就是0 1 2 第二个partition序号就是3 4 5 6 7 第三个partition序号就是8 9
    */
   def zipWithIndex(): RDD[(T, Long)] = withScope {
     new ZippedWithIndexRDD(this)
@@ -1432,6 +1477,14 @@ print Map(5 -> 1, 1 -> 4, 6 -> 1, 9 -> 1, 2 -> 2, 3 -> 1)
    * elements in a partition. The unique ID assigned to each element is therefore not guaranteed,
    * and may even change if the RDD is reevaluated. If a fixed ordering is required to guarantee
    * the same index assignments, you should sort the RDD with sortByKey() or save it to a file.
+   * 为每一个元素添加一个唯一的序号,最后组成元组,
+   * 唯一的序号算法:
+   * 比如有3个partition 因此n=3
+   * 第一个partition的前三个元素分别是0 1 2 即i = 0 1 2
+   * k是第一个partitition,因此k=0
+   * 因此第一个partition的序号是0*3+0  1*3+0  2*3+0 即0 3 6
+   *
+   * 以此类推,第二个partition产生的序号是0*3+1  1*3+1  2*3+1 即1 4 7
    */
   def zipWithUniqueId(): RDD[(T, Long)] = withScope {
     val n = this.partitions.length.toLong
@@ -1449,7 +1502,7 @@ print Map(5 -> 1, 1 -> 4, 6 -> 1, 9 -> 1, 2 -> 2, 3 -> 1)
    *
    * @note due to complications in the internal implementation, this method will raise
    * an exception if called on an RDD of `Nothing` or `Null`.
-   * 获取前num个元素,这些元素是从第0个partition开始获取,一直获取到num数量为止
+   * 获取前num个元素,这些元素是从第0个partition开始获取,一直获取到num数量为止,获取的数据跟排序没关系
    */
   def take(num: Int): Array[T] = withScope {
     if (num == 0) {
@@ -1494,7 +1547,7 @@ c: scala.collection.immutable.Range = Range(3, 4, 5, 6, 7)
 
   /**
    * Return the first element in this RDD.
-   * 获取第一个元素
+   * 获取第一个元素,该第一个元素不是排序后的第一个元素,而就是随意产生的一个元素
    */
   def first(): T = withScope {
     take(1) match {
@@ -1562,7 +1615,7 @@ c: scala.collection.immutable.Range = Range(3, 4, 5, 6, 7)
         mapRDDs.reduce { (queue1, queue2) =>
           queue1 ++= queue2
           queue1
-        }.toArray.sorted(ord)
+        }.toArray.sorted(ord) //对优先队列的数据进行排序
       }
     }
   }
@@ -1825,7 +1878,7 @@ res80: Array[(Int, String)] = Array((3,dog), (6,salmon), (6,salmon), (3,rat), (8
 
   private[spark] def elementClassTag: ClassTag[T] = classTag[T] //RDD对应的泛型对应的类
 
-  private[spark] var checkpointData: Option[RDDCheckpointData[T]] = None //对RDD创建一个新的可支持checkPoint的RDD对象
+  private[spark] var checkpointData: Option[RDDCheckpointData[T]] = None //对RDD的最终结果在hdfs上有一个备份,这样如果该hdfs上存在内容,则说明已经不用再跑rdd前面的逻辑了,直接加载数据即可
 
   /** Returns the first parent RDD 
    * 返回依赖的父类中第一个RDD对象  
@@ -1886,10 +1939,11 @@ res80: Array[(Int, String)] = Array((3,dog), (6,salmon), (6,salmon), (3,rat), (8
   /**
    * Changes the dependencies of this RDD from its original parents to a new RDD (`newRDD`)
    * created from the checkpoint file, and forget its old dependencies and partitions.
+   * 当完成checkpoint之后,调用该方法,清理父RDD依赖的信息,因为这些信息已经不重要了
    */
   private[spark] def markCheckpointed(): Unit = {
-    clearDependencies()
-    partitions_ = null
+    clearDependencies() //清理父依赖的RDD关系,因为已经有checkpoint了
+    partitions_ = null //因为该RDD已经在HDFS上存储结果集了,因此将父RDD的关联都删除.已经不再需要父RDD的存在了
     deps = null    // Forget the constructor argument for dependencies too
   }
 
@@ -1898,6 +1952,7 @@ res80: Array[(Int, String)] = Array((3,dog), (6,salmon), (6,salmon), (3,rat), (8
    * to the original parent RDDs is removed to enable the parent RDDs to be garbage
    * collected. Subclasses of RDD may override this method for implementing their own cleaning
    * logic. See [[org.apache.spark.rdd.UnionRDD]] for an example.
+   * 清理父依赖的RDD关系,因为已经有checkpoint了
    */
   protected def clearDependencies() {
     dependencies_ = null

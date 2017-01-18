@@ -43,12 +43,13 @@ class PartitionwiseSampledRDDPartition(val prev: Partition, val seed: Long)
  * @param seed random seed
  * @tparam T input RDD item type
  * @tparam U sampled RDD item type
+ * 在RDD的基础上进行抽样选择数据
  */
 private[spark] class PartitionwiseSampledRDD[T: ClassTag, U: ClassTag](
-    prev: RDD[T],
-    sampler: RandomSampler[T, U],
+    prev: RDD[T],//父RDD
+    sampler: RandomSampler[T, U],//随机算法
     @transient preservesPartitioning: Boolean,
-    @transient seed: Long = Utils.random.nextLong)
+    @transient seed: Long = Utils.random.nextLong) //随机种子
   extends RDD[U](prev) {
 
   @transient override val partitioner = if (preservesPartitioning) prev.partitioner else None

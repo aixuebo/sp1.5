@@ -39,7 +39,7 @@ private[spark] abstract class CheckpointRDD[T: ClassTag](@transient sc: SparkCon
   extends RDD[T](sc, Nil) {//Nil表示该RDD没有父RDD做依赖
 
   // CheckpointRDD should not be checkpointed again
-  override def doCheckpoint(): Unit = { }
+  override def doCheckpoint(): Unit = { } //真正去HDFS上备份该RDD的输出内容
   override def checkpoint(): Unit = { }
   override def localCheckpoint(): this.type = this
 

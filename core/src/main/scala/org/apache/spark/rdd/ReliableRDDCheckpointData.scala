@@ -56,7 +56,7 @@ private[spark] class ReliableRDDCheckpointData[T: ClassTag](@transient rdd: RDD[
   /**
    * Materialize this RDD and write its content to a reliable DFS.
    * This is called immediately after the first action invoked on this RDD has completed.
-   * 真正去做checkPoint操作
+   * 真正去做checkPoint操作,即将该rdd的结果集存储到HDFS上即可
    */
   protected override def doCheckpoint(): CheckpointRDD[T] = {
     // Create the output path for the checkpoint 创建RDD的输出目录
@@ -70,10 +70,10 @@ private[spark] class ReliableRDDCheckpointData[T: ClassTag](@transient rdd: RDD[
     val broadcastedConf = rdd.context.broadcast(
       new SerializableConfiguration(rdd.context.hadoopConfiguration))
     // TODO: This is expensive because it computes the RDD again unnecessarily (SPARK-8582) 这是一个非常耗时的操作
-    rdd.context.runJob(rdd, ReliableCheckpointRDD.writeCheckpointFile[T](cpDir, broadcastedConf) _)
+    rdd.context.runJob(rdd, ReliableCheckpointRDD.writeCheckpointFile[T](cpDir, broadcastedConf) _) //将每一个partition的信息写入到hdfs上的输出目录中,每一个partition在目录中创建一个文件输出流part-00001,向该文件输出流中写入partition内容
     
-    val newRDD = new ReliableCheckpointRDD[T](rdd.context, cpDir) //创建可以被checkPoint的RDD
-    if (newRDD.partitions.length != rdd.partitions.length) {
+    val newRDD = new ReliableCheckpointRDD[T](rdd.context, cpDir) //将hdfs上的内容创建成一个新的RDD,说明每一次的结果其实都存储到HDFS上了,下次直接获取到记录即可,不需要计算中间过程了
+    if (newRDD.partitions.length != rdd.partitions.length) {//校验partition数量一定是一对一的
       throw new SparkException(
         s"Checkpoint RDD $newRDD(${newRDD.partitions.length}) has different " +
           s"number of partitions from original RDD $rdd(${rdd.partitions.length})")
@@ -86,9 +86,9 @@ private[spark] class ReliableRDDCheckpointData[T: ClassTag](@transient rdd: RDD[
       }
     }
 
-    logInfo(s"Done checkpointing RDD ${rdd.id} to $cpDir, new parent is RDD ${newRDD.id}")
+    logInfo(s"Done checkpointing RDD ${rdd.id} to $cpDir, new parent is RDD ${newRDD.id}") //打印日志,说明已经完成了checkpointing,原来的rddid是什么,结果集导入到什么hdfs的目录下了,新产生的rddid是什么
 
-    newRDD
+    newRDD //返回新的RDDid
   }
 
 }

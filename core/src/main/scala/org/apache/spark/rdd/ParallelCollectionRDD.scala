@@ -89,7 +89,7 @@ private[spark] class ParallelCollectionRDD[T: ClassTag](
     @transient data: Seq[T],//等待拆分的数据集合
     numSlices: Int,//等待将要被拆分成多少组
     locationPrefs: Map[Int, Seq[String]]) //key是partitionId,value是该partitionId对应的存储路径集合,即可以从这些集合内的路径获取该partitionId的信息
-    extends RDD[T](sc, Nil) {
+    extends RDD[T](sc, Nil) {//该RDD是根RDD,因为父RDD是Nil
   // TODO: Right now, each split sends along its full data, even if later down the RDD chain it gets
   // cached. It might be worthwhile to write the data to a file in the DFS and read it in the split
   // instead.
@@ -122,7 +122,7 @@ private object ParallelCollectionRDD {
    * 将集合seq拆分成numSlices个部分,返回值就是Seq[Seq[T]],第一维度数组长度是numSlices,每一个元素都是Seq[T]
    */
   def slice[T: ClassTag](seq: Seq[T], numSlices: Int): Seq[Seq[T]] = {
-    if (numSlices < 1) {
+    if (numSlices < 1) {//不能拆分成小于1的partition
       throw new IllegalArgumentException("Positive number of slices required")
     }
     // Sequences need to be sliced at the same set of index positions for operations
@@ -133,6 +133,9 @@ private object ParallelCollectionRDD {
 0==6
 6==13
 13==20
+      参数length表示一共数组有多少个元素
+      参数numSlices 表示分多少个partition
+      返回每一个分组在array中的开始位置和结束位置,这样就把数组分成若干个组了
      */
     def positions(length: Long, numSlices: Int): Iterator[(Int, Int)] = {
       (0 until numSlices).iterator.map(i => {
@@ -169,7 +172,7 @@ private object ParallelCollectionRDD {
         val array = seq.toArray // To prevent O(n^2) operations for List etc
         positions(array.length, numSlices).map({
           case (start, end) =>
-            array.slice(start, end).toSeq
+            array.slice(start, end).toSeq //获取array的子集数据集,
         }).toSeq
       }
     }

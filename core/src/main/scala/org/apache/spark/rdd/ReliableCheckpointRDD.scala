@@ -31,12 +31,12 @@ import org.apache.spark.util.{SerializableConfiguration, Utils}
 /**
  * An RDD that reads from checkpoint files previously written to reliable storage.
  * 从缓存点读取数据,生成一个RDD对象,该缓存点是以前RDD写到文件中的
- * @T表示还原的RDD的泛型对象,例如RDD[Double],表示的就是checkPoint是针对该RDD进行处理的,RDD处理的元素是Double类型的
+ * T 表示还原的RDD的泛型对象,例如RDD[Double],表示的就是checkPoint是针对该RDD进行处理的,RDD处理的元素是Double类型的
  */
 private[spark] class ReliableCheckpointRDD[T: ClassTag](
     @transient sc: SparkContext,
-    val checkpointPath: String) //做数据缓存的目录
-  extends CheckpointRDD[T](sc) {
+    val checkpointPath: String) //做数据缓存的目录,在hdfs上存储
+  extends CheckpointRDD[T](sc) {//这个RDD是没有根的RDD,即第一级别的RDD
 
   @transient private val hadoopConf = sc.hadoopConfiguration //hadoop的配置对象
   @transient private val cpath = new Path(checkpointPath)
@@ -64,6 +64,7 @@ private[spark] class ReliableCheckpointRDD[T: ClassTag](
   protected override def getPartitions: Array[Partition] = {
     // listStatus can throw exception if path does not exist.
     //获取目录下所有的part-开头的文件,就是校验点缓存下来的文件,每一个part-开头的文件对应的是原始RDD对应的一个个partition对象
+    //hdfs上每一个part文件都是一个partition
     val inputFiles = fs.listStatus(cpath)
       .map(_.getPath)
       .filter(_.getName.startsWith("part-"))
@@ -97,8 +98,8 @@ private[spark] class ReliableCheckpointRDD[T: ClassTag](
    * 返回值是该partition的一行一行的数据
    */
   override def compute(split: Partition, context: TaskContext): Iterator[T] = {
-    val file = new Path(checkpointPath, ReliableCheckpointRDD.checkpointFileName(split.index))
-    ReliableCheckpointRDD.readCheckpointFile(file, broadcastedConf, context)
+    val file = new Path(checkpointPath, ReliableCheckpointRDD.checkpointFileName(split.index)) //找到该partition在hdfs上的路径
+    ReliableCheckpointRDD.readCheckpointFile(file, broadcastedConf, context)//读取该文件路径内容即可返回一个partition的迭代器对象
   }
 
 }
@@ -116,16 +117,16 @@ private[spark] object ReliableCheckpointRDD extends Logging {
 
   /**
    * Write this partition's values to a checkpoint file.
-   * @blockSize 向hadoop内写入数据时,每一个数据块的大小
+   * blockSize 向hadoop内写入数据时,每一个数据块的大小
    * 将partition的每一个记录写入path/partitionId对应的文件中
    * 
-   * @ctx 该任务的上下文对象
-   * @iterator 该任务所属的partition每一行信息读取迭代器
+   * ctx 该任务的上下文对象
+   * iterator 该任务所属的partition每一行信息读取迭代器
    */
   def writeCheckpointFile[T: ClassTag](
       path: String,//输出目录
       broadcastedConf: Broadcast[SerializableConfiguration],//hadoop的配置文件对象
-      blockSize: Int = -1)(ctx: TaskContext, iterator: Iterator[T]) {
+      blockSize: Int = -1)(ctx: TaskContext, iterator: Iterator[T]) { //方法传入一个partition的迭代器
     val env = SparkEnv.get
     val outputDir = new Path(path)
     val fs = outputDir.getFileSystem(broadcastedConf.value.value) //根据path和hadoop环境对象,返回操作系统对象
@@ -173,7 +174,7 @@ private[spark] object ReliableCheckpointRDD extends Logging {
   /**
    * Read the content of the specified checkpoint file.
    * 从partition文件中还原RDD的某一个partition数据
-   * @context 任务的上下文对象
+   * context 任务的上下文对象
    * 
    * 返回该partition中每一个记录的迭代对象
    */

@@ -1883,9 +1883,9 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    */
   def runJob[T, U: ClassTag](
       rdd: RDD[T],
-      func: (TaskContext, Iterator[T]) => U,
-      partitions: Seq[Int],
-      resultHandler: (Int, U) => Unit): Unit = {
+      func: (TaskContext, Iterator[T]) => U,//如何处理一个partition的迭代器,返回一个U
+      partitions: Seq[Int],//需要的partition集合
+      resultHandler: (Int, U) => Unit): Unit = {//如何处理每一个partition的结果集,即参数 第几个partition返回的结果U
     if (stopped.get()) {
       throw new IllegalStateException("SparkContext has been shutdown")
     }
@@ -1907,7 +1907,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       rdd: RDD[T],
       func: (TaskContext, Iterator[T]) => U,
       partitions: Seq[Int]): Array[U] = {
-    val results = new Array[U](partitions.size)
+    val results = new Array[U](partitions.size) //多少个partition,每一个partiton的结果
     runJob[T, U](rdd, func, partitions, (index, res) => results(index) = res)
     results
   }
@@ -2017,7 +2017,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       processPartition: Iterator[T] => U,
       resultHandler: (Int, U) => Unit)
   {
-    val processFunc = (context: TaskContext, iter: Iterator[T]) => processPartition(iter)
+    val processFunc = (context: TaskContext, iter: Iterator[T]) => processPartition(iter) //如何处理一个partition迭代器,该返回值是一个U
     runJob[T, U](rdd, processFunc, 0 until rdd.partitions.length, resultHandler)
   }
 

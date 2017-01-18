@@ -34,6 +34,7 @@ import org.apache.spark.annotation.DeveloperApi
  *
  * @tparam T item type
  * @tparam U sampled item type
+ * 随机抽样算法
  */
 @DeveloperApi
 trait RandomSampler[T, U] extends Pseudorandom with Cloneable with Serializable {
@@ -83,8 +84,8 @@ object RandomSampler {
  * :: DeveloperApi ::
  * A sampler based on Bernoulli trials for partitioning a data sequence.
  *
- * @param lb lower bound of the acceptance range
- * @param ub upper bound of the acceptance range
+ * @param lb lower bound of the acceptance range 设置最小值
+ * @param ub upper bound of the acceptance range 设置最大值
  * @param complement whether to use the complement of the range specified, default to false
  * @tparam T item type
  */
@@ -107,6 +108,7 @@ class BernoulliCellSampler[T](lb: Double, ub: Double, complement: Boolean = fals
 
   override def setSeed(seed: Long): Unit = rng.setSeed(seed)
 
+  //循环整个partition的迭代器
   override def sample(items: Iterator[T]): Iterator[T] = {
     if (ub - lb <= 0.0) {
       if (complement) items else Iterator.empty
@@ -118,7 +120,7 @@ class BernoulliCellSampler[T](lb: Double, ub: Double, complement: Boolean = fals
         }}
       } else {
         items.filter { item => {
-          val x = rng.nextDouble()
+          val x = rng.nextDouble() //产生一个随机数,随机数在最大值和最小值区间的.则要该数据
           (x >= lb) && (x < ub)
         }}
       }
@@ -143,7 +145,7 @@ class BernoulliCellSampler[T](lb: Double, ub: Double, complement: Boolean = fals
  * @tparam T item type
  */
 @DeveloperApi
-class BernoulliSampler[T: ClassTag](fraction: Double) extends RandomSampler[T, T] {
+class BernoulliSampler[T: ClassTag](fraction: Double) extends RandomSampler[T, T] { //参数是伐值
 
   /** epsilon slop to avoid failure from floating point jitter */
   require(
@@ -156,14 +158,14 @@ class BernoulliSampler[T: ClassTag](fraction: Double) extends RandomSampler[T, T
   override def setSeed(seed: Long): Unit = rng.setSeed(seed)
 
   override def sample(items: Iterator[T]): Iterator[T] = {
-    if (fraction <= 0.0) {
+    if (fraction <= 0.0) {//说明一个数据都不要
       Iterator.empty
-    } else if (fraction >= 1.0) {
+    } else if (fraction >= 1.0) {//说明全部数据都要
       items
     } else if (fraction <= RandomSampler.defaultMaxGapSamplingFraction) {
       new GapSamplingIterator(items, fraction, rng, RandomSampler.rngEpsilon)
     } else {
-      items.filter { _ => rng.nextDouble() <= fraction }
+      items.filter { _ => rng.nextDouble() <= fraction }//随机数超过该伐值的都要
     }
   }
 
