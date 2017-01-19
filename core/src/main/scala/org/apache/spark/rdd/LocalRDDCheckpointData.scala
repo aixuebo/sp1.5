@@ -36,6 +36,7 @@ private[spark] class LocalRDDCheckpointData[T: ClassTag](@transient rdd: RDD[T])
 
   /**
    * Ensure the RDD is fully cached so the partitions can be recovered later.
+   * 确保RDD是全部缓存所有的partiiton
    */
   protected override def doCheckpoint(): CheckpointRDD[T] = {
     val level = rdd.getStorageLevel
@@ -45,12 +46,15 @@ private[spark] class LocalRDDCheckpointData[T: ClassTag](@transient rdd: RDD[T])
 
     // Not all actions compute all partitions of the RDD (e.g. take). For correctness, we
     // must cache any missing partitions. TODO: avoid running another job here (SPARK-8582).
-    val action = (tc: TaskContext, iterator: Iterator[T]) => Utils.getIteratorSize(iterator)
+    val action = (tc: TaskContext, iterator: Iterator[T]) => Utils.getIteratorSize(iterator) //计算Iterator中元素个数
+
+    //计算缺失的partition,即查看哪些partitionid在master上不知道
     val missingPartitionIndices = rdd.partitions.map(_.index).filter { i =>
       !SparkEnv.get.blockManager.master.contains(RDDBlockId(rdd.id, i))
     }
-    if (missingPartitionIndices.nonEmpty) {
-      rdd.sparkContext.runJob(rdd, action, missingPartitionIndices)
+
+    if (missingPartitionIndices.nonEmpty) {//说明有缺失的partition信息
+      rdd.sparkContext.runJob(rdd, action, missingPartitionIndices) //没有应用返回值,暂时不知道这个本地做checkpoint的意义
     }
 
     new LocalCheckpointRDD[T](rdd)

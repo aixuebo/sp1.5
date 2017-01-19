@@ -59,7 +59,9 @@ class StatCounter(values: TraversableOnce[Double]) extends Serializable {
     this
   }
 
-  /** Merge another StatCounter into this one, adding up the internal statistics. */
+  /** Merge another StatCounter into this one, adding up the internal statistics.
+    * 合并每一个parttion的结果集
+    **/
   def merge(other: StatCounter): StatCounter = {
     if (other == this) {
       merge(other.copy())  // Avoid overwriting fields in a weird order
@@ -147,7 +149,7 @@ class StatCounter(values: TraversableOnce[Double]) extends Serializable {
 //提供可遍历的double对象或者double数组,来构造统计对象StatCounter
 object StatCounter {
   /** Build a StatCounter from a list of values. */
-  def apply(values: TraversableOnce[Double]): StatCounter = new StatCounter(values)
+  def apply(values: TraversableOnce[Double]): StatCounter = new StatCounter(values) //如何将迭代器作为参数,去计算统计指标
 
   /** Build a StatCounter from a list of values passed as variable-length arguments. */
   def apply(values: Double*): StatCounter = new StatCounter(values)

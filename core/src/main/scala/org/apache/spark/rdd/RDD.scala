@@ -220,6 +220,7 @@ abstract class RDD[T: ClassTag](
    * Set this RDD's storage level to persist its values across operations after the first time
    * it is computed. This can only be used to assign a new storage level if the RDD does not
    * have a storage level set yet. Local checkpointing is an exception.
+   * 仅仅是应用在该RDD没有设置存储级别的时候
    */
   def persist(newLevel: StorageLevel): this.type = {
     if (isLocallyCheckpointed) {
@@ -228,7 +229,7 @@ abstract class RDD[T: ClassTag](
       // one that is explicitly requested by the user (after adapting it to use disk).
       persist(LocalRDDCheckpointData.transformStorageLevel(newLevel), allowOverride = true)
     } else {
-      persist(newLevel, allowOverride = false)
+      persist(newLevel, allowOverride = false) //不允许覆盖
     }
   }
 
@@ -272,7 +273,7 @@ abstract class RDD[T: ClassTag](
    * RDD is checkpointed or not.
    */
   final def dependencies: Seq[Dependency[_]] = {
-    checkpointRDD.map(r => List(new OneToOneDependency(r))).getOrElse {//先从checkpointRDD中获取依赖,如果没有,则获取本身依赖的RDD
+    checkpointRDD.map(r => List(new OneToOneDependency(r))).getOrElse {//先从checkpointRDD中获取依赖,如果没有,则获取本身依赖的RDD,即该rdd依赖checkpoint对应的RDD
       if (dependencies_ == null) {
         dependencies_ = getDependencies
       }
@@ -349,8 +350,8 @@ abstract class RDD[T: ClassTag](
    */
   private[spark] def computeOrReadCheckpoint(split: Partition, context: TaskContext): Iterator[T] =
   {
-    if (isCheckpointedAndMaterialized) {
-      firstParent[T].iterator(split, context)
+    if (isCheckpointedAndMaterialized) {//说明已经checkpoint了,因此firstParent就是存储HDFS上的内容
+      firstParent[T].iterator(split, context)//读取HDFS上的内容
     } else {
       compute(split, context)
     }
@@ -1812,7 +1813,7 @@ res80: Array[(Int, String)] = Array((3,dog), (6,salmon), (6,salmon), (3,rat), (8
       // Lineage is not truncated yet, so just override any existing checkpoint data with ours
       checkpointData match {
         case Some(_: ReliableRDDCheckpointData[_]) => logWarning(
-          "RDD was already marked for reliable checkpointing: overriding with local checkpoint.")
+          "RDD was already marked for reliable checkpointing: overriding with local checkpoint.") //说明RDD已经是在HDFS上存在checkpoint了
         case _ =>
       }
       checkpointData = Some(new LocalRDDCheckpointData(this))
@@ -1822,6 +1823,7 @@ res80: Array[(Int, String)] = Array((3,dog), (6,salmon), (6,salmon), (3,rat), (8
 
   /**
    * Return whether this RDD is checkpointed and materialized, either reliably or locally.
+   * true表示已经完成了checkpoint操作了
    */
   def isCheckpointed: Boolean = checkpointData.exists(_.isCheckpointed)
 
@@ -1829,12 +1831,13 @@ res80: Array[(Int, String)] = Array((3,dog), (6,salmon), (6,salmon), (3,rat), (8
    * Return whether this RDD is checkpointed and materialized, either reliably or locally.
    * This is introduced as an alias for `isCheckpointed` to clarify the semantics of the
    * return value. Exposed for testing.
+   * true表示已经完成了checkpoint操作了
    */
   private[spark] def isCheckpointedAndMaterialized: Boolean = isCheckpointed
 
   /**
    * Return whether this RDD is marked for local checkpointing.
-   * Exposed for testing.
+   * Exposed for testing.仅仅为了测试使用LocalRDDCheckpointData
    */
   private[rdd] def isLocallyCheckpointed: Boolean = {
     checkpointData match {
@@ -1846,6 +1849,7 @@ res80: Array[(Int, String)] = Array((3,dog), (6,salmon), (6,salmon), (3,rat), (8
   /**
    * Gets the name of the directory to which this RDD was checkpointed.
    * This is not defined if the RDD is checkpointed locally.
+   * 获取已经完成checkpoint的目录
    */
   def getCheckpointFile: Option[String] = {
     checkpointData match {
@@ -1958,7 +1962,9 @@ res80: Array[(Int, String)] = Array((3,dog), (6,salmon), (6,salmon), (3,rat), (8
     dependencies_ = null
   }
 
-  /** A description of this RDD and its recursive dependencies for debugging. */
+  /** A description of this RDD and its recursive dependencies for debugging.
+    * 递归描述一个RDD的依赖内容
+    **/
   def toDebugString: String = {
     // Get a debug description of an rdd without its children
     def debugSelf(rdd: RDD[_]): Seq[String] = {
@@ -2049,19 +2055,26 @@ res80: Array[(Int, String)] = Array((3,dog), (6,salmon), (6,salmon), (3,rat), (8
  */
 object RDD {
 
+  /**
+  隐式转换
+   */
   // The following implicit functions were in SparkContext before 1.3 and users had to
   // `import SparkContext._` to enable them. Now we move them here to make the compiler find
   // them automatically. However, we still keep the old functions in SparkContext for backward
   // compatibility and forward to the following functions directly.
+  //1.可以将RDD[(K, V)]转换成PairRDDFunctions(rdd),即对KEY-value的RDD增加一些新的功能函数,该函数由PairRDDFunctions类提供
   implicit def rddToPairRDDFunctions[K, V](rdd: RDD[(K, V)])
     (implicit kt: ClassTag[K], vt: ClassTag[V], ord: Ordering[K] = null): PairRDDFunctions[K, V] = {
     new PairRDDFunctions(rdd)
   }
 
-  implicit def rddToAsyncRDDActions[T: ClassTag](rdd: RDD[T]): AsyncRDDActions[T] = {
-    new AsyncRDDActions(rdd)
+  //2.可以将RDD[(K, V)]转换成OrderedRDDFunctions(rdd),条件是Key是支持排序的Key,即对KEY-value的RDD增加一些新的功能函数,该函数由OrderedRDDFunctions类提供
+  implicit def rddToOrderedRDDFunctions[K : Ordering : ClassTag, V: ClassTag](rdd: RDD[(K, V)])
+  : OrderedRDDFunctions[K, V, (K, V)] = {
+    new OrderedRDDFunctions[K, V, (K, V)](rdd)
   }
 
+  //3.可以将RDD[(K, V)]转换成SequenceFileRDDFunctions(rdd),条件是Key和value都是支持hadoop的Writable接口的,即对KEY-value的RDD增加一些新的功能函数,该函数由SequenceFileRDDFunctions类提供
   implicit def rddToSequenceFileRDDFunctions[K, V](rdd: RDD[(K, V)])
       (implicit kt: ClassTag[K], vt: ClassTag[V],
                 keyWritableFactory: WritableFactory[K],
@@ -2073,17 +2086,20 @@ object RDD {
       keyWritableFactory.writableClass(kt), valueWritableFactory.writableClass(vt))
   }
 
-  implicit def rddToOrderedRDDFunctions[K : Ordering : ClassTag, V: ClassTag](rdd: RDD[(K, V)])
-    : OrderedRDDFunctions[K, V, (K, V)] = {
-    new OrderedRDDFunctions[K, V, (K, V)](rdd)
-  }
-
+  //4.可以将double的RDD,RDD[Double]转换成DoubleRDDFunctions,为double运算提供了新的函数
   implicit def doubleRDDToDoubleRDDFunctions(rdd: RDD[Double]): DoubleRDDFunctions = {
     new DoubleRDDFunctions(rdd)
   }
 
+  //5.可以将RDD[T]元素是Numeric数字类型的都转换成DoubleRDDFunctions,为数字运算提供了新的函数,实现是将每一个数字map成double类型
   implicit def numericRDDToDoubleRDDFunctions[T](rdd: RDD[T])(implicit num: Numeric[T])
     : DoubleRDDFunctions = {
     new DoubleRDDFunctions(rdd.map(x => num.toDouble(x)))
+  }
+
+
+  //6.可以为每一个RDD都转换成AsyncRDDActions,为RDD本身提供了异步的功能函数
+  implicit def rddToAsyncRDDActions[T: ClassTag](rdd: RDD[T]): AsyncRDDActions[T] = {
+    new AsyncRDDActions(rdd)
   }
 }

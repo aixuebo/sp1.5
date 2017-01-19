@@ -29,6 +29,7 @@ import org.apache.spark.{ComplexFutureAction, FutureAction, Logging}
 
 /**
  * A set of asynchronous RDD actions available through an implicit conversion.
+ * 可以为每一个RDD都转换成AsyncRDDActions,为RDD本身提供了异步的功能函数
  */
 class AsyncRDDActions[T: ClassTag](self: RDD[T]) extends Serializable with Logging {
 
@@ -39,7 +40,7 @@ class AsyncRDDActions[T: ClassTag](self: RDD[T]) extends Serializable with Loggi
     val totalCount = new AtomicLong
     self.context.submitJob(
       self,
-      (iter: Iterator[T]) => {
+      (iter: Iterator[T]) => {//每一个partition如何计算,即计算每一个partition的元素数量
         var result = 0L
         while (iter.hasNext) {
           result += 1L
@@ -47,17 +48,18 @@ class AsyncRDDActions[T: ClassTag](self: RDD[T]) extends Serializable with Loggi
         }
         result
       },
-      Range(0, self.partitions.length),
-      (index: Int, data: Long) => totalCount.addAndGet(data),
-      totalCount.get())
+      Range(0, self.partitions.length),//所有的partition集合
+      (index: Int, data: Long) => totalCount.addAndGet(data),//参数是每一个partitionId和该partition的返回值,向totalCount中汇总值
+      totalCount.get())//如何获取最终返回值
   }
 
   /**
    * Returns a future for retrieving all elements of this RDD.
    */
   def collectAsync(): FutureAction[Seq[T]] = self.withScope {
+    //返回每一个partition对应的数组集合T
     val results = new Array[Array[T]](self.partitions.length)
-    self.context.submitJob[T, Array[T], Seq[T]](self, _.toArray, Range(0, self.partitions.length),
+    self.context.submitJob[T, Array[T], Seq[T]](self, _.toArray, Range(0, self.partitions.length),//_.toArray表示将partition迭代器的内容作为数组返回
       (index, data) => results(index) = data, results.flatten.toSeq)
   }
 

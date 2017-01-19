@@ -2050,11 +2050,11 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    */
   @Experimental
   def submitJob[T, U, R](
-      rdd: RDD[T],
-      processPartition: Iterator[T] => U,
-      partitions: Seq[Int],
-      resultHandler: (Int, U) => Unit,
-      resultFunc: => R): SimpleFutureAction[R] =
+      rdd: RDD[T],//要处理的RDD
+      processPartition: Iterator[T] => U,//对RDD的一个partition元素内容进行处理,返回U
+      partitions: Seq[Int],//要处理的partition集合
+      resultHandler: (Int, U) => Unit,//如何处理每一个partitionid和该partition的返回值U
+      resultFunc: => R): SimpleFutureAction[R] = //返回最终结果R
   {
     assertNotStopped()
     val cleanF = clean(processPartition)

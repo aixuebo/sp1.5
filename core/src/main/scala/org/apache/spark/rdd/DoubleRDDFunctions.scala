@@ -32,7 +32,7 @@ import org.apache.spark.util.StatCounter
  * 参数是Double类型的RDD
  */
 class DoubleRDDFunctions(self: RDD[Double]) extends Logging with Serializable {
-  /** Add up the elements in this RDD. */
+  /** Add up the elements in this RDD. 求和*/
   def sum(): Double = self.withScope {
     self.fold(0.0)(_ + _)
   }
@@ -43,7 +43,7 @@ class DoubleRDDFunctions(self: RDD[Double]) extends Logging with Serializable {
    * 获取统计对象
    */
   def stats(): StatCounter = self.withScope {
-    self.mapPartitions(nums => Iterator(StatCounter(nums))).reduce((a, b) => a.merge(b))
+    self.mapPartitions(nums => Iterator(StatCounter(nums))).reduce((a, b) => a.merge(b)) //首先对每一个partiton迭代,转换成统计对象,然后合并每一个partition的结果
   }
 
   /** Compute the mean of this RDD's elements. */
@@ -111,7 +111,7 @@ class DoubleRDDFunctions(self: RDD[Double]) extends Logging with Serializable {
    * If the RDD contains infinity, NaN throws an exception
    * If the elements in RDD do not vary (max == min) always returns a single bucket.
    * 
-   * @bucketCount 表示将最大值与最小值之间拆分成多少分,该值最少也要是1
+   * bucketCount 表示将最大值与最小值之间拆分成多少分,该值最少也要是1
    * 获取直方图数据
    */
   def histogram(bucketCount: Int): Pair[Array[Double], Array[Long]] = self.withScope {
