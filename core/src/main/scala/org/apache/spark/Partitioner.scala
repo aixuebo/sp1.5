@@ -184,6 +184,7 @@ class RangePartitioner[K : Ordering : ClassTag, V](
 
   private var binarySearch: ((Array[K], K) => Int) = CollectionsUtils.makeBinarySearch[K] //二分法查找K是否在数组K中存在,存在的话,返回下标位置
 
+  //找到该key在哪个partition中,因为partition是按照key是有顺序的,因此一个key在哪个partition是可以确定的
   def getPartition(key: Any): Int = {
     val k = key.asInstanceOf[K]
     var partition = 0

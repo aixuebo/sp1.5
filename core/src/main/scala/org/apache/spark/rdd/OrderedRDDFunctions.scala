@@ -40,6 +40,7 @@ import org.apache.spark.annotation.DeveloperApi
  *   // Sort by key, using the above case insensitive ordering.
  *   rdd.sortByKey()
  * }}}
+ * 对RDD[K,V]形式的数据,其中K是支持排序的隐式转换,提供一些附加功能
  */
 class OrderedRDDFunctions[K : Ordering : ClassTag,//可以排序的K
                           V: ClassTag,
@@ -71,6 +72,7 @@ class OrderedRDDFunctions[K : Ordering : ClassTag,//可以排序的K
    *
    * This is more efficient than calling `repartition` and then sorting within each partition
    * because it can push the sorting down into the shuffle machinery.
+   * 重新分配partition数量,并且保证每一个shuffle的结果是有顺序的,但是不保证多个partition文件中key是有顺序的
    */
   def repartitionAndSortWithinPartitions(partitioner: Partitioner): RDD[(K, V)] = self.withScope {
     new ShuffledRDD[K, V, V](self, partitioner).setKeyOrdering(ordering)
@@ -82,6 +84,7 @@ class OrderedRDDFunctions[K : Ordering : ClassTag,//可以排序的K
    * performed efficiently by only scanning the partitions that might contain matching elements.
    * Otherwise, a standard `filter` is applied to all partitions.
    * 设置K的区间范围,即给定该区间的K的最小值和最大值
+   * 查找全部RDD中的一个子集,子集的内容是key在[lower,upper]区间即可
    */
   def filterByRange(lower: K, upper: K): RDD[P] = self.withScope {
 
@@ -91,10 +94,10 @@ class OrderedRDDFunctions[K : Ordering : ClassTag,//可以排序的K
     //如何过滤RDD,返回的还是RDD本身,只是过滤了一层
     val rddToFilter: RDD[P] = self.partitioner match {
       case Some(rp: RangePartitioner[K, V]) => {//对RDD本身进行过滤
-        val partitionIndicies = (rp.getPartition(lower), rp.getPartition(upper)) match {
+        val partitionIndicies = (rp.getPartition(lower), rp.getPartition(upper)) match {//因此可以根据key的过滤器,就能算出来只要扫描哪些partition即可,不需要扫描全部的partition
           case (l, u) => Math.min(l, u) to Math.max(l, u)
         }
-        PartitionPruningRDD.create(self, partitionIndicies.contains)
+        PartitionPruningRDD.create(self, partitionIndicies.contains) //过滤,只要partitionIndicies包含的partitionid
       }
       case _ =>
         self //如果不是RangePartitioner,则就返回RDD本身自己

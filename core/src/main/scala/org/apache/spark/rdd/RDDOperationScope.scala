@@ -47,7 +47,7 @@ private[spark] class RDDOperationScope(
     val id: String = RDDOperationScope.nextScopeId().toString) {
 
   def toJson: String = {
-    RDDOperationScope.jsonMapper.writeValueAsString(this)
+    RDDOperationScope.jsonMapper.writeValueAsString(this) //将RDDOperationScope对象转换成json字符串
   }
 
   /**
@@ -75,9 +75,10 @@ private[spark] class RDDOperationScope(
  * An RDD scope tracks the series of operations that created a given RDD.
  */
 private[spark] object RDDOperationScope extends Logging {
-  private val jsonMapper = new ObjectMapper().registerModule(DefaultScalaModule)
-  private val scopeCounter = new AtomicInteger(0)
+  private val jsonMapper = new ObjectMapper().registerModule(DefaultScalaModule) //返回一个json对象
+  private val scopeCounter = new AtomicInteger(0) //计数器
 
+  //将一个json字符串转换成对象
   def fromJson(s: String): RDDOperationScope = {
     jsonMapper.readValue(s, classOf[RDDOperationScope])
   }
@@ -94,7 +95,7 @@ private[spark] object RDDOperationScope extends Logging {
    */
   private[spark] def withScope[T](
       sc: SparkContext,
-      allowNesting: Boolean = false)(body: => T): T = {
+      allowNesting: Boolean = false)(body: => T): T = { //执行一个body内容,返回T对象
     val ourMethodName = "withScope"
     val callerMethodName = Thread.currentThread.getStackTrace()
       .dropWhile(_.getMethodName != ourMethodName)

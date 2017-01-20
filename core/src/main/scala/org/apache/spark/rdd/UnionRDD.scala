@@ -56,11 +56,12 @@ private[spark] class UnionPartition[T: ClassTag](
   }
 }
 
+//表示将N个RDD进行合并,称为更大的RDD,但是新的RDD的partition数量是N个RDD的partition数量之和,即不会合并RDD处理
 @DeveloperApi
 class UnionRDD[T: ClassTag](
     sc: SparkContext,
     var rdds: Seq[RDD[T]])//要合并的一组RDD集合
-  extends RDD[T](sc, Nil) {  // Nil since we implement getDependencies
+  extends RDD[T](sc, Nil) {  // Nil since we implement getDependencies 这个RDD是根RDD,因为他的父RDD是nil
 
   //返回新的partition对象集合
   override def getPartitions: Array[Partition] = {
@@ -73,11 +74,12 @@ class UnionRDD[T: ClassTag](
     array
   }
 
+
   override def getDependencies: Seq[Dependency[_]] = {
     val deps = new ArrayBuffer[Dependency[_]]
     var pos = 0
     for (rdd <- rdds) {//这个是每一个父RDD对应的依赖
-      deps += new RangeDependency(rdd, 0, pos, rdd.partitions.length)
+      deps += new RangeDependency(rdd, 0, pos, rdd.partitions.length) // 虽然新RDD依赖父RDD也是一对一的,但是依赖的却有一个范围,该类是一对一的一种特别,计数要有一个基数,基数就是outStart
       pos += rdd.partitions.length
     }
     deps

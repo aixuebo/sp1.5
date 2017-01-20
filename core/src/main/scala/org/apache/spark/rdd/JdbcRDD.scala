@@ -60,7 +60,7 @@ class JdbcRDD[T: ClassTag](
     upperBound: Long,//最大值
     numPartitions: Int,//最终拆分成多少个partition
     mapRow: (ResultSet) => T = JdbcRDD.resultSetToObjectArray _) //将参数为ResultSet,转换成T对象
-  extends RDD[T](sc, Nil) with Logging {
+  extends RDD[T](sc, Nil) with Logging {//属于根RDD,因为父RDD是Nil
 
   //第idx个partition,仅仅抓取从lower到upper的数据
   override def getPartitions: Array[Partition] = {

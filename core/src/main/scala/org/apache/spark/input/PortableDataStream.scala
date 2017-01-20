@@ -148,10 +148,11 @@ class PortableDataStream(
   @transient private var fileIn: DataInputStream = null
   @transient private var isOpen = false
 
+  //将conf对象存储到输出流中,返回的是conf对象对应的字节数组
   private val confBytes = {
-    val baos = new ByteArrayOutputStream()
+    val baos = new ByteArrayOutputStream()//输出流
     SparkHadoopUtil.get.getConfigurationFromJobContext(context).
-      write(new DataOutputStream(baos))
+      write(new DataOutputStream(baos))//conf对象输出到输出流中
     baos.toByteArray
   }
 

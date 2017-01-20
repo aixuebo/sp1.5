@@ -48,6 +48,9 @@ import org.apache.spark.serializer.Serializer
  * you can use `rdd1`'s partitioner/partition size and not worry about running
  * out of memory because of the size of `rdd2`.
  * 对两个rdd进行交互,获取RDD1存在,RDD2不存在数据,即差异的元素
+ *
+ * 如果partitioner不同,则要先进行shuffle,确保同一个key都在同一个partition中
+ * 然后才能方便判断是否存在Key
  */
 private[spark] class SubtractedRDD[K: ClassTag, V: ClassTag, W: ClassTag](
     @transient var rdd1: RDD[_ <: Product2[K, V]],//K-V键值对的RDD1
@@ -102,6 +105,7 @@ private[spark] class SubtractedRDD[K: ClassTag, V: ClassTag, W: ClassTag](
   override def compute(p: Partition, context: TaskContext): Iterator[(K, V)] = {
     val partition = p.asInstanceOf[CoGroupPartition]
 
+    //该map可能当不太一样的数据很多的时候,会造成内存益处的可能,但是也不会,因为一个partition的内容都已经装进来了,而一个文件数据块又128M,因此也不会造成内存溢出,但是至少该方法一定是耗费内存的方法
     val map = new JHashMap[K, ArrayBuffer[V]] //最终存储rdd1中存在,rdd2中不存在的元素内容
 
     //返回key对应的一个数组集合

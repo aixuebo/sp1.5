@@ -24,8 +24,8 @@ import org.apache.spark.util.StatCounter
 /**
  * An ApproximateEvaluator for means.
  * 估算一个平均值
- * @totalOutputs 表示一共有多少个统计输出
- * @confidence 置信值
+ * totalOutputs 表示一共有多少个统计输出
+ * confidence 置信值
  */
 private[spark] class MeanEvaluator(totalOutputs: Int, confidence: Double)
   extends ApproximateEvaluator[StatCounter, BoundedDouble] {
@@ -33,6 +33,11 @@ private[spark] class MeanEvaluator(totalOutputs: Int, confidence: Double)
   var outputsMerged = 0 //一共合并了几个输出
   var counter = new StatCounter //合并后的最终统计值
 
+  /**
+   * 合并partition的输出结果
+   * @param outputId 表示哪个partition已经完成了
+   * @param taskResult 表示该partition的输出结果
+   */
   override def merge(outputId: Int, taskResult: StatCounter) {
     outputsMerged += 1 //累加合并的输出
     counter.merge(taskResult) //合并统计值

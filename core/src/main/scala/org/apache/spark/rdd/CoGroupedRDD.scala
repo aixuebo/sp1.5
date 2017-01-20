@@ -61,8 +61,8 @@ private[spark] case class NarrowCoGroupSplitDep(
  *                   the partition for that dependency) at the corresponding index. The size of
  *                   narrowDeps should always be equal to the number of parents.
  *  该类表示CoGroupedRDD的每一个partition对应一个该对象
- *  @idx 表示该CoGroupPartition是CoGroupedRDD的第几个partition
- *  @narrowDeps
+ *  idx 表示该CoGroupPartition是CoGroupedRDD的第几个partition
+ *  narrowDeps
  */
 private[spark] class CoGroupPartition(
     idx: Int, val narrowDeps: Array[Option[NarrowCoGroupSplitDep]])
@@ -87,7 +87,7 @@ private[spark] class CoGroupPartition(
  */
 @DeveloperApi
 class CoGroupedRDD[K](@transient var rdds: Seq[RDD[_ <: Product2[K, _]]], part: Partitioner)
-  extends RDD[(K, Array[Iterable[_]])](rdds.head.context, Nil) {//返回值是key,value是Array数组,每一个元素是一个迭代器,每一个迭代器都是RDD与key关联后的返回值
+  extends RDD[(K, Array[Iterable[_]])](rdds.head.context, Nil) {//返回值是key,value是Array数组,每一个元素是一个迭代器,每一个迭代器都是RDD与key关联后的返回值,该RDD最终也是根RDD,因为父RDD是nil
 
   // For example, `(k, a) cogroup (k, b)` produces k -> Array(ArrayBuffer as, ArrayBuffer bs).
   // Each ArrayBuffer is represented as a CoGroup, and the resulting Array as a CoGroupCombiner.
@@ -107,6 +107,7 @@ class CoGroupedRDD[K](@transient var rdds: Seq[RDD[_ <: Product2[K, _]]], part: 
   /**
    * 循环每一个RDD,返回每一个RDD与新的RDD之间的关系
    * 例如返回值是 seq[OneToOneDependency,OneToOneDependency,ShuffleDependency] 表示该CoGroupedRDD有3个父RDD,与三个RDD每一个对应依赖关系是OneToOneDependency,OneToOneDependency,ShuffleDependency
+   * 该实现逻辑是 如果多个RDD的partitoner不同,则要先进行shuffle,确保同一个key都在同一个partition中,然后才能方便判断是否存在Key
    */
   override def getDependencies: Seq[Dependency[_]] = {
     rdds.map { rdd: RDD[_] =>
@@ -144,12 +145,13 @@ class CoGroupedRDD[K](@transient var rdds: Seq[RDD[_ <: Product2[K, _]]], part: 
 
   override def compute(s: Partition, context: TaskContext): Iterator[(K, Array[Iterable[_]])] = {
     val sparkConf = SparkEnv.get.conf
-    val externalSorting = sparkConf.getBoolean("spark.shuffle.spill", true)
+    val externalSorting = sparkConf.getBoolean("spark.shuffle.spill", true) //true表示内存不够的时候,进行外部排序存储
     val split = s.asInstanceOf[CoGroupPartition]
     val numRdds = dependencies.length
 
     // A list of (rdd iterator, dependency number) pairs,数组的每一个元素组成,key是每一个父RDD的某个partition的输出流迭代器,value是该父RDD是第几个依赖的RDD
     val rddIterators = new ArrayBuffer[(Iterator[Product2[K, Any]], Int)]
+
     //循环所有依赖的父RDD集合,元组是依赖的父RDD,以及父RDD的序号
     for ((dep, depNum) <- dependencies.zipWithIndex) dep match {
       //如果依赖是一对一的,所以只要找到该父RDD对应的一个partiton即可
@@ -167,14 +169,17 @@ class CoGroupedRDD[K](@transient var rdds: Seq[RDD[_ <: Product2[K, _]]], part: 
         rddIterators += ((it, depNum))
     }
 
-    if (!externalSorting) {
+    if (!externalSorting) {//不用外部排序,就用内存排序
       val map = new AppendOnlyMap[K, CoGroupCombiner]
       val update: (Boolean, CoGroupCombiner) => CoGroupCombiner = (hadVal, oldVal) => {
         if (hadVal) oldVal else Array.fill(numRdds)(new CoGroup)
       }
+
       val getCombiner: K => CoGroupCombiner = key => {
         map.changeValue(key, update)
       }
+
+      //因为k-v结构,没有对key和value进行排序.因此最终输出的结果也是没有排序的
       rddIterators.foreach { case (it, depNum) =>
         while (it.hasNext) {
           val kv = it.next()
@@ -183,7 +188,7 @@ class CoGroupedRDD[K](@transient var rdds: Seq[RDD[_ <: Product2[K, _]]], part: 
       }
       new InterruptibleIterator(context,
         map.iterator.asInstanceOf[Iterator[(K, Array[Iterable[_]])]])
-    } else {
+    } else {//外部存储排序
       val map = createExternalMap(numRdds)
       for ((it, depNum) <- rddIterators) {
         map.insertAll(it.map(pair => (pair._1, new CoGroupValue(pair._2, depNum))))
@@ -197,6 +202,7 @@ class CoGroupedRDD[K](@transient var rdds: Seq[RDD[_ <: Product2[K, _]]], part: 
     }
   }
 
+  //创建外部的存储对象
   private def createExternalMap(numRdds: Int)
     : ExternalAppendOnlyMap[K, CoGroupValue, CoGroupCombiner] = {
 

@@ -49,6 +49,8 @@ abstract class NarrowDependency[T](_rdd: RDD[T]) extends Dependency[T] {
    * @param partitionId a partition of the child RDD 参数是子RDD的partitionId
    * @return the partitions of the parent RDD that the child partition depends upon 返回值是与该子RDD的partition对应的N个父RDD的partition
    * 表示该partition依赖父RDD的哪些partition序号集合
+   *
+   * 比如参见PartitionPruningRDD类文件的PruneDependency
    */
   def getParents(partitionId: Int): Seq[Int]
 
@@ -134,6 +136,11 @@ class OneToOneDependency[T](rdd: RDD[T]) extends NarrowDependency[T](rdd) {
 
 
  RangeDependency表示在一个range范围内，依赖关系是一对一的，所以初始化的时候会有一个范围，范围外的partitionId，传进去之后返回的是Nil。
+
+
+ 方便找到新生成的RDD的某一个partition,他应该依赖父RDD的哪些partition
+
+ 虽然新RDD依赖父RDD也是一对一的,但是依赖的却有一个范围,该类是一对一的一种特别,计数要有一个基数,基数就是outStart
 */
 @DeveloperApi
 class RangeDependency[T](rdd: RDD[T], inStart: Int, outStart: Int, length: Int)

@@ -34,6 +34,7 @@ class PartitionerAwareUnionRDDPartition(
     val idx: Int //该RDD是第几个RDD,即依赖第几个父RDD
   ) extends Partition {
 
+  //该rdd的partition依赖父RDD中每一个RDD相对应的partition位置
   var parents = rdds.map(_.partitions(idx)).toArray //该partition需要父RDD的partition集合
 
   override val index = idx
@@ -55,7 +56,7 @@ class PartitionerAwareUnionRDDPartition(
  * of the corresponding partitions of the parent RDDs. For example, location of partition 0
  * of the unified RDD will be where most of partition 0 of the parent RDDs are located.
  * 多个RDD拥有相同的partitioner,将他们合并成一个RDD
- *
+ * PartitionerAwareUnionRDD 表示把N个RDD,每一个partition序号相同的,进行合并,即如果有10个partition,则最终结果依然是10个partition,只不过每一个partiton存在了更多的RDD的数据而已
  */
 private[spark]
 class PartitionerAwareUnionRDD[T: ClassTag](

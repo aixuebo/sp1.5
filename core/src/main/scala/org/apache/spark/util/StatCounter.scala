@@ -103,15 +103,18 @@ class StatCounter(values: TraversableOnce[Double]) extends Serializable {
 
   def count: Long = n
 
-  def mean: Double = mu
+  def mean: Double = mu //平均值
 
-  def sum: Double = n * mu
+  def sum: Double = n * mu //求和 就是数量*均值
 
   def max: Double = maxValue
 
   def min: Double = minValue
 
-  /** Return the variance of the values. */
+  /** Return the variance of the values.
+    * 计算方差
+     */
+    **/
   def variance: Double = {
     if (n == 0) {
       Double.NaN
@@ -123,6 +126,7 @@ class StatCounter(values: TraversableOnce[Double]) extends Serializable {
   /**
    * Return the sample variance, which corrects for bias in estimating the variance by dividing
    * by N-1 instead of N.
+   * 样本方差,另外一种方差计算方法
    */
   def sampleVariance: Double = {
     if (n <= 1) {
@@ -132,12 +136,15 @@ class StatCounter(values: TraversableOnce[Double]) extends Serializable {
     }
   }
 
-  /** Return the standard deviation of the values. */
+  /** Return the standard deviation of the values.
+    * 方差的开方,即标准差
+    **/
   def stdev: Double = math.sqrt(variance)
 
   /**
    * Return the sample standard deviation of the values, which corrects for bias in estimating the
    * variance by dividing by N-1 instead of N.
+   * 样本方差的开方,即样本标准差
    */
   def sampleStdev: Double = math.sqrt(sampleVariance)
 

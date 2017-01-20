@@ -46,35 +46,43 @@ class DoubleRDDFunctions(self: RDD[Double]) extends Logging with Serializable {
     self.mapPartitions(nums => Iterator(StatCounter(nums))).reduce((a, b) => a.merge(b)) //首先对每一个partiton迭代,转换成统计对象,然后合并每一个partition的结果
   }
 
-  /** Compute the mean of this RDD's elements. */
+  /** Compute the mean of this RDD's elements.
+    * 平均自
+    **/
   def mean(): Double = self.withScope {
     stats().mean
   }
 
-  /** Compute the variance of this RDD's elements. */
+  /** Compute the variance of this RDD's elements.
+    * 方差
+    **/
   def variance(): Double = self.withScope {
     stats().variance
   }
 
-  /** Compute the standard deviation of this RDD's elements. */
+  /** Compute the standard deviation of this RDD's elements.
+    * 方差的开方,标准差
+    **/
   def stdev(): Double = self.withScope {
     stats().stdev
   }
 
   /**
-   * Compute the sample standard deviation of this RDD's elements (which corrects for bias in
-   * estimating the standard deviation by dividing by N-1 instead of N).
-   */
-  def sampleStdev(): Double = self.withScope {
-    stats().sampleStdev
-  }
-
-  /**
    * Compute the sample variance of this RDD's elements (which corrects for bias in
    * estimating the variance by dividing by N-1 instead of N).
+   * 样本方差
    */
   def sampleVariance(): Double = self.withScope {
     stats().sampleVariance
+  }
+
+  /**
+   * Compute the sample standard deviation of this RDD's elements (which corrects for bias in
+   * estimating the standard deviation by dividing by N-1 instead of N).
+   * 样本方差的开方,样本标准差
+   */
+  def sampleStdev(): Double = self.withScope {
+    stats().sampleStdev
   }
 
   /**
@@ -113,31 +121,50 @@ class DoubleRDDFunctions(self: RDD[Double]) extends Logging with Serializable {
    * 
    * bucketCount 表示将最大值与最小值之间拆分成多少分,该值最少也要是1
    * 获取直方图数据
+   *
+   * 返回值第一个Array[Double] 表示分组后每一个指标的区间
+   *
    */
   def histogram(bucketCount: Int): Pair[Array[Double], Array[Long]] = self.withScope {
+
     // Scala's built-in range has issues. See #SI-8782
+    /**
+     *
+     * @param min 最小值
+     * @param max 最大值
+     * @param steps 最终多少个分组
+     * @return 返回每个分组的区间
+     */
     def customRange(min: Double, max: Double, steps: Int): IndexedSeq[Double] = {
-      val span = max - min
+      val span = max - min //最大值和最小值的差,就是总区间
+      /**
+Range.Int(0, 5, 1) 输出NumericRange(0, 1, 2, 3, 4)
+Range.Int(0, 5, 2) 输出 NumericRange(0, 2, 4)
+循环分组个数,每一个分组,最终返回的是分组后的区间结果集
+       */
       Range.Int(0, steps, 1).map(s => min + (s * span) / steps) :+ max
     }
-    // Compute the minimum and the maximum
+
+    // Compute the minimum and the maximum 先计算每一个partition的最大值和最小值,最终合并成全局的最大值和最小值
     val (max: Double, min: Double) = self.mapPartitions { items =>
       Iterator(items.foldRight(Double.NegativeInfinity,
         Double.PositiveInfinity)((e: Double, x: Pair[Double, Double]) =>
-        (x._1.max(e), x._2.min(e))))
+        (x._1.max(e), x._2.min(e)))) //每一个元素拿出来,对比出最大值和最小值
     }.reduce { (maxmin1, maxmin2) =>
       (maxmin1._1.max(maxmin2._1), maxmin1._2.min(maxmin2._2))
-    }
+    }//合并所有的partition,成全局的最大值和最小值
+
     if (min.isNaN || max.isNaN || max.isInfinity || min.isInfinity ) {
       throw new UnsupportedOperationException(
         "Histogram on either an empty RDD or RDD containing +/-infinity or NaN")
     }
-    val range = if (min != max) {
+
+    val range = if (min != max) {//说明最大值和最小值不相同
       // Range.Double.inclusive(min, max, increment)
       // The above code doesn't always work. See Scala bug #SI-8782.
       // https://issues.scala-lang.org/browse/SI-8782
       customRange(min, max, bucketCount)
-    } else {
+    } else {//说明最大值和最小值相同
       List(min, min)
     }
     val buckets = range.toArray
@@ -160,6 +187,8 @@ class DoubleRDDFunctions(self: RDD[Double]) extends Logging with Serializable {
    * All NaN entries are treated the same. If you have a NaN bucket it must be
    * the maximum value of the last position and all NaN entries will be counted
    * in that bucket.
+   *
+   * 参数buckets 表示直方图中分组的数字
    */
   def histogram(
       buckets: Array[Double],
@@ -172,27 +201,31 @@ class DoubleRDDFunctions(self: RDD[Double]) extends Logging with Serializable {
     // to increment or returns None if there is no bucket. This is done so we can
     // specialize for uniformly distributed buckets and save the O(log n) binary
     // search cost.
+    //iter表示一个partition的迭代器
+    //函数bucketFunction 表示一个double属于哪个标签内
+    //返回每一个partition的每一个标签分组内有多少个数据
     def histogramPartition(bucketFunction: (Double) => Option[Int])(iter: Iterator[Double]):
         Iterator[Array[Long]] = {
-      val counters = new Array[Long](buckets.length - 1)
+      val counters = new Array[Long](buckets.length - 1) //柱状图的区间
       while (iter.hasNext) {
         bucketFunction(iter.next()) match {
-          case Some(x: Int) => {counters(x) += 1}
+          case Some(x: Int) => {counters(x) += 1}//该标签分组内数据量+1
           case _ => {}
         }
       }
-      Iterator(counters)
+      Iterator(counters) //返回每一个标签分组内有多少个数据
     }
-    // Merge the counters.
+    // Merge the counters.合并所有partition中每一个标签分组内的数据量
     def mergeCounters(a1: Array[Long], a2: Array[Long]): Array[Long] = {
       a1.indices.foreach(i => a1(i) += a2(i))
       a1
     }
     // Basic bucket function. This works using Java's built in Array
     // binary search. Takes log(size(buckets))
+    //查看参数double属于哪个区间
     def basicBucketFunction(e: Double): Option[Int] = {
-      val location = java.util.Arrays.binarySearch(buckets, e)
-      if (location < 0) {
+      val location = java.util.Arrays.binarySearch(buckets, e) //标签范围
+      if (location < 0) {//没有在该标签内
         // If the location is less than 0 then the insertion point in the array
         // to keep it sorted is -location-1
         val insertionPoint = -location-1
@@ -205,7 +238,7 @@ class DoubleRDDFunctions(self: RDD[Double]) extends Logging with Serializable {
         } else {
           None
         }
-      } else if (location < buckets.length - 1) {
+      } else if (location < buckets.length - 1) {//返回具体的位置
         // Exact match, just insert here
         Some(location)
       } else {
@@ -213,7 +246,9 @@ class DoubleRDDFunctions(self: RDD[Double]) extends Logging with Serializable {
         Some(location - 1)
       }
     }
+
     // Determine the bucket function in constant time. Requires that buckets are evenly spaced
+    //min和max表示柱状图的最小值和最大值的分区,count表示分区数量,一共多少个分组,e表示一个value值,输出是该value值属于第几个分区内
     def fastBucketFunction(min: Double, max: Double, count: Int)(e: Double): Option[Int] = {
       // If our input is not a number unless the increment is also NaN then we fail fast
       if (e.isNaN || e < min || e > max) {
@@ -234,6 +269,8 @@ class DoubleRDDFunctions(self: RDD[Double]) extends Logging with Serializable {
     } else {
       basicBucketFunction _
     }
+
+    //去计算每一个分区有多少条数据
     if (self.partitions.length == 0) {
       new Array[Long](buckets.length - 1)
     } else {

@@ -92,6 +92,7 @@
     <module>network/shuffle</module>
     <module>network/yarn</module>
     <module>launcher</module>
+    <module>streaming</module>
     <module>examples</module>
   </modules>
 
