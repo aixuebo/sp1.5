@@ -35,6 +35,7 @@ private[streaming] trait BlockGeneratorListener {
    * for updating metadata on successful buffering of a data item, specifically that metadata
    * that will be useful when a block is generated. Any long blocking operation in this callback
    * will hurt the throughput.
+   * 已经添加完数据
    */
   def onAddData(data: Any, metadata: Any)
 
@@ -45,6 +46,7 @@ private[streaming] trait BlockGeneratorListener {
    * for updating metadata when a block has been generated, specifically metadata that will
    * be useful when the block has been successfully stored. Any long blocking operation in this
    * callback will hurt the throughput.
+   * 一个新的数据块被产生的时候调用该事件
    */
   def onGenerateBlock(blockId: StreamBlockId)
 
@@ -74,7 +76,7 @@ private[streaming] trait BlockGeneratorListener {
  * `ReceiverSupervisor.createBlockGenerator` to create a BlockGenerator and use it.
  */
 private[streaming] class BlockGenerator(
-    listener: BlockGeneratorListener,
+    listener: BlockGeneratorListener,//监听器
     receiverId: Int,
     conf: SparkConf,
     clock: Clock = new SystemClock()
@@ -84,13 +86,13 @@ private[streaming] class BlockGenerator(
 
   /**
    * The BlockGenerator can be in 5 possible states, in the order as follows.
-   * - Initialized: Nothing has been started
-   * - Active: start() has been called, and it is generating blocks on added data.
+   * - Initialized: Nothing has been started 初始化之后
+   * - Active: start() has been called, and it is generating blocks on added data. 已经调用了start方法
    * - StoppedAddingData: stop() has been called, the adding of data has been stopped,
-   *                      but blocks are still being generated and pushed.
+   *                      but blocks are still being generated and pushed.已经调用了stop方法,数据已经停止被添加了,但是数据块仍然可以被产生和推送
    * - StoppedGeneratingBlocks: Generating of blocks has been stopped, but
-   *                            they are still being pushed.
-   * - StoppedAll: Everything has stopped, and the BlockGenerator object can be GCed.
+   *                            they are still being pushed. 不能产生数据块了,但是仍然可以被推送
+   * - StoppedAll: Everything has stopped, and the BlockGenerator object can be GCed. 全部都停止了
    */
   private object GeneratorState extends Enumeration {
     type GeneratorState = Value
@@ -102,12 +104,15 @@ private[streaming] class BlockGenerator(
   require(blockIntervalMs > 0, s"'spark.streaming.blockInterval' should be a positive value")
 
   private val blockIntervalTimer =
-    new RecurringTimer(clock, blockIntervalMs, updateCurrentBuffer, "BlockGenerator")
-  private val blockQueueSize = conf.getInt("spark.streaming.blockQueueSize", 10)
-  private val blocksForPushing = new ArrayBlockingQueue[Block](blockQueueSize)
+    new RecurringTimer(clock, blockIntervalMs, updateCurrentBuffer, "BlockGenerator")//一定周期内,产生一个数据块
+
+  private val blockQueueSize = conf.getInt("spark.streaming.blockQueueSize", 10)//队列大小
+  private val blocksForPushing = new ArrayBlockingQueue[Block](blockQueueSize)//等待被推送的数据块队列
+
+
   private val blockPushingThread = new Thread() { override def run() { keepPushingBlocks() } }
 
-  @volatile private var currentBuffer = new ArrayBuffer[Any]
+  @volatile private var currentBuffer = new ArrayBuffer[Any] //要添加的数据缓存
   @volatile private var state = Initialized
 
   /** Start block generating and pushing threads. */
@@ -157,7 +162,7 @@ private[streaming] class BlockGenerator(
    */
   def addData(data: Any): Unit = {
     if (state == Active) {
-      waitToPush()
+      waitToPush()//等待流量是否足够
       synchronized {
         if (state == Active) {
           currentBuffer += data
@@ -175,6 +180,7 @@ private[streaming] class BlockGenerator(
   /**
    * Push a single data item into the buffer. After buffering the data, the
    * `BlockGeneratorListener.onAddData` callback will be called.
+   * 添加之后产生一个回调
    */
   def addDataWithCallback(data: Any, metadata: Any): Unit = {
     if (state == Active) {
@@ -198,6 +204,7 @@ private[streaming] class BlockGenerator(
    * Push multiple data items into the buffer. After buffering the data, the
    * `BlockGeneratorListener.onAddData` callback will be called. Note that all the data items
    * are atomically added to the buffer, and are hence guaranteed to be present in a single block.
+   * 添加一组数据,然后回调
    */
   def addMultipleDataWithCallback(dataIterator: Iterator[Any], metadata: Any): Unit = {
     if (state == Active) {
@@ -231,7 +238,7 @@ private[streaming] class BlockGenerator(
     try {
       var newBlock: Block = null
       synchronized {
-        if (currentBuffer.nonEmpty) {
+        if (currentBuffer.nonEmpty) {//切换buffer数据,称为一个数据块
           val newBlockBuffer = currentBuffer
           currentBuffer = new ArrayBuffer[Any]
           val blockId = StreamBlockId(receiverId, time - blockIntervalMs)
@@ -251,10 +258,13 @@ private[streaming] class BlockGenerator(
     }
   }
 
-  /** Keep pushing blocks to the BlockManager. */
+  /** Keep pushing blocks to the BlockManager.
+    * 保持推送数据块到BlockManager
+    **/
   private def keepPushingBlocks() {
     logInfo("Started block pushing thread")
 
+    //StoppedGeneratingBlocks 不能产生数据块了,但是仍然可以被推送
     def areBlocksBeingGenerated: Boolean = synchronized {
       state != StoppedGeneratingBlocks
     }
@@ -262,7 +272,7 @@ private[streaming] class BlockGenerator(
     try {
       // While blocks are being generated, keep polling for to-be-pushed blocks and push them.
       while (areBlocksBeingGenerated) {
-        Option(blocksForPushing.poll(10, TimeUnit.MILLISECONDS)) match {
+        Option(blocksForPushing.poll(10, TimeUnit.MILLISECONDS)) match {//从队列中获取10个元素,
           case Some(block) => pushBlock(block)
           case None =>
         }
@@ -286,8 +296,8 @@ private[streaming] class BlockGenerator(
   }
 
   private def reportError(message: String, t: Throwable) {
-    logError(message, t)
-    listener.onError(message, t)
+    logError(message, t) //记录日志
+    listener.onError(message, t) //调用监听器
   }
 
   private def pushBlock(block: Block) {

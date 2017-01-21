@@ -87,6 +87,8 @@ case class TaskResultBlockId(taskId: Long) extends BlockId {
   override def name: String = "taskresult_" + taskId
 }
 
+//代表一个stream的数据块,同一个stream持有多个数据块,但是streamId是一样的,
+//uniqueid初始化的时候是持有的时间戳
 @DeveloperApi
 case class StreamBlockId(streamId: Int, uniqueId: Long) extends BlockId {
   override def name: String = "input-" + streamId + "-" + uniqueId

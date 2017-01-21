@@ -30,21 +30,27 @@ import org.apache.spark.streaming.util.{WriteAheadLogRecordHandle, WriteAheadLog
 import org.apache.spark.util.{Clock, SystemClock, ThreadUtils}
 import org.apache.spark.{Logging, SparkConf, SparkException}
 
-/** Trait that represents the metadata related to storage of blocks */
+/** Trait that represents the metadata related to storage of blocks
+  * 表示存储数据块后的返回结果
+  **/
 private[streaming] trait ReceivedBlockStoreResult {
-  // Any implementation of this trait will store a block id
+  // Any implementation of this trait will store a block id 去存储该数据块
   def blockId: StreamBlockId
-  // Any implementation of this trait will have to return the number of records
+  // Any implementation of this trait will have to return the number of records 存储的数据块有多少条记录
   def numRecords: Option[Long]
 }
 
 /** Trait that represents a class that handles the storage of blocks received by receiver */
 private[streaming] trait ReceivedBlockHandler {
 
-  /** Store a received block with the given block id and return related metadata */
+  /** Store a received block with the given block id and return related metadata
+    * 存储一个数据块  以及该数据块对应的内容
+    **/
   def storeBlock(blockId: StreamBlockId, receivedBlock: ReceivedBlock): ReceivedBlockStoreResult
 
-  /** Cleanup old blocks older than the given threshold time */
+  /** Cleanup old blocks older than the given threshold time
+    * 清理老的数据块信息
+    **/
   def cleanupOldBlocks(threshTime: Long)
 }
 
@@ -72,17 +78,17 @@ private[streaming] class BlockManagerBasedBlockHandler(
     var numRecords = None: Option[Long]
 
     val putResult: Seq[(BlockId, BlockStatus)] = block match {
-      case ArrayBufferBlock(arrayBuffer) =>
-        numRecords = Some(arrayBuffer.size.toLong)
+      case ArrayBufferBlock(arrayBuffer) => //说明接收的数据块是数组
+        numRecords = Some(arrayBuffer.size.toLong) //行数就是数组的大小
         blockManager.putIterator(blockId, arrayBuffer.iterator, storageLevel,
-          tellMaster = true)
-      case IteratorBlock(iterator) =>
-        val countIterator = new CountingIterator(iterator)
+          tellMaster = true) //存储数组内容
+      case IteratorBlock(iterator) => //说明接收的是一个迭代器
+        val countIterator = new CountingIterator(iterator) //该迭代器可以计算记录行数
         val putResult = blockManager.putIterator(blockId, countIterator, storageLevel,
           tellMaster = true)
         numRecords = countIterator.count
         putResult
-      case ByteBufferBlock(byteBuffer) =>
+      case ByteBufferBlock(byteBuffer) => //如果接收到的是一个字节数组
         blockManager.putBytes(blockId, byteBuffer, storageLevel, tellMaster = true)
       case o =>
         throw new SparkException(
@@ -117,6 +123,7 @@ private[streaming] case class WriteAheadLogBasedStoreResult(
 /**
  * Implementation of a [[org.apache.spark.streaming.receiver.ReceivedBlockHandler]] which
  * stores the received blocks in both, a write ahead log and a block manager.
+ * 既存储到数据块中,也存储到log日志中
  */
 private[streaming] class WriteAheadLogBasedBlockHandler(
     blockManager: BlockManager,
@@ -162,11 +169,12 @@ private[streaming] class WriteAheadLogBasedBlockHandler(
    * This implementation stores the block into the block manager as well as a write ahead log.
    * It does this in parallel, using Scala Futures, and returns only after the block has
    * been stored in both places.
+   * 同时向log和数据块管理器存储数据,是并行的去存储的数据,scala的Future保证了两者一定会都完成后才会被返回
    */
   def storeBlock(blockId: StreamBlockId, block: ReceivedBlock): ReceivedBlockStoreResult = {
 
     var numRecords = None: Option[Long]
-    // Serialize the block so that it can be inserted into both
+    // Serialize the block so that it can be inserted into both 对数据块内容进行序列化
     val serializedBlock = block match {
       case ArrayBufferBlock(arrayBuffer) =>
         numRecords = Some(arrayBuffer.size.toLong)
@@ -182,7 +190,8 @@ private[streaming] class WriteAheadLogBasedBlockHandler(
         throw new Exception(s"Could not push $blockId to block manager, unexpected block type")
     }
 
-    // Store the block in block manager
+    //并行的去写入两个地方
+    // Store the block in block manager 写入字节数组
     val storeInBlockManagerFuture = Future {
       val putResult =
         blockManager.putBytes(blockId, serializedBlock, effectiveStorageLevel, tellMaster = true)
@@ -192,14 +201,16 @@ private[streaming] class WriteAheadLogBasedBlockHandler(
       }
     }
 
-    // Store the block in write ahead log
+    // Store the block in write ahead log 写入到日志中
     val storeInWriteAheadLogFuture = Future {
       writeAheadLog.write(serializedBlock, clock.getTimeMillis())
     }
 
     // Combine the futures, wait for both to complete, and return the write ahead log record handle
+    //scala的Future特性,必须两个Future都成功了,才会被返回
+    //zip返回两个结果集,然后警告map处理,只要第二个Future结果集
     val combinedFuture = storeInBlockManagerFuture.zip(storeInWriteAheadLogFuture).map(_._2)
-    val walRecordHandle = Await.result(combinedFuture, blockStoreTimeout)
+    val walRecordHandle = Await.result(combinedFuture, blockStoreTimeout) //等候返回结果
     WriteAheadLogBasedStoreResult(blockId, numRecords, walRecordHandle)
   }
 
@@ -221,6 +232,7 @@ private[streaming] object WriteAheadLogBasedBlockHandler {
 
 /**
  * A utility that will wrap the Iterator to get the count
+ * 迭代数据,并且记录迭代器的记录条数
  */
 private[streaming] class CountingIterator[T](iterator: Iterator[T]) extends Iterator[T] {
    private var _count = 0

@@ -31,26 +31,35 @@ import org.apache.spark.util.{Utils, ThreadUtils}
 /**
  * Abstract class that is responsible for supervising a Receiver in the worker.
  * It provides all the necessary interfaces for handling the data received by the receiver.
+ *
  */
 private[streaming] abstract class ReceiverSupervisor(
     receiver: Receiver[_],
     conf: SparkConf
   ) extends Logging {
 
-  /** Enumeration to identify current state of the Receiver */
+  /** Enumeration to identify current state of the Receiver
+    * 状态
+    * 已经初始化了   已经开始了 已经结束了
+    **/
   object ReceiverState extends Enumeration {
     type CheckpointState = Value
     val Initialized, Started, Stopped = Value
   }
+
   import ReceiverState._
 
   // Attach the supervisor to the receiver
+  //对一个接收器注入该管理者
   receiver.attachSupervisor(this)
 
+  //开启线程池,最多允许128个线程
   private val futureExecutionContext = ExecutionContext.fromExecutorService(
     ThreadUtils.newDaemonCachedThreadPool("receiver-supervisor-future", 128))
 
-  /** Receiver id */
+  /** Receiver id
+    * 接受者ID
+    **/
   protected val streamId = receiver.streamId
 
   /** Has the receiver been marked for stop. */

@@ -23,17 +23,19 @@ import org.apache.spark._
 import org.apache.spark.storage.{BlockId, BlockManager}
 import scala.Some
 
+//每一个数据块对应的partitionId
 private[spark] class BlockRDDPartition(val blockId: BlockId, idx: Int) extends Partition {
   val index = idx
 }
 
 private[spark]
 class BlockRDD[T: ClassTag](@transient sc: SparkContext, @transient val blockIds: Array[BlockId])
-  extends RDD[T](sc, Nil) {
+  extends RDD[T](sc, Nil) {//根RDD,该RDD用于Stream中,该RDD是处理BlockId集合的
 
-  @transient lazy val _locations = BlockManager.blockIdsToHosts(blockIds, SparkEnv.get)
-  @volatile private var _isValid = true
+  @transient lazy val _locations = BlockManager.blockIdsToHosts(blockIds, SparkEnv.get) //获取参数数据块集合所在位置
+  @volatile private var _isValid = true //默认数据块都有效
 
+  //每一个数据块对应一个partition
   override def getPartitions: Array[Partition] = {
     assertValid()
     (0 until blockIds.length).map(i => {
@@ -41,6 +43,7 @@ class BlockRDD[T: ClassTag](@transient sc: SparkContext, @transient val blockIds
     }).toArray
   }
 
+  //获取该数据块的内容,因为内容存储的就是元素的迭代器
   override def compute(split: Partition, context: TaskContext): Iterator[T] = {
     assertValid()
     val blockManager = SparkEnv.get.blockManager
@@ -61,17 +64,19 @@ class BlockRDD[T: ClassTag](@transient sc: SparkContext, @transient val blockIds
    * Remove the data blocks that this BlockRDD is made from. NOTE: This is an
    * irreversible operation, as the data in the blocks cannot be recovered back
    * once removed. Use it with caution.
+   * 删除所有的数据块
    */
   private[spark] def removeBlocks() {
     blockIds.foreach { blockId =>
       sc.env.blockManager.master.removeBlock(blockId)
     }
-    _isValid = false
+    _isValid = false //因为删除了所有的数据块,因此数据块失效
   }
 
   /**
    * Whether this BlockRDD is actually usable. This will be false if the data blocks have been
    * removed using `this.removeBlocks`.
+   * 数据块此时是否有效
    */
   private[spark] def isValid: Boolean = {
     _isValid
@@ -85,6 +90,7 @@ class BlockRDD[T: ClassTag](@transient sc: SparkContext, @transient val blockIds
     }
   }
 
+  //全部数据块对应的host地址
   protected def getBlockIdLocations(): Map[BlockId, Seq[String]] = {
     _locations
   }

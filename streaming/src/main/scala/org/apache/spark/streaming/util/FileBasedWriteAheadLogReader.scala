@@ -27,27 +27,28 @@ import org.apache.spark.Logging
  * [[org.apache.spark.streaming.util.FileBasedWriteAheadLogWriter]]. This reads
  * the records (bytebuffers) in the log file sequentially and return them as an
  * iterator of bytebuffers.
+ * 读取整个文件
  */
 private[streaming] class FileBasedWriteAheadLogReader(path: String, conf: Configuration)
   extends Iterator[ByteBuffer] with Closeable with Logging {
 
-  private val instream = HdfsUtils.getInputStream(path, conf)
+  private val instream = HdfsUtils.getInputStream(path, conf) //输入流
   private var closed = false
-  private var nextItem: Option[ByteBuffer] = None
+  private var nextItem: Option[ByteBuffer] = None //下一个读取的内容
 
   override def hasNext: Boolean = synchronized {
     if (closed) {
       return false
     }
 
-    if (nextItem.isDefined) { // handle the case where hasNext is called without calling next
+    if (nextItem.isDefined) { // handle the case where hasNext is called without calling next 说明下一个内容已经存在了,还没有被消费掉
       true
     } else {
       try {
-        val length = instream.readInt()
+        val length = instream.readInt() //读取字节长度
         val buffer = new Array[Byte](length)
-        instream.readFully(buffer)
-        nextItem = Some(ByteBuffer.wrap(buffer))
+        instream.readFully(buffer) //读取内容
+        nextItem = Some(ByteBuffer.wrap(buffer)) //设置下一个内容
         logTrace("Read next item " + nextItem.get)
         true
       } catch {
@@ -64,12 +65,12 @@ private[streaming] class FileBasedWriteAheadLogReader(path: String, conf: Config
   }
 
   override def next(): ByteBuffer = synchronized {
-    val data = nextItem.getOrElse {
+    val data = nextItem.getOrElse {//获取下一个要消费的数据,如果没有,则关闭该文件流
       close()
       throw new IllegalStateException(
         "next called without calling hasNext or after hasNext returned false")
     }
-    nextItem = None // Ensure the next hasNext call loads new data.
+    nextItem = None // Ensure the next hasNext call loads new data. 消费掉,然后设置为None
     data
   }
 

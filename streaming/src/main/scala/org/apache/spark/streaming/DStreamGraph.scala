@@ -104,12 +104,14 @@ final private[streaming] class DStreamGraph extends Serializable with Logging {
 
   def getOutputStreams(): Array[DStream[_]] = this.synchronized { outputStreams.toArray }
 
+  //返回输入源中是ReceiverInputDStream类型的结果集
   def getReceiverInputStreams(): Array[ReceiverInputDStream[_]] = this.synchronized {
     inputStreams.filter(_.isInstanceOf[ReceiverInputDStream[_]])
       .map(_.asInstanceOf[ReceiverInputDStream[_]])
       .toArray
   }
 
+  //找到某一个输入源对应的name
   def getInputStreamName(streamId: Int): Option[String] = synchronized {
     inputStreams.find(_.id == streamId).map(_.name)
   }

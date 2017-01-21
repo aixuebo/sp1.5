@@ -59,14 +59,14 @@ import org.apache.spark.util.{CallSite, ShutdownHookManager, Utils}
  */
 class StreamingContext private[streaming] (
     sc_ : SparkContext,
-    cp_ : Checkpoint,
-    batchDur_ : Duration
+    cp_ : Checkpoint,//存储在hdfs上的文件
+    batchDur_ : Duration //被划分到batch里面的时间间隔
   ) extends Logging {
 
   /**
    * Create a StreamingContext using an existing SparkContext.
    * @param sparkContext existing SparkContext
-   * @param batchDuration the time interval at which streaming data will be divided into batches
+   * @param batchDuration the time interval at which streaming data will be divided into batches 被划分到batch里面的时间间隔
    */
   def this(sparkContext: SparkContext, batchDuration: Duration) = {
     this(sparkContext, null, batchDuration)
@@ -103,6 +103,7 @@ class StreamingContext private[streaming] (
    * @param path Path to the directory that was specified as the checkpoint directory
    * @param hadoopConf Optional, configuration object if necessary for reading from
    *                   HDFS compatible filesystems
+   * 从hadoop的hdfs上path读取一个输入源,
    */
   def this(path: String, hadoopConf: Configuration) =
     this(null, CheckpointReader.read(path, new SparkConf(), hadoopConf).get, null)
@@ -126,12 +127,13 @@ class StreamingContext private[streaming] (
   }
 
 
+  //不允许两个都是null,如果都是null了,就没办法读取数源了
   if (sc_ == null && cp_ == null) {
     throw new Exception("Spark Streaming cannot be initialized with " +
       "both SparkContext and checkpoint as null")
   }
 
-  private[streaming] val isCheckpointPresent = (cp_ != null)
+  private[streaming] val isCheckpointPresent = (cp_ != null) //true表示存在checkpoint文件
 
   private[streaming] val sc: SparkContext = {
     if (sc_ != null) {
@@ -165,10 +167,10 @@ class StreamingContext private[streaming] (
     }
   }
 
-  private val nextInputStreamId = new AtomicInteger(0)
+  private val nextInputStreamId = new AtomicInteger(0) //数据流的序号
 
   private[streaming] var checkpointDir: String = {
-    if (isCheckpointPresent) {
+    if (isCheckpointPresent) {//已经存在checkpoint点
       sc.setCheckpointDir(cp_.checkpointDir)
       cp_.checkpointDir
     } else {
@@ -176,6 +178,7 @@ class StreamingContext private[streaming] (
     }
   }
 
+  //checkpoint周期
   private[streaming] val checkpointDuration: Duration = {
     if (isCheckpointPresent) cp_.checkpointDuration else graph.batchDuration
   }
@@ -377,12 +380,14 @@ class StreamingContext private[streaming] (
    * @tparam K Key type for reading HDFS file
    * @tparam V Value type for reading HDFS file
    * @tparam F Input format for reading HDFS file
+   * 读取HDFS上的K-V结构的文件
    */
   def fileStream[
-    K: ClassTag,
-    V: ClassTag,
-    F <: NewInputFormat[K, V]: ClassTag
-  ] (directory: String): InputDStream[(K, V)] = {
+    K: ClassTag,//key的类型
+    V: ClassTag,//value的类型
+    F <: NewInputFormat[K, V]: ClassTag //读取的格式,即如何拆分和读取原始数据内容
+  ] (directory: String) //文件存储的路径
+   : InputDStream[(K, V)] = {
     new FileInputDStream[K, V, F](this, directory)
   }
 
@@ -439,7 +444,7 @@ class StreamingContext private[streaming] (
    * @param directory HDFS directory to monitor for new file
    */
   def textFileStream(directory: String): DStream[String] = withNamedScope("text file stream") {
-    fileStream[LongWritable, Text, TextInputFormat](directory).map(_._2.toString)
+    fileStream[LongWritable, Text, TextInputFormat](directory).map(_._2.toString) //获取Value对应的内容
   }
 
   /**
@@ -847,6 +852,7 @@ object StreamingContext extends Logging {
     new SparkContext(conf)
   }
 
+  //创建sparkContext对象
   private[streaming] def createNewSparkContext(
       master: String,
       appName: String,

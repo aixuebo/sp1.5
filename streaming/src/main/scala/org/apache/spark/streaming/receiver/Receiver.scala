@@ -264,13 +264,17 @@ abstract class Receiver[T](val storageLevel: StorageLevel) extends Serializable 
     id = id_
   }
 
-  /** Attach Network Receiver executor to this receiver. */
+  /** Attach Network Receiver executor to this receiver.
+    * 添加一个接收者执行器
+    **/
   private[streaming] def attachSupervisor(exec: ReceiverSupervisor) {
     assert(_supervisor == null)
     _supervisor = exec
   }
 
-  /** Get the attached supervisor. */
+  /** Get the attached supervisor.
+    * 获取一个接收器
+    **/
   private[streaming] def supervisor: ReceiverSupervisor = {
     assert(_supervisor != null,
       "A ReceiverSupervisor have not been attached to the receiver yet. Maybe you are starting " +

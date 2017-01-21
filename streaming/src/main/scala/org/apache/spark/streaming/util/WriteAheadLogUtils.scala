@@ -27,17 +27,20 @@ import org.apache.spark.{Logging, SparkConf, SparkException}
 /** A helper class with utility functions related to the WriteAheadLog interface */
 private[streaming] object WriteAheadLogUtils extends Logging {
   val RECEIVER_WAL_ENABLE_CONF_KEY = "spark.streaming.receiver.writeAheadLog.enable"
+
+  //receiver端 实现类、日志切换周期 最大失败次数
   val RECEIVER_WAL_CLASS_CONF_KEY = "spark.streaming.receiver.writeAheadLog.class"
   val RECEIVER_WAL_ROLLING_INTERVAL_CONF_KEY =
     "spark.streaming.receiver.writeAheadLog.rollingIntervalSecs"
   val RECEIVER_WAL_MAX_FAILURES_CONF_KEY = "spark.streaming.receiver.writeAheadLog.maxFailures"
 
+  //driver端 实现类、日志切换周期 最大失败次数
   val DRIVER_WAL_CLASS_CONF_KEY = "spark.streaming.driver.writeAheadLog.class"
   val DRIVER_WAL_ROLLING_INTERVAL_CONF_KEY =
     "spark.streaming.driver.writeAheadLog.rollingIntervalSecs"
   val DRIVER_WAL_MAX_FAILURES_CONF_KEY = "spark.streaming.driver.writeAheadLog.maxFailures"
 
-  val DEFAULT_ROLLING_INTERVAL_SECS = 60
+  val DEFAULT_ROLLING_INTERVAL_SECS = 60 //默认时间间隔,单位秒
   val DEFAULT_MAX_FAILURES = 3
 
   def enableReceiverLog(conf: SparkConf): Boolean = {
@@ -63,6 +66,7 @@ private[streaming] object WriteAheadLogUtils extends Logging {
   /**
    * Create a WriteAheadLog for the driver. If configured with custom WAL class, it will try
    * to create instance of that class, otherwise it will create the default FileBasedWriteAheadLog.
+   * 为driver产生一个日志
    */
   def createLogForDriver(
       sparkConf: SparkConf,
@@ -75,6 +79,7 @@ private[streaming] object WriteAheadLogUtils extends Logging {
   /**
    * Create a WriteAheadLog for the receiver. If configured with custom WAL class, it will try
    * to create instance of that class, otherwise it will create the default FileBasedWriteAheadLog.
+   * 为receiver产生一个日志
    */
   def createLogForReceiver(
       sparkConf: SparkConf,
@@ -92,9 +97,9 @@ private[streaming] object WriteAheadLogUtils extends Logging {
    * it will create the default FileBasedWriteAheadLog.
    */
   private def createLog(
-      isDriver: Boolean,
+      isDriver: Boolean,//true表示是driver,false表示是receiver
       sparkConf: SparkConf,
-      fileWalLogDirectory: String,
+      fileWalLogDirectory: String,//日志的根目录
       fileWalHadoopConf: Configuration
     ): WriteAheadLog = {
 
@@ -113,7 +118,7 @@ private[streaming] object WriteAheadLogUtils extends Logging {
       }
     }.getOrElse {
       new FileBasedWriteAheadLog(sparkConf, fileWalLogDirectory, fileWalHadoopConf,
-        getRollingIntervalSecs(sparkConf, isDriver), getMaxFailures(sparkConf, isDriver))
+        getRollingIntervalSecs(sparkConf, isDriver), getMaxFailures(sparkConf, isDriver)) //默认
     }
   }
 

@@ -24,8 +24,10 @@ import org.apache.spark.{Logging, SparkConf}
 /** Provides waitToPush() method to limit the rate at which receivers consume data.
   *
   * waitToPush method will block the thread if too many messages have been pushed too quickly,
+  * 如果太多信息被推送的太快,waitToPush方法会阻塞线程
   * and only return when a new message has been pushed. It assumes that only one message is
   * pushed at a time.
+  * 并且当新小心被完成推送后才被返回,
   *
   * The spark configuration spark.streaming.receiver.maxRate gives the maximum number of messages
   * per second that each receiver will accept.
@@ -55,7 +57,7 @@ private[receiver] abstract class RateLimiter(conf: SparkConf) extends Logging {
    */
   private[receiver] def updateRate(newRate: Long): Unit =
     if (newRate > 0) {
-      if (maxRateLimit > 0) {
+      if (maxRateLimit > 0) {//说明设置了最大值,因此即使参数很大,也会将其变成最大值
         rateLimiter.setRate(newRate.min(maxRateLimit))
       } else {
         rateLimiter.setRate(newRate)

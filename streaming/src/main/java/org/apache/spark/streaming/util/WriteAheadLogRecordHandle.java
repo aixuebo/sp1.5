@@ -26,6 +26,7 @@ package org.apache.spark.streaming.util;
  * an implemenation of the WriteAheadLog class.
  *
  * @see org.apache.spark.streaming.util.WriteAheadLog
+ * 写入日志的头文件
  */
 @org.apache.spark.annotation.DeveloperApi
 public abstract class WriteAheadLogRecordHandle implements java.io.Serializable {

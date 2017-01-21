@@ -67,18 +67,19 @@ import org.apache.spark.util.{SerializableConfiguration, TimeStampedHashMap, Uti
  *   selected as the mod time will be less than the ignore threshold when it becomes visible.
  * - Once a file is visible, the mod time cannot change. If it does due to appends, then the
  *   processing semantics are undefined.
+ *   读取hdfs上的一个文件
  */
 private[streaming]
-class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
+class FileInputDStream[K, V, F <: NewInputFormat[K, V]]( //K和V表示hdfs上存储的key和value的类型,F是如何读取该文件的格式,比如TextInputFormat
     @transient ssc_ : StreamingContext,
-    directory: String,
-    filter: Path => Boolean = FileInputDStream.defaultFilter,
+    directory: String,//要加载的path路径
+    filter: Path => Boolean = FileInputDStream.defaultFilter, //true表示要该path,false表示该路径非法
     newFilesOnly: Boolean = true,
     conf: Option[Configuration] = None)
     (implicit km: ClassTag[K], vm: ClassTag[V], fm: ClassTag[F])
   extends InputDStream[(K, V)](ssc_) {
 
-  private val serializableConfOpt = conf.map(new SerializableConfiguration(_))
+  private val serializableConfOpt = conf.map(new SerializableConfiguration(_))//序列化conf对象
 
   /**
    * Minimum duration of remembering the information of selected files. Defaults to 60 seconds.
@@ -113,14 +114,15 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
 
   // Map of batch-time to selected file info for the remembered batches
   // This is a concurrent map because it's also accessed in unit tests
+  //每个时间戳下找到了哪些文件集合
   @transient private[streaming] var batchTimeToSelectedFiles =
     new mutable.HashMap[Time, Array[String]] with mutable.SynchronizedMap[Time, Array[String]]
 
-  // Set of files that were selected in the remembered batches
+  // Set of files that were selected in the remembered batches 已经被选择的文件集合
   @transient private var recentlySelectedFiles = new mutable.HashSet[String]()
 
   // Read-through cache of file mod times, used to speed up mod time lookups
-  @transient private var fileToModTime = new TimeStampedHashMap[String, Long](true)
+  @transient private var fileToModTime = new TimeStampedHashMap[String, Long](true) //true表示无论什么操作都会更新时间戳
 
   // Timestamp of the last round of finding files
   @transient private var lastNewFileFindingTime = 0L
@@ -143,11 +145,11 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
    */
   override def compute(validTime: Time): Option[RDD[(K, V)]] = {
     // Find new files
-    val newFiles = findNewFiles(validTime.milliseconds)
-    logInfo("New files at time " + validTime + ":\n" + newFiles.mkString("\n"))
+    val newFiles = findNewFiles(validTime.milliseconds) //找到新文件
+    logInfo("New files at time " + validTime + ":\n" + newFiles.mkString("\n")) //找到文件集合
     batchTimeToSelectedFiles += ((validTime, newFiles))
     recentlySelectedFiles ++= newFiles
-    val rdds = Some(filesToRDD(newFiles))
+    val rdds = Some(filesToRDD(newFiles)) //转换成RDD
     // Copy newFiles to immutable.List to prevent from being modified by the user
     val metadata = Map(
       "files" -> newFiles.toList,
@@ -160,7 +162,7 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
   /** Clear the old time-to-files mappings along with old RDDs */
   protected[streaming] override def clearMetadata(time: Time) {
     super.clearMetadata(time)
-    val oldFiles = batchTimeToSelectedFiles.filter(_._1 < (time - rememberDuration))
+    val oldFiles = batchTimeToSelectedFiles.filter(_._1 < (time - rememberDuration))//筛选老文件
     batchTimeToSelectedFiles --= oldFiles.keys
     recentlySelectedFiles --= oldFiles.values.flatten
     logInfo("Cleared " + oldFiles.size + " old files that were older than " +
@@ -177,6 +179,7 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
    * the current batch time and the ignore threshold. The ignore threshold is the max of
    * initial ignore threshold and the trailing end of the remember window (that is, which ever
    * is later in time).
+   * 去找新文件
    */
   private def findNewFiles(currentTime: Long): Array[String] = {
     try {
@@ -189,19 +192,22 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
       )
       logDebug(s"Getting new files for time $currentTime, " +
         s"ignoring files older than $modTimeIgnoreThreshold")
+
+      //筛选是否是新文件的条件
       val filter = new PathFilter {
         def accept(path: Path): Boolean = isNewFile(path, currentTime, modTimeIgnoreThreshold)
       }
-      val newFiles = fs.listStatus(directoryPath, filter).map(_.getPath.toString)
-      val timeTaken = clock.getTimeMillis() - lastNewFileFindingTime
-      logInfo("Finding new files took " + timeTaken + " ms")
+      val newFiles = fs.listStatus(directoryPath, filter).map(_.getPath.toString) //新文件集合
+
+      val timeTaken = clock.getTimeMillis() - lastNewFileFindingTime //找文件时间
+      logInfo("Finding new files took " + timeTaken + " ms") //打印日志找新文件花费的时间
       logDebug("# cached file times = " + fileToModTime.size)
       if (timeTaken > slideDuration.milliseconds) {
         logWarning(
           "Time taken to find new files exceeds the batch size. " +
             "Consider increasing the batch size or reducing the number of " +
             "files in the monitored directory."
-        )
+        ) //打印警告日志,说明找文件花费时间较久
       }
       newFiles
     } catch {
@@ -215,11 +221,13 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
   /**
    * Identify whether the given `path` is a new file for the batch of `currentTime`. For it to be
    * accepted, it has to pass the following criteria.
-   * - It must pass the user-provided file filter.
+   * - It must pass the user-provided file filter.必须通过用户定义的文件名称过滤器
    * - It must be newer than the ignore threshold. It is assumed that files older than the ignore
    *   threshold have already been considered or are existing files before start
-   *   (when newFileOnly = true).
-   * - It must not be present in the recently selected files that this class remembers.
+   *   (when newFileOnly = true). 必须是新产生的文件,即在modTimeIgnoreThreshold之后产生的文件才是选择范围内的
+   *
+   * - It must not be present in the recently selected files that this class remembers.不能再已经选择的集合内存在
+   *
    * - It must not be newer than the time of the batch (i.e. `currentTime` for which this
    *   file is being tested. This can occur if the driver was recovered, and the missing batches
    *   (during downtime) are being generated. In that case, a batch of time T may be generated
@@ -228,40 +236,58 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
    *   the batch of time t is forgotten, and the ignore threshold is still T+1.
    *   The files with mod time T+5 are not remembered and cannot be ignored (since, t+5 > t+1).
    *   Hence they can get selected as new files again. To prevent this, files whose mod time is more
-   *   than current batch time are not considered.
+   *   than current batch time are not considered. 必须不能超过currentTime时间上限
+   *
+   *   该函数确定path是否是需要的文件
+   *   true表示要该path,false表示该路径非法
+   *
+   *   参数currentTime 表示此次操作的时间上限
+   *   参数modTimeIgnoreThreshold 表示一个伐值,比该伐值小的时间戳,都忽略掉,即在modTimeIgnoreThreshold之前产生的文件都忽略掉
    */
   private def isNewFile(path: Path, currentTime: Long, modTimeIgnoreThreshold: Long): Boolean = {
     val pathStr = path.toString
+
+    //1.首先校验path名字合法性
     // Reject file if it does not satisfy filter
-    if (!filter(path)) {
+    //true表示要该path,false表示该路径非法
+    if (!filter(path)) {//非法,因此返回false
       logDebug(s"$pathStr rejected by filter")
       return false
     }
     // Reject file if it was created before the ignore time
+    //2.校验文件的最后修改时间
     val modTime = getFileModTime(path)
-    if (modTime <= modTimeIgnoreThreshold) {
+    if (modTime <= modTimeIgnoreThreshold) {//忽略之前产生的文件
       // Use <= instead of < to avoid SPARK-4518
       logDebug(s"$pathStr ignored as mod time $modTime <= ignore time $modTimeIgnoreThreshold")
       return false
     }
+
+    //最后修改时间大于此次操作时间的也忽略掉
     // Reject file if mod time > current batch time
     if (modTime > currentTime) {
       logDebug(s"$pathStr not selected as mod time $modTime > current time $currentTime")
       return false
     }
+
     // Reject file if it was considered earlier
+    //说明已经选择该文件了,因此也会被忽略掉
     if (recentlySelectedFiles.contains(pathStr)) {
       logDebug(s"$pathStr already considered")
       return false
     }
+
     logDebug(s"$pathStr accepted with mod time $modTime")
     return true
   }
 
-  /** Generate one RDD from an array of files */
+  /** Generate one RDD from an array of files
+    * 参数file表示文件路径集合
+    **/
   private def filesToRDD(files: Seq[String]): RDD[(K, V)] = {
+    //获取文件的RDD集合
     val fileRDDs = files.map { file =>
-      val rdd = serializableConfOpt.map(_.value) match {
+      val rdd = serializableConfOpt.map(_.value) match {//看配置文件是什么类型的文件RDD
         case Some(config) => context.sparkContext.newAPIHadoopFile(
           file,
           fm.runtimeClass.asInstanceOf[Class[F]],
@@ -270,17 +296,20 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
           config)
         case None => context.sparkContext.newAPIHadoopFile[K, V, F](file)
       }
-      if (rdd.partitions.size == 0) {
+      if (rdd.partitions.size == 0) {//说明没有数据
         logError("File " + file + " has no data in it. Spark Streaming can only ingest " +
           "files that have been \"moved\" to the directory assigned to the file stream. " +
           "Refer to the streaming programming guide for more details.")
       }
       rdd
     }
+    //全部文件RDD集合组成新的RDD
     new UnionRDD(context.sparkContext, fileRDDs)
   }
 
-  /** Get file mod time from cache or fetch it from the file system */
+  /** Get file mod time from cache or fetch it from the file system
+    * 获取文件的更新时间,如果不存在,则返回文件的最后修改时间
+    **/
   private def getFileModTime(path: Path) = {
     fileToModTime.getOrElseUpdate(path.toString, fs.getFileStatus(path).getModificationTime())
   }

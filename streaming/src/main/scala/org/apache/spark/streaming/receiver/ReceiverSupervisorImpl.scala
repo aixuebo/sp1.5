@@ -44,13 +44,13 @@ private[streaming] class ReceiverSupervisorImpl(
     receiver: Receiver[_],
     env: SparkEnv,
     hadoopConf: Configuration,
-    checkpointDirOption: Option[String]
+    checkpointDirOption: Option[String] //日志输出的根目录
   ) extends ReceiverSupervisor(receiver, env.conf) with Logging {
 
   private val hostPort = SparkEnv.get.blockManager.blockManagerId.hostPort
 
   private val receivedBlockHandler: ReceivedBlockHandler = {
-    if (WriteAheadLogUtils.enableReceiverLog(env.conf)) {
+    if (WriteAheadLogUtils.enableReceiverLog(env.conf)) {//是否要支持写入日志
       if (checkpointDirOption.isEmpty) {
         throw new SparkException(
           "Cannot enable receiver write-ahead log without checkpoint directory set. " +
@@ -60,7 +60,7 @@ private[streaming] class ReceiverSupervisorImpl(
       new WriteAheadLogBasedBlockHandler(env.blockManager, receiver.streamId,
         receiver.storageLevel, env.conf, hadoopConf, checkpointDirOption.get)
     } else {
-      new BlockManagerBasedBlockHandler(env.blockManager, receiver.storageLevel)
+      new BlockManagerBasedBlockHandler(env.blockManager, receiver.storageLevel)//磁盘存储
     }
   }
 
@@ -88,13 +88,17 @@ private[streaming] class ReceiverSupervisorImpl(
       }
     })
 
-  /** Unique block ids if one wants to add blocks directly */
+  /** Unique block ids if one wants to add blocks directly
+    * 同一个streamid下的数据块id,初始化使用时间戳
+    **/
   private val newBlockId = new AtomicLong(System.currentTimeMillis())
 
   private val registeredBlockGenerators = new mutable.ArrayBuffer[BlockGenerator]
     with mutable.SynchronizedBuffer[BlockGenerator]
 
-  /** Divides received data records into data blocks for pushing in BlockManager. */
+  /** Divides received data records into data blocks for pushing in BlockManager.
+    * 默认监听器
+    **/
   private val defaultBlockGeneratorListener = new BlockGeneratorListener {
     def onAddData(data: Any, metadata: Any): Unit = { }
 
@@ -154,7 +158,8 @@ private[streaming] class ReceiverSupervisorImpl(
     val blockId = blockIdOption.getOrElse(nextBlockId)
     val time = System.currentTimeMillis
     val blockStoreResult = receivedBlockHandler.storeBlock(blockId, receivedBlock)
-    logDebug(s"Pushed block $blockId in ${(System.currentTimeMillis - time)} ms")
+    logDebug(s"Pushed block $blockId in ${(System.currentTimeMillis - time)} ms") //存放数据块花费多久
+
     val numRecords = blockStoreResult.numRecords
     val blockInfo = ReceivedBlockInfo(streamId, numRecords, metadataOption, blockStoreResult)
     trackerEndpoint.askWithRetry[Boolean](AddBlock(blockInfo))
@@ -163,7 +168,7 @@ private[streaming] class ReceiverSupervisorImpl(
 
   /** Report error to the receiver tracker */
   def reportError(message: String, error: Throwable) {
-    val errorString = Option(error).map(Throwables.getStackTraceAsString).getOrElse("")
+    val errorString = Option(error).map(Throwables.getStackTraceAsString).getOrElse("") //错误信息
     trackerEndpoint.send(ReportError(streamId, message, errorString))
     logWarning("Reported error " + message + " - " + error)
   }
@@ -200,7 +205,9 @@ private[streaming] class ReceiverSupervisorImpl(
     newBlockGenerator
   }
 
-  /** Generate new block ID */
+  /** Generate new block ID
+    * 创建新的数据块
+    **/
   private def nextBlockId = StreamBlockId(streamId, newBlockId.getAndIncrement)
 
   private def cleanupOldBlocks(cleanupThreshTime: Time): Unit = {

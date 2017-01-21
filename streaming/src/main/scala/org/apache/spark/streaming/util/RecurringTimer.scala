@@ -20,17 +20,19 @@ package org.apache.spark.streaming.util
 import org.apache.spark.Logging
 import org.apache.spark.util.{Clock, SystemClock}
 
+//一定周期period内,调用一次callback函数,函数需要传入一个时间
 private[streaming]
 class RecurringTimer(clock: Clock, period: Long, callback: (Long) => Unit, name: String)
   extends Logging {
 
+  //一个线程不断调用loop
   private val thread = new Thread("RecurringTimer - " + name) {
     setDaemon(true)
     override def run() { loop }
   }
 
-  @volatile private var prevTime = -1L
-  @volatile private var nextTime = -1L
+  @volatile private var prevTime = -1L //上一次的时间
+  @volatile private var nextTime = -1L //下一次的时间
   @volatile private var stopped = false
 
   /**
@@ -93,10 +95,10 @@ class RecurringTimer(clock: Clock, period: Long, callback: (Long) => Unit, name:
   private def loop() {
     try {
       while (!stopped) {
-        clock.waitTillTime(nextTime)
-        callback(nextTime)
+        clock.waitTillTime(nextTime) //等待一直到nextTime时间为止
+        callback(nextTime) //每一个周期内都调用call back函数
         prevTime = nextTime
-        nextTime += period
+        nextTime += period //定义下一个周期时间
         logDebug("Callback for " + name + " called at time " + prevTime)
       }
     } catch {
@@ -117,7 +119,7 @@ object RecurringTimer extends Logging {
       logInfo("" + currentTime + ": " + (currentTime - lastRecurTime))
       lastRecurTime = currentTime
     }
-    val timer = new  RecurringTimer(new SystemClock(), period, onRecur, "Test")
+    val timer = new RecurringTimer(new SystemClock(), period, onRecur, "Test")
     timer.start()
     Thread.sleep(30 * 1000)
     timer.stop(true)

@@ -21,6 +21,7 @@ import org.apache.hadoop.fs._
 
 private[streaming] object HdfsUtils {
 
+  //创建HDFS上的输出流
   def getOutputStream(path: String, conf: Configuration): FSDataOutputStream = {
     val dfsPath = new Path(path)
     val dfs = getFileSystemForPath(dfsPath, conf)
@@ -28,17 +29,18 @@ private[streaming] object HdfsUtils {
     val stream: FSDataOutputStream = {
       if (dfs.isFile(dfsPath)) {
         if (conf.getBoolean("hdfs.append.support", false) || dfs.isInstanceOf[RawLocalFileSystem]) {
-          dfs.append(dfsPath)
+          dfs.append(dfsPath) //追加
         } else {
           throw new IllegalStateException("File exists and there is no append support!")
         }
       } else {
-        dfs.create(dfsPath)
+        dfs.create(dfsPath) //创建新的文件
       }
     }
     stream
   }
 
+  //读取一个HDFS上的路径内容,返回输入流
   def getInputStream(path: String, conf: Configuration): FSDataInputStream = {
     val dfsPath = new Path(path)
     val dfs = getFileSystemForPath(dfsPath, conf)
@@ -52,7 +54,9 @@ private[streaming] object HdfsUtils {
     }
   }
 
-  /** Get the locations of the HDFS blocks containing the given file segment. */
+  /** Get the locations of the HDFS blocks containing the given file segment.
+    * 返回数据块所在host节点集合
+    **/
   def getFileSegmentLocations(
       path: String, offset: Long, length: Long, conf: Configuration): Array[String] = {
     val dfsPath = new Path(path)

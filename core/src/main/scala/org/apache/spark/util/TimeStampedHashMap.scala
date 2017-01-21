@@ -36,6 +36,8 @@ private[spark] case class TimeStampedValue[V](value: V, timestamp: Long)
  * be a drop-in replacement of scala.collection.mutable.HashMap.
  *
  * @param updateTimeStampOnGet Whether timestamp of a pair will be updated when it is accessed
+ *
+ *参数updateTimeStampOnGet true表示每次get时候也会更新对应的时间戳
  */
 private[spark] class TimeStampedHashMap[A, B](updateTimeStampOnGet: Boolean = false)
   extends mutable.Map[A, B]() with Logging {
@@ -45,28 +47,30 @@ private[spark] class TimeStampedHashMap[A, B](updateTimeStampOnGet: Boolean = fa
   //获取key对应的value,并且设置当前时间
   def get(key: A): Option[B] = {
     val value = internalMap.get(key)
-    if (value != null && updateTimeStampOnGet) {
+    if (value != null && updateTimeStampOnGet) {//key已经存在对应得值了,并且要更新时间戳
       //key 老值 新值
       internalMap.replace(key, value, TimeStampedValue(value.value, currentTime))
     }
-    Option(value).map(_.value)
+    Option(value).map(_.value) //返回Key对应的value,不需要返回时间戳
   }
 
   def iterator: Iterator[(A, B)] = {
     val jIterator = getEntrySet.iterator
-    JavaConversions.asScalaIterator(jIterator).map(kv => (kv.getKey, kv.getValue.value))
+    JavaConversions.asScalaIterator(jIterator).map(kv => (kv.getKey, kv.getValue.value)) //只是返回Key和value,不返回时间戳
   }
 
   def getEntrySet: Set[Entry[A, TimeStampedValue[B]]] = internalMap.entrySet
 
+  //新增是重新创建一个Map对象
   override def + [B1 >: B](kv: (A, B1)): mutable.Map[A, B1] = {
-    val newMap = new TimeStampedHashMap[A, B1]
-    val oldInternalMap = this.internalMap.asInstanceOf[ConcurrentHashMap[A, TimeStampedValue[B1]]]
-    newMap.internalMap.putAll(oldInternalMap)
-    kv match { case (a, b) => newMap.internalMap.put(a, TimeStampedValue(b, currentTime)) }
-    newMap
+    val newMap = new TimeStampedHashMap[A, B1] //新的
+    val oldInternalMap = this.internalMap.asInstanceOf[ConcurrentHashMap[A, TimeStampedValue[B1]]] //老的
+    newMap.internalMap.putAll(oldInternalMap) //新的添加老的全部内容
+    kv match { case (a, b) => newMap.internalMap.put(a, TimeStampedValue(b, currentTime)) } //添加一个key-value,以及产生一个新的时间戳
+    newMap //返回新的
   }
 
+  //删除也是重新创建一个新的对象
   override def - (key: A): mutable.Map[A, B] = {
     val newMap = new TimeStampedHashMap[A, B]
     newMap.internalMap.putAll(this.internalMap)
@@ -74,16 +78,19 @@ private[spark] class TimeStampedHashMap[A, B](updateTimeStampOnGet: Boolean = fa
     newMap
   }
 
+  //在原有Map上新增
   override def += (kv: (A, B)): this.type = {
     kv match { case (a, b) => internalMap.put(a, TimeStampedValue(b, currentTime)) }
     this
   }
 
+  //在原有map上删除
   override def -= (key: A): this.type = {
     internalMap.remove(key)
     this
   }
 
+  //在原有map上操作更新
   override def update(key: A, value: B) {
     this += ((key, value))
   }
@@ -112,23 +119,25 @@ private[spark] class TimeStampedHashMap[A, B](updateTimeStampOnGet: Boolean = fa
     }
   }
 
+  //如果不存在key才添加,如果存在,则不添加,返回老的value值
   def putIfAbsent(key: A, value: B): Option[B] = {
     val prev = internalMap.putIfAbsent(key, TimeStampedValue(value, currentTime))
     Option(prev).map(_.value)
   }
 
+  //在原有map上追加一个新的map集合
   def putAll(map: Map[A, B]) {
     map.foreach { case (k, v) => update(k, v) }
   }
 
   def toMap: Map[A, B] = iterator.toMap
 
-  //在threshTime时间戳之前的数据,都要进行f函数处理,该函数没有返回值,并且数据从集合中删除
+  //移除在threshTime时间戳之前的数据,并且每一个移除的数据,都要进行f函数处理
   def clearOldValues(threshTime: Long, f: (A, B) => Unit) {
     val it = getEntrySet.iterator
     while (it.hasNext) {
       val entry = it.next()
-      if (entry.getValue.timestamp < threshTime) {//在threshTime之前的数据都要进行if处理
+      if (entry.getValue.timestamp < threshTime) {//在threshTime之前的数据都要进行f处理
         f(entry.getKey, entry.getValue.value)
         logDebug("Removing key " + entry.getKey)
         it.remove()

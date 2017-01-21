@@ -24,7 +24,7 @@ import java.util.concurrent.TimeUnit._
 
 import org.apache.spark.Logging
 
-
+//向OutputStream中写入信息,desiredBytesPerSec表示流量伐值,一秒内不允许超过该流量
 private[streaming]
 class RateLimitedOutputStream(out: OutputStream, desiredBytesPerSec: Int)
   extends OutputStream
@@ -32,13 +32,14 @@ class RateLimitedOutputStream(out: OutputStream, desiredBytesPerSec: Int)
 
   require(desiredBytesPerSec > 0)
 
-  private val SYNC_INTERVAL = NANOSECONDS.convert(10, SECONDS)
-  private val CHUNK_SIZE = 8192
-  private var lastSyncTime = System.nanoTime
-  private var bytesWrittenSinceSync = 0L
+  private val SYNC_INTERVAL = NANOSECONDS.convert(10, SECONDS) //10秒转换成纳秒,10秒一个周期
+  private val CHUNK_SIZE = 8192 //每一个数据块大小
+
+  private var lastSyncTime = System.nanoTime //时间戳
+  private var bytesWrittenSinceSync = 0L //在流量单位时间内,已经写入多少个字节了
 
   override def write(b: Int) {
-    waitToWrite(1)
+    waitToWrite(1) //控制流量
     out.write(b)
   }
 
@@ -48,11 +49,12 @@ class RateLimitedOutputStream(out: OutputStream, desiredBytesPerSec: Int)
 
   @tailrec
   override final def write(bytes: Array[Byte], offset: Int, length: Int) {
-    val writeSize = math.min(length - offset, CHUNK_SIZE)
+    val writeSize = math.min(length - offset, CHUNK_SIZE) //计算写入多少个字节
+
     if (writeSize > 0) {
-      waitToWrite(writeSize)
+      waitToWrite(writeSize) //控制流量
       out.write(bytes, offset, writeSize)
-      write(bytes, offset + writeSize, length)
+      write(bytes, offset + writeSize, length) //因为每一次只能最多写入CHUNK_SIZE个字节,因此可能一次写不完所有的length,因此要不断的调用write方法
     }
   }
 
@@ -64,20 +66,21 @@ class RateLimitedOutputStream(out: OutputStream, desiredBytesPerSec: Int)
     out.close()
   }
 
+  //控制流量 参数表示此时要写入多少个字节
   @tailrec
   private def waitToWrite(numBytes: Int) {
     val now = System.nanoTime
-    val elapsedNanosecs = math.max(now - lastSyncTime, 1)
-    val rate = bytesWrittenSinceSync.toDouble * 1000000000 / elapsedNanosecs
-    if (rate < desiredBytesPerSec) {
+    val elapsedNanosecs = math.max(now - lastSyncTime, 1) //经过了多少纳秒
+    val rate = bytesWrittenSinceSync.toDouble * 1000000000 / elapsedNanosecs //即一秒内有已经产生多少流量bytesWrittenSinceSync/elapsedNanosecs  表示每一纳秒已经流过多少字节, *1000000000表示一秒流了多少
+    if (rate < desiredBytesPerSec) {//没有超过流量
       // It's okay to write; just update some variables and return
-      bytesWrittenSinceSync += numBytes
-      if (now > lastSyncTime + SYNC_INTERVAL) {
+      bytesWrittenSinceSync += numBytes //增加写入的数据量
+      if (now > lastSyncTime + SYNC_INTERVAL) {//重置流量
         // Sync interval has passed; let's resync
         lastSyncTime = now
         bytesWrittenSinceSync = numBytes
       }
-    } else {
+    } else {//说明超过了流量
       // Calculate how much time we should sleep to bring ourselves to the desired rate.
       val targetTimeInMillis = bytesWrittenSinceSync * 1000 / desiredBytesPerSec
       val elapsedTimeInMillis = elapsedNanosecs / 1000000

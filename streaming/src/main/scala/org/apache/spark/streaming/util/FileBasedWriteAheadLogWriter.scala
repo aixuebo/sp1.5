@@ -26,28 +26,32 @@ import org.apache.hadoop.fs.FSDataOutputStream
 
 /**
  * A writer for writing byte-buffers to a write ahead log file.
+ * 具体的一个存储日志的文件
  */
 private[streaming] class FileBasedWriteAheadLogWriter(path: String, hadoopConf: Configuration)
   extends Closeable {
 
-  private lazy val stream = HdfsUtils.getOutputStream(path, hadoopConf)
+  private lazy val stream = HdfsUtils.getOutputStream(path, hadoopConf) //打开输出流
 
+  //找到hflush或者sync方法,对输出流进行flush操作
   private lazy val hadoopFlushMethod = {
     // Use reflection to get the right flush operation
     val cls = classOf[FSDataOutputStream]
     Try(cls.getMethod("hflush")).orElse(Try(cls.getMethod("sync"))).toOption
   }
 
-  private var nextOffset = stream.getPos()
-  private var closed = false
+  private var nextOffset = stream.getPos() //当前位置,即下一次要开始写入的位置
+  private var closed = false //true表示输出流被关闭
 
-  /** Write the bytebuffer to the log file */
+  /** Write the bytebuffer to the log file
+    * 向文件中写入字节数组内容
+    **/
   def write(data: ByteBuffer): FileBasedWriteAheadLogSegment = synchronized {
-    assertOpen()
+    assertOpen() //确保文件输出流已经打开
     data.rewind() // Rewind to ensure all data in the buffer is retrieved
-    val lengthToWrite = data.remaining()
-    val segment = new FileBasedWriteAheadLogSegment(path, nextOffset, lengthToWrite)
-    stream.writeInt(lengthToWrite)
+    val lengthToWrite = data.remaining() //要写入多少字节
+    val segment = new FileBasedWriteAheadLogSegment(path, nextOffset, lengthToWrite) //表示一次写入的数据记录,记录这段数据在path路径下第几个字节位置开始写入的数据,一共写入了多少个字节,即头文件
+    stream.writeInt(lengthToWrite) //先写入多少个字节
     if (data.hasArray) {
       stream.write(data.array())
     } else {

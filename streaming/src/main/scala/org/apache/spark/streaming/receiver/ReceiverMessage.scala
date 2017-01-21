@@ -19,9 +19,14 @@ package org.apache.spark.streaming.receiver
 
 import org.apache.spark.streaming.Time
 
-/** Messages sent to the Receiver. */
+/** Messages sent to the Receiver.
+  * 发送到Receiver的信息
+  **/
 private[streaming] sealed trait ReceiverMessage extends Serializable
-private[streaming] object StopReceiver extends ReceiverMessage
-private[streaming] case class CleanupOldBlocks(threshTime: Time) extends ReceiverMessage
+
+private[streaming] object StopReceiver extends ReceiverMessage //停止Receiver
+
+private[streaming] case class CleanupOldBlocks(threshTime: Time) extends ReceiverMessage //清理Receiver的老一些的数据块信息
+
 private[streaming] case class UpdateRateLimit(elementsPerSecond: Long)
-                   extends ReceiverMessage
+                   extends ReceiverMessage //更新Receiver的带宽速度

@@ -36,22 +36,26 @@ public abstract class WriteAheadLog {
    * such that it can be cleaned later. Note that implementations of this abstract class must
    * ensure that the written data is durable and readable (using the record handle) by the
    * time this function returns.
+   * 写入数据
    */
   abstract public WriteAheadLogRecordHandle write(ByteBuffer record, long time);
 
   /**
    * Read a written record based on the given record handle.
+   * 读取数据
    */
   abstract public ByteBuffer read(WriteAheadLogRecordHandle handle);
 
   /**
    * Read and return an iterator of all the records that have been written but not yet cleaned up.
+   * 循环所有数据
    */
   abstract public Iterator<ByteBuffer> readAll();
 
   /**
    * Clean all the records that are older than the threshold time. It can wait for
    * the completion of the deletion.
+   * 清理threshTime之前的数据
    */
   abstract public void clean(long threshTime, boolean waitForCompletion);
 

@@ -43,15 +43,15 @@ import org.apache.spark.{Logging, SparkConf}
  */
 private[streaming] class FileBasedWriteAheadLog(
     conf: SparkConf,
-    logDirectory: String,
+    logDirectory: String,//向哪个目录写入日志
     hadoopConf: Configuration,
-    rollingIntervalSecs: Int,
-    maxFailures: Int
+    rollingIntervalSecs: Int,//切换文件的时间间隔,单位是秒
+    maxFailures: Int //写入的最大失败次数
   ) extends WriteAheadLog with Logging {
 
   import FileBasedWriteAheadLog._
 
-  private val pastLogs = new ArrayBuffer[LogInfo]
+  private val pastLogs = new ArrayBuffer[LogInfo] //已经完成的文件集合
   private val callerNameTag = getCallerName.map(c => s" for $c").getOrElse("")
 
   private val threadpoolName = s"WriteAheadLogManager $callerNameTag"
@@ -59,10 +59,11 @@ private[streaming] class FileBasedWriteAheadLog(
     ThreadUtils.newDaemonSingleThreadExecutor(threadpoolName))
   override protected val logName = s"WriteAheadLogManager $callerNameTag"
 
-  private var currentLogPath: Option[String] = None
-  private var currentLogWriter: FileBasedWriteAheadLogWriter = null
-  private var currentLogWriterStartTime: Long = -1L
-  private var currentLogWriterStopTime: Long = -1L
+
+  private var currentLogPath: Option[String] = None //当前正在写入的日志文件路径
+  private var currentLogWriter: FileBasedWriteAheadLogWriter = null //当前正在写入的日志文件
+  private var currentLogWriterStartTime: Long = -1L //当前日志文件处理的开始时间
+  private var currentLogWriterStopTime: Long = -1L //当前日志文件处理的结束时间
 
   initializeOrRecover()
 
@@ -70,15 +71,18 @@ private[streaming] class FileBasedWriteAheadLog(
    * Write a byte buffer to the log file. This method synchronously writes the data in the
    * ByteBuffer to HDFS. When this method returns, the data is guaranteed to have been flushed
    * to HDFS, and will be available for readers to read.
+   * 将数据写入到日志文件中,参数time可以帮助找到数据内容应该写入到哪个文件中
    */
   def write(byteBuffer: ByteBuffer, time: Long): FileBasedWriteAheadLogSegment = synchronized {
-    var fileSegment: FileBasedWriteAheadLogSegment = null
-    var failures = 0
-    var lastException: Exception = null
-    var succeeded = false
+    var fileSegment: FileBasedWriteAheadLogSegment = null //文件头对象
+
+    var failures = 0 //失败次数
+    var lastException: Exception = null //最后一次失败的异常
+    var succeeded = false //true表示写入成功
+
     while (!succeeded && failures < maxFailures) {
       try {
-        fileSegment = getLogWriter(time).write(byteBuffer)
+        fileSegment = getLogWriter(time).write(byteBuffer) //写入数据
         succeeded = true
       } catch {
         case ex: Exception =>
@@ -95,17 +99,18 @@ private[streaming] class FileBasedWriteAheadLog(
     fileSegment
   }
 
+  //读取一个数据段落,传入数据段落头文件即可
   def read(segment: WriteAheadLogRecordHandle): ByteBuffer = {
     val fileSegment = segment.asInstanceOf[FileBasedWriteAheadLogSegment]
     var reader: FileBasedWriteAheadLogRandomReader = null
     var byteBuffer: ByteBuffer = null
     try {
-      reader = new FileBasedWriteAheadLogRandomReader(fileSegment.path, hadoopConf)
-      byteBuffer = reader.read(fileSegment)
+      reader = new FileBasedWriteAheadLogRandomReader(fileSegment.path, hadoopConf) //根据文件路径,创建读取流
+      byteBuffer = reader.read(fileSegment) //读取一个数据段落
     } finally {
       reader.close()
     }
-    byteBuffer
+    byteBuffer //返回段落内容
   }
 
   /**
@@ -116,15 +121,16 @@ private[streaming] class FileBasedWriteAheadLog(
    * If this is called after writes have been made using this manager, then it may not return
    * the latest the records. This does not deal with currently active log files, and
    * hence the implementation is kept simple.
+   * 读取所有已经完成的文件以及当前处理的文件
    */
   def readAll(): JIterator[ByteBuffer] = synchronized {
     import scala.collection.JavaConversions._
-    val logFilesToRead = pastLogs.map{ _.path} ++ currentLogPath
+    val logFilesToRead = pastLogs.map{ _.path} ++ currentLogPath //读取所有已经完成的文件以及当前处理的文件  路径集合
     logInfo("Reading from the logs: " + logFilesToRead.mkString("\n"))
 
     logFilesToRead.iterator.map { file =>
       logDebug(s"Creating log reader with $file")
-      val reader = new FileBasedWriteAheadLogReader(file, hadoopConf)
+      val reader = new FileBasedWriteAheadLogReader(file, hadoopConf) //从头读取文件
       CompletionIterator[ByteBuffer, Iterator[ByteBuffer]](reader, reader.close _)
     } flatMap { x => x }
   }
@@ -140,19 +146,22 @@ private[streaming] class FileBasedWriteAheadLog(
    * If waitForCompletion is set to true, this method will return only after old logs have been
    * deleted. This should be set to true only for testing. Else the files will be deleted
    * asynchronously.
+   *
+   * 参数waitForCompletion为true,表示只有当老文件都删除后,该方法才会被返回
    */
   def clean(threshTime: Long, waitForCompletion: Boolean): Unit = {
-    val oldLogFiles = synchronized { pastLogs.filter { _.endTime < threshTime } }
+    val oldLogFiles = synchronized { pastLogs.filter { _.endTime < threshTime } } //获取老文件集合
     logInfo(s"Attempting to clear ${oldLogFiles.size} old log files in $logDirectory " +
       s"older than $threshTime: ${oldLogFiles.map { _.path }.mkString("\n")}")
 
+    //删除文件
     def deleteFiles() {
       oldLogFiles.foreach { logInfo =>
         try {
           val path = new Path(logInfo.path)
           val fs = HdfsUtils.getFileSystemForPath(path, hadoopConf)
-          fs.delete(path, true)
-          synchronized { pastLogs -= logInfo }
+          fs.delete(path, true) //删除物理文件
+          synchronized { pastLogs -= logInfo } //删除内存映射
           logDebug(s"Cleared log file $logInfo")
         } catch {
           case ex: Exception =>
@@ -162,8 +171,8 @@ private[streaming] class FileBasedWriteAheadLog(
       logInfo(s"Cleared log files in $logDirectory older than $threshTime")
     }
     if (!executionContext.isShutdown) {
-      val f = Future { deleteFiles() }
-      if (waitForCompletion) {
+      val f = Future { deleteFiles() }//已经执行了该删除方法,属于异步执行
+      if (waitForCompletion) {//true,表示只有当老文件都删除后,该方法才会被返回
         import scala.concurrent.duration._
         Await.ready(f, 1 second)
       }
@@ -180,33 +189,35 @@ private[streaming] class FileBasedWriteAheadLog(
     logInfo("Stopped write ahead log manager")
   }
 
-  /** Get the current log writer while taking care of rotation */
+  /** Get the current log writer while taking care of rotation
+    * 获取时间参数对应的文件是哪个
+    **/
   private def getLogWriter(currentTime: Long): FileBasedWriteAheadLogWriter = synchronized {
-    if (currentLogWriter == null || currentTime > currentLogWriterStopTime) {
-      resetWriter()
+    if (currentLogWriter == null || currentTime > currentLogWriterStopTime) {//说明文件不存在,或者当前时间已经超过了当前文件的最后时间范围了
+      resetWriter() //关闭当前的文件
       currentLogPath.foreach {
-        pastLogs += LogInfo(currentLogWriterStartTime, currentLogWriterStopTime, _)
+        pastLogs += LogInfo(currentLogWriterStartTime, currentLogWriterStopTime, _) //追加一个数据块LogInfo  其中_表示当前文件路径
       }
       currentLogWriterStartTime = currentTime
       currentLogWriterStopTime = currentTime + (rollingIntervalSecs * 1000)
       val newLogPath = new Path(logDirectory,
-        timeToLogFile(currentLogWriterStartTime, currentLogWriterStopTime))
+        timeToLogFile(currentLogWriterStartTime, currentLogWriterStopTime)) //新文件的路径
       currentLogPath = Some(newLogPath.toString)
-      currentLogWriter = new FileBasedWriteAheadLogWriter(currentLogPath.get, hadoopConf)
+      currentLogWriter = new FileBasedWriteAheadLogWriter(currentLogPath.get, hadoopConf) //创建新文件输出流
     }
     currentLogWriter
   }
 
   /** Initialize the log directory or recover existing logs inside the directory */
   private def initializeOrRecover(): Unit = synchronized {
-    val logDirectoryPath = new Path(logDirectory)
-    val fileSystem = HdfsUtils.getFileSystemForPath(logDirectoryPath, hadoopConf)
+    val logDirectoryPath = new Path(logDirectory) //日志目录
+    val fileSystem = HdfsUtils.getFileSystemForPath(logDirectoryPath, hadoopConf) //文件系统
 
     if (fileSystem.exists(logDirectoryPath) && fileSystem.getFileStatus(logDirectoryPath).isDir) {
-      val logFileInfo = logFilesTologInfo(fileSystem.listStatus(logDirectoryPath).map { _.getPath })
+      val logFileInfo = logFilesTologInfo(fileSystem.listStatus(logDirectoryPath).map { _.getPath }) //根目录下所有子目录对应的文件路径集合去排序,文件名字的格式是log-开始时间-结束时间
       pastLogs.clear()
       pastLogs ++= logFileInfo
-      logInfo(s"Recovered ${logFileInfo.size} write ahead log files from $logDirectory")
+      logInfo(s"Recovered ${logFileInfo.size} write ahead log files from $logDirectory") //打印日志说明目录下有多少个日志文件
       logDebug(s"Recovered files are:\n${logFileInfo.map(_.path).mkString("\n")}")
     }
   }
@@ -234,10 +245,12 @@ private[streaming] object FileBasedWriteAheadLog {
     stackTraceClasses.find(!_.contains("WriteAheadLog")).flatMap(_.split(".").lastOption)
   }
 
-  /** Convert a sequence of files to a sequence of sorted LogInfo objects */
+  /** Convert a sequence of files to a sequence of sorted LogInfo objects
+    * 将文件集合转换成LogInfo集合,并且LogInfo集合是有顺序的
+    **/
   def logFilesTologInfo(files: Seq[Path]): Seq[LogInfo] = {
     files.flatMap { file =>
-      logFileRegex.findFirstIn(file.getName()) match {
+      logFileRegex.findFirstIn(file.getName()) match { //只要文件名字符合正则表达式,则就按照开始时间进行排序
         case Some(logFileRegex(startTimeStr, stopTimeStr)) =>
           val startTime = startTimeStr.toLong
           val stopTime = stopTimeStr.toLong

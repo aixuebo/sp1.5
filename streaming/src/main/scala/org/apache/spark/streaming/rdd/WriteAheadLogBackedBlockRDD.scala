@@ -54,6 +54,7 @@ class WriteAheadLogBackedBlockRDDPartition(
  * the block manager are also backed by data in write ahead logs. For reading
  * the data, this RDD first looks up the blocks by their ids in the block manager.
  * If it does not find them, it looks up the WAL using the corresponding record handle.
+ * 先读取在磁盘上的数据块,如果不存在,可以从日志上获取
  * The lookup of the blocks from the block manager can be skipped by setting the corresponding
  * element in isBlockIdValid to false. This is a performance optimization which does not affect
  * correctness, and it can be used in situations where it is known that the block
@@ -76,8 +77,8 @@ class WriteAheadLogBackedBlockRDD[T: ClassTag](
     @transient sc: SparkContext,
     @transient blockIds: Array[BlockId],
     @transient val walRecordHandles: Array[WriteAheadLogRecordHandle],
-    @transient isBlockIdValid: Array[Boolean] = Array.empty,
-    storeInBlockManager: Boolean = false,
+    @transient isBlockIdValid: Array[Boolean] = Array.empty,//有效的数据块
+    storeInBlockManager: Boolean = false,//从日志还原后,是否还要继续存储数据库到磁盘上
     storageLevel: StorageLevel = StorageLevel.MEMORY_ONLY_SER)
   extends BlockRDD[T](sc, blockIds) {
 
@@ -100,7 +101,7 @@ class WriteAheadLogBackedBlockRDD[T: ClassTag](
   override def getPartitions: Array[Partition] = {
     assertValid()
     Array.tabulate(blockIds.length) { i =>
-      val isValid = if (isBlockIdValid.length == 0) true else isBlockIdValid(i)
+      val isValid = if (isBlockIdValid.length == 0) true else isBlockIdValid(i) //说明该数据块有效
       new WriteAheadLogBackedBlockRDDPartition(i, blockIds(i), isValid, walRecordHandles(i))
     }
   }
@@ -109,6 +110,7 @@ class WriteAheadLogBackedBlockRDD[T: ClassTag](
    * Gets the partition data by getting the corresponding block from the block manager.
    * If the block does not exist, then the data is read from the corresponding record
    * in write ahead log files.
+   * 读取该partition对应的数据
    */
   override def compute(split: Partition, context: TaskContext): Iterator[T] = {
     assertValid()
@@ -117,27 +119,29 @@ class WriteAheadLogBackedBlockRDD[T: ClassTag](
     val partition = split.asInstanceOf[WriteAheadLogBackedBlockRDDPartition]
     val blockId = partition.blockId
 
+    //从BlockManager中获取数据块内容,内容就是迭代器
     def getBlockFromBlockManager(): Option[Iterator[T]] = {
       blockManager.get(blockId).map(_.data.asInstanceOf[Iterator[T]])
     }
 
+    //从日志中获取数据块内容,内容就是迭代器
     def getBlockFromWriteAheadLog(): Iterator[T] = {
-      var dataRead: ByteBuffer = null
-      var writeAheadLog: WriteAheadLog = null
+      var dataRead: ByteBuffer = null //读取的数据内容
+      var writeAheadLog: WriteAheadLog = null //
       try {
         // The WriteAheadLogUtils.createLog*** method needs a directory to create a
         // WriteAheadLog object as the default FileBasedWriteAheadLog needs a directory for
         // writing log data. However, the directory is not needed if data needs to be read, hence
-        // a dummy path is provided to satisfy the method parameter requirements.
+        // a dummy path is provided to satisfy the method parameter requirements.因为我们仅仅是读取数据,但是还被要求需要一个路径,因此我们随机产生一个文件路径
         // FileBasedWriteAheadLog will not create any file or directory at that path.
         // FileBasedWriteAheadLog will not create any file or directory at that path. Also,
         // this dummy directory should not already exist otherwise the WAL will try to recover
         // past events from the directory and throw errors.
         val nonExistentDirectory = new File(
-          System.getProperty("java.io.tmpdir"), UUID.randomUUID().toString).getAbsolutePath
+          System.getProperty("java.io.tmpdir"), UUID.randomUUID().toString).getAbsolutePath //一个不存在的目录
         writeAheadLog = WriteAheadLogUtils.createLogForReceiver(
-          SparkEnv.get.conf, nonExistentDirectory, hadoopConf)
-        dataRead = writeAheadLog.read(partition.walRecordHandle)
+          SparkEnv.get.conf, nonExistentDirectory, hadoopConf) //在该目录上创建一个日志
+        dataRead = writeAheadLog.read(partition.walRecordHandle) //读取该日志内容,返回ByteBuffer
       } catch {
         case NonFatal(e) =>
           throw new SparkException(
@@ -148,24 +152,25 @@ class WriteAheadLogBackedBlockRDD[T: ClassTag](
           writeAheadLog = null
         }
       }
-      if (dataRead == null) {
+      if (dataRead == null) {//说明没有数据被读取出来
         throw new SparkException(
           s"Could not read data from write ahead log record ${partition.walRecordHandle}, " +
             s"read returned null")
       }
       logInfo(s"Read partition data of $this from write ahead log, record handle " +
         partition.walRecordHandle)
+
       if (storeInBlockManager) {
-        blockManager.putBytes(blockId, dataRead, storageLevel)
+        blockManager.putBytes(blockId, dataRead, storageLevel) //存储到磁盘上
         logDebug(s"Stored partition data of $this into block manager with level $storageLevel")
         dataRead.rewind()
       }
-      blockManager.dataDeserialize(blockId, dataRead).asInstanceOf[Iterator[T]]
+      blockManager.dataDeserialize(blockId, dataRead).asInstanceOf[Iterator[T]] //磁盘上的数据进行反序列化
     }
 
-    if (partition.isBlockIdValid) {
+    if (partition.isBlockIdValid) {//如果数据块是有效的 则从磁盘上读取数据块
       getBlockFromBlockManager().getOrElse { getBlockFromWriteAheadLog() }
-    } else {
+    } else { //如果磁盘无效,从日志读取数据块
       getBlockFromWriteAheadLog()
     }
   }
@@ -177,18 +182,18 @@ class WriteAheadLogBackedBlockRDD[T: ClassTag](
    */
   override def getPreferredLocations(split: Partition): Seq[String] = {
     val partition = split.asInstanceOf[WriteAheadLogBackedBlockRDDPartition]
-    val blockLocations = if (partition.isBlockIdValid) {
+    val blockLocations = if (partition.isBlockIdValid) {//如果partition有效,则返回该partition所在host
       getBlockIdLocations().get(partition.blockId)
     } else {
       None
     }
 
-    blockLocations.getOrElse {
+    blockLocations.getOrElse {//如果partition无效
       partition.walRecordHandle match {
         case fileSegment: FileBasedWriteAheadLogSegment =>
           try {
             HdfsUtils.getFileSegmentLocations(
-              fileSegment.path, fileSegment.offset, fileSegment.length, hadoopConfig)
+              fileSegment.path, fileSegment.offset, fileSegment.length, hadoopConfig) //则获取该日志对应的数据块所在host
           } catch {
             case NonFatal(e) =>
               logError("Error getting WAL file segment locations", e)
