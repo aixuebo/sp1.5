@@ -56,14 +56,15 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
   // A tracker to track all the input stream information as well as processed record number
   var inputInfoTracker: InputInfoTracker = null
 
-  private var eventLoop: EventLoop[JobSchedulerEvent] = null
+  //接收job的调度事件
+  private var eventLoop: EventLoop[JobSchedulerEvent] = null //是一个线程
 
   def start(): Unit = synchronized {
     if (eventLoop != null) return // scheduler has already been started
 
     logDebug("Starting JobScheduler")
     eventLoop = new EventLoop[JobSchedulerEvent]("JobScheduler") {
-      override protected def onReceive(event: JobSchedulerEvent): Unit = processEvent(event)
+      override protected def onReceive(event: JobSchedulerEvent): Unit = processEvent(event) //处理该job的事件
 
       override protected def onError(e: Throwable): Unit = reportError("Error in job scheduler", e)
     }
@@ -139,6 +140,7 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
     eventLoop != null
   }
 
+  //处理job的事件
   private def processEvent(event: JobSchedulerEvent) {
     try {
       event match {
@@ -154,9 +156,9 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
 
   private def handleJobStart(job: Job) {
     val jobSet = jobSets.get(job.time)
-    val isFirstJobOfJobSet = !jobSet.hasStarted
+    val isFirstJobOfJobSet = !jobSet.hasStarted //true表示该jobset第一次启动
     jobSet.handleJobStart(job)
-    if (isFirstJobOfJobSet) {
+    if (isFirstJobOfJobSet) {//第一次启动时候产生事件
       // "StreamingListenerBatchStarted" should be posted after calling "handleJobStart" to get the
       // correct "jobSet.processingStartTime".
       listenerBus.post(StreamingListenerBatchStarted(jobSet.toBatchInfo))
