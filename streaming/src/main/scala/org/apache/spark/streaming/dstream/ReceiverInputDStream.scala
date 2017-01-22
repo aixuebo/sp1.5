@@ -36,7 +36,8 @@ import org.apache.spark.streaming.{StreamingContext, Time}
  * [[org.apache.spark.streaming.receiver.Receiver]] that will be sent
  * to the workers to receive data.
  * @param ssc_ Streaming context that will execute this input stream
- * @tparam T Class type of the object of this stream
+ * @tparam T Class type of the object of this stream,注意,T也可以是一个元组对象,表示最终接收到的信息是什么对象类型的
+ *
  */
 abstract class ReceiverInputDStream[T: ClassTag](@transient ssc_ : StreamingContext)
   extends InputDStream[T](ssc_) {

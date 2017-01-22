@@ -214,7 +214,7 @@ private[spark] object AkkaUtils extends Logging {
   def makeDriverRef(name: String, conf: SparkConf, actorSystem: ActorSystem): ActorRef = {
     val driverActorSystemName = SparkEnv.driverActorSystemName//driver指定的Actor系统名字
     val driverHost: String = conf.get("spark.driver.host", "localhost")
-    val driverPort: Int = conf.getInt("spark.driver.port", 7077)!
+    val driverPort: Int = conf.getInt("spark.driver.port", 7077)
     Utils.checkHost(driverHost, "Expected hostname")//断言driverHost一定仅仅有host,不能有port
     val url = address(protocol(actorSystem), driverActorSystemName, driverHost, driverPort, name)
     val timeout = RpcUtils.lookupRpcTimeout(conf)

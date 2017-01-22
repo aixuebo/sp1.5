@@ -114,7 +114,6 @@ class StatCounter(values: TraversableOnce[Double]) extends Serializable {
   /** Return the variance of the values.
     * 计算方差
      */
-    **/
   def variance: Double = {
     if (n == 0) {
       Double.NaN

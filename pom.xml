@@ -93,6 +93,8 @@
     <module>network/yarn</module>
     <module>launcher</module>
     <module>streaming</module>
+    <module>external/kafka</module>
+    <module>external/kafka-assembly</module>
     <module>examples</module>
   </modules>
 

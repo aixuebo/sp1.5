@@ -49,6 +49,7 @@ private[streaming] class ReceiverSupervisorImpl(
 
   private val hostPort = SparkEnv.get.blockManager.blockManagerId.hostPort
 
+  //如何存储接收到的数据,是磁盘存储还是log日志存储
   private val receivedBlockHandler: ReceivedBlockHandler = {
     if (WriteAheadLogUtils.enableReceiverLog(env.conf)) {//是否要支持写入日志
       if (checkpointDirOption.isEmpty) {
@@ -65,7 +66,9 @@ private[streaming] class ReceiverSupervisorImpl(
   }
 
 
-  /** Remote RpcEndpointRef for the ReceiverTracker */
+  /** Remote RpcEndpointRef for the ReceiverTracker
+    * 向driver发送请求,返回引用
+    **/
   private val trackerEndpoint = RpcUtils.makeDriverRef("ReceiverTracker", env.conf, env.rpcEnv)
 
   /** RpcEndpointRef for receiving messages from the ReceiverTracker in the driver */
@@ -155,21 +158,21 @@ private[streaming] class ReceiverSupervisorImpl(
       metadataOption: Option[Any],
       blockIdOption: Option[StreamBlockId]
     ) {
-    val blockId = blockIdOption.getOrElse(nextBlockId)
+    val blockId = blockIdOption.getOrElse(nextBlockId) //产生新的数据块ID
     val time = System.currentTimeMillis
-    val blockStoreResult = receivedBlockHandler.storeBlock(blockId, receivedBlock)
+    val blockStoreResult = receivedBlockHandler.storeBlock(blockId, receivedBlock) //真正去存储数据
     logDebug(s"Pushed block $blockId in ${(System.currentTimeMillis - time)} ms") //存放数据块花费多久
 
     val numRecords = blockStoreResult.numRecords
     val blockInfo = ReceivedBlockInfo(streamId, numRecords, metadataOption, blockStoreResult)
-    trackerEndpoint.askWithRetry[Boolean](AddBlock(blockInfo))
+    trackerEndpoint.askWithRetry[Boolean](AddBlock(blockInfo)) //向driver发送申请,说添加了一个新的数据块
     logDebug(s"Reported block $blockId")
   }
 
   /** Report error to the receiver tracker */
   def reportError(message: String, error: Throwable) {
     val errorString = Option(error).map(Throwables.getStackTraceAsString).getOrElse("") //错误信息
-    trackerEndpoint.send(ReportError(streamId, message, errorString))
+    trackerEndpoint.send(ReportError(streamId, message, errorString))//向master发送错误信息
     logWarning("Reported error " + message + " - " + error)
   }
 

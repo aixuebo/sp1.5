@@ -26,7 +26,9 @@ import org.apache.spark.storage.StreamBlockId
 import org.apache.spark.streaming.util.RecurringTimer
 import org.apache.spark.util.{Clock, SystemClock}
 
-/** Listener object for BlockGenerator events */
+/** Listener object for BlockGenerator events
+  * 注册一个事件
+  **/
 private[streaming] trait BlockGeneratorListener {
   /**
    * Called after a data item is added into the BlockGenerator. The data addition and this
@@ -35,7 +37,10 @@ private[streaming] trait BlockGeneratorListener {
    * for updating metadata on successful buffering of a data item, specifically that metadata
    * that will be useful when a block is generated. Any long blocking operation in this callback
    * will hurt the throughput.
-   * 已经添加完数据
+   * 已经添加完成了,但是放到的是内存中,即已经添加到BlockGenerator后就开始产生回调函数
+   *
+   * demo
+   * 在kafka中 data就是key-value数据   metadata就是元数据--该key-value属于哪个topic-partition,以及属于第几个offset数据
    */
   def onAddData(data: Any, metadata: Any)
 
@@ -47,6 +52,7 @@ private[streaming] trait BlockGeneratorListener {
    * be useful when the block has been successfully stored. Any long blocking operation in this
    * callback will hurt the throughput.
    * 一个新的数据块被产生的时候调用该事件
+   * demo kafka中当产生一个新数据块的时候,备份一下此时每一个partition对应的offset位置快照
    */
   def onGenerateBlock(blockId: StreamBlockId)
 
@@ -55,6 +61,7 @@ private[streaming] trait BlockGeneratorListener {
    * Spark in this method. Internally this is called from a single
    * thread, that is not synchronized with any other callbacks. Hence it is okay to do long
    * blocking operation in this callback.
+   * 当数据块已经提交到磁盘后,调用该方法
    */
   def onPushBlock(blockId: StreamBlockId, arrayBuffer: ArrayBuffer[_])
 
@@ -159,6 +166,7 @@ private[streaming] class BlockGenerator(
 
   /**
    * Push a single data item into the buffer.
+   * 仅仅单独添加数据
    */
   def addData(data: Any): Unit = {
     if (state == Active) {
@@ -181,6 +189,8 @@ private[streaming] class BlockGenerator(
    * Push a single data item into the buffer. After buffering the data, the
    * `BlockGeneratorListener.onAddData` callback will be called.
    * 添加之后产生一个回调
+   * demo
+   * 在kafka中 data就是key-value数据   metadata就是元数据--该key-value属于哪个topic-partition,以及属于第几个offset数据
    */
   def addDataWithCallback(data: Any, metadata: Any): Unit = {
     if (state == Active) {
@@ -233,7 +243,9 @@ private[streaming] class BlockGenerator(
 
   def isStopped(): Boolean = state == StoppedAll
 
-  /** Change the buffer to which single records are added to. */
+  /** Change the buffer to which single records are added to.
+    * 产生一个新的数据块,老的数据信息等待被推送
+    **/
   private def updateCurrentBuffer(time: Long): Unit = {
     try {
       var newBlock: Block = null
@@ -295,11 +307,13 @@ private[streaming] class BlockGenerator(
     }
   }
 
+  //记录错误日志,并且发送事件
   private def reportError(message: String, t: Throwable) {
     logError(message, t) //记录日志
     listener.onError(message, t) //调用监听器
   }
 
+  //记录日志,并且发送推送事件
   private def pushBlock(block: Block) {
     listener.onPushBlock(block.id, block.buffer)
     logInfo("Pushed block " + block.id)

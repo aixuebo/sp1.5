@@ -23,10 +23,10 @@ import org.apache.spark.streaming.util.WriteAheadLogRecordHandle
 
 /** Information about blocks received by the receiver */
 private[streaming] case class ReceivedBlockInfo(
-    streamId: Int,
-    numRecords: Option[Long],
-    metadataOption: Option[Any],
-    blockStoreResult: ReceivedBlockStoreResult
+    streamId: Int,//哪个stream
+    numRecords: Option[Long],//该数据块有多少条数据
+    metadataOption: Option[Any],//该数据块的元数据信息内容.比如是kafka的话,会有topic-partition以及offset等信息
+    blockStoreResult: ReceivedBlockStoreResult //存储后的结果
   ) {
 
   require(numRecords.isEmpty || numRecords.get >= 0, "numRecords must not be negative")

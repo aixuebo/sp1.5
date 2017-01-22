@@ -114,6 +114,7 @@ abstract class Receiver[T](val storageLevel: StorageLevel) extends Serializable 
    * Store a single item of received data to Spark's memory.
    * These single items will be aggregated together into data blocks before
    * being pushed into Spark's memory.
+   * 存储kafka等接收的对象
    */
   def store(dataItem: T) {
     supervisor.pushSingle(dataItem)
@@ -179,7 +180,10 @@ abstract class Receiver[T](val storageLevel: StorageLevel) extends Serializable 
     supervisor.pushBytes(bytes, Some(metadata), None)
   }
 
-  /** Report exceptions in receiving data. */
+  /** Report exceptions in receiving data.
+    * 在kafka等接收信息的时候,出现的了异常,
+    * message表示提示的异常信息,throwable表示异常对象
+    **/
   def reportError(message: String, throwable: Throwable) {
     supervisor.reportError(message, throwable)
   }

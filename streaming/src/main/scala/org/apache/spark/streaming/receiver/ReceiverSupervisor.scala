@@ -82,9 +82,9 @@ private[streaming] abstract class ReceiverSupervisor(
 
   /** Store the bytes of received data as a data block into Spark's memory. */
   def pushBytes(
-      bytes: ByteBuffer,
-      optionalMetadata: Option[Any],
-      optionalBlockId: Option[StreamBlockId]
+      bytes: ByteBuffer,//数据内容
+      optionalMetadata: Option[Any],//数据的元数据--附加的一些信息
+      optionalBlockId: Option[StreamBlockId]//数据存储在哪个数据块
     )
 
   /** Store a iterator of received data as a data block into Spark's memory. */
@@ -107,10 +107,13 @@ private[streaming] abstract class ReceiverSupervisor(
    *
    * Note: Do not explicitly start or stop the `BlockGenerator`, the `ReceiverSupervisorImpl`
    * will take care of it.
+   * 创建一个监听器,可以监听一些动作
    */
   def createBlockGenerator(blockGeneratorListener: BlockGeneratorListener): BlockGenerator
 
-  /** Report errors. */
+  /** Report errors.
+    * 报告错误
+    **/
   def reportError(message: String, throwable: Throwable)
 
   /**

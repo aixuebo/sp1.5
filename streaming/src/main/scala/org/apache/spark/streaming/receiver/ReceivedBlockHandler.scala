@@ -40,7 +40,9 @@ private[streaming] trait ReceivedBlockStoreResult {
   def numRecords: Option[Long]
 }
 
-/** Trait that represents a class that handles the storage of blocks received by receiver */
+/** Trait that represents a class that handles the storage of blocks received by receiver
+  * 如何存储接收到的数据,是磁盘存储还是log日志存储
+  **/
 private[streaming] trait ReceivedBlockHandler {
 
   /** Store a received block with the given block id and return related metadata
@@ -68,11 +70,13 @@ private[streaming] case class BlockManagerBasedStoreResult(
 /**
  * Implementation of a [[org.apache.spark.streaming.receiver.ReceivedBlockHandler]] which
  * stores the received blocks into a block manager with the specified storage level.
+ * 磁盘存储
  */
 private[streaming] class BlockManagerBasedBlockHandler(
     blockManager: BlockManager, storageLevel: StorageLevel)
   extends ReceivedBlockHandler with Logging {
 
+  //将数据块内容添加到该磁盘上
   def storeBlock(blockId: StreamBlockId, block: ReceivedBlock): ReceivedBlockStoreResult = {
 
     var numRecords = None: Option[Long]
@@ -170,6 +174,8 @@ private[streaming] class WriteAheadLogBasedBlockHandler(
    * It does this in parallel, using Scala Futures, and returns only after the block has
    * been stored in both places.
    * 同时向log和数据块管理器存储数据,是并行的去存储的数据,scala的Future保证了两者一定会都完成后才会被返回
+   *
+   * 把数据块内容添加到磁盘上,也添加到日志中
    */
   def storeBlock(blockId: StreamBlockId, block: ReceivedBlock): ReceivedBlockStoreResult = {
 
