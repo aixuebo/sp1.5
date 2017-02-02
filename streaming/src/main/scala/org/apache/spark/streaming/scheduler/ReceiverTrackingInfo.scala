@@ -37,8 +37,8 @@ private[streaming] case class ReceiverErrorInfo(
 private[streaming] case class ReceiverTrackingInfo(
     receiverId: Int,
     state: ReceiverState,
-    scheduledExecutors: Option[Seq[String]],
-    runningExecutor: Option[String],
+    scheduledExecutors: Option[Seq[String]],//该receiver在哪些host上可以去被调度
+    runningExecutor: Option[String],//真正在哪个host上运行的该receiver
     name: Option[String] = None,
     endpoint: Option[RpcEndpointRef] = None,
     errorInfo: Option[ReceiverErrorInfo] = None) {

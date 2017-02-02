@@ -133,7 +133,7 @@ class StreamingContext private[streaming] (
       "both SparkContext and checkpoint as null")
   }
 
-  private[streaming] val isCheckpointPresent = (cp_ != null) //true表示存在checkpoint文件
+  private[streaming] val isCheckpointPresent = (cp_ != null) //true表示需要从系统日志中还原接收到的内容
 
   private[streaming] val sc: SparkContext = {
     if (sc_ != null) {

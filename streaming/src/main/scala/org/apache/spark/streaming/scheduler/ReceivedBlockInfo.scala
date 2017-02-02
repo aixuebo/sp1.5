@@ -21,7 +21,9 @@ import org.apache.spark.storage.StreamBlockId
 import org.apache.spark.streaming.receiver.{ReceivedBlockStoreResult, WriteAheadLogBasedStoreResult}
 import org.apache.spark.streaming.util.WriteAheadLogRecordHandle
 
-/** Information about blocks received by the receiver */
+/** Information about blocks received by the receiver
+  * 接收到的一个数据块的信息,是一个基本单位,一个streaming每次接受,都产生一个该对象
+  **/
 private[streaming] case class ReceivedBlockInfo(
     streamId: Int,//哪个stream
     numRecords: Option[Long],//该数据块有多少条数据
@@ -31,11 +33,11 @@ private[streaming] case class ReceivedBlockInfo(
 
   require(numRecords.isEmpty || numRecords.get >= 0, "numRecords must not be negative")
 
-  @volatile private var _isBlockIdValid = true
+  @volatile private var _isBlockIdValid = true //数据块是否有效
 
   def blockId: StreamBlockId = blockStoreResult.blockId
 
-  def walRecordHandleOption: Option[WriteAheadLogRecordHandle] = {
+  def walRecordHandleOption: Option[WriteAheadLogRecordHandle] = { //数据块对应的头文件
     blockStoreResult match {
       case walStoreResult: WriteAheadLogBasedStoreResult => Some(walStoreResult.walRecordHandle)
       case _ => None
@@ -48,6 +50,7 @@ private[streaming] case class ReceivedBlockInfo(
   /**
    * Set the block ID as invalid. This is useful when it is known that the block is not present
    * in the Spark executors.
+    * 校验该数据块是否有效,
    */
   def setBlockIdInvalid(): Unit = {
     _isBlockIdValid = false

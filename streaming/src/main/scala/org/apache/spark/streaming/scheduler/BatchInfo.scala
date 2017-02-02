@@ -23,7 +23,8 @@ import org.apache.spark.streaming.Time
 /**
  * :: DeveloperApi ::
  * Class having information on completed batches.
- * @param batchTime   Time of the batch
+  * 关于一个batch的信息,表示一组批处理
+ * @param batchTime   Time of the batch 批处理时间
  * @param streamIdToInputInfo A map of input stream id to its input info
  * @param submissionTime  Clock time of when jobs of this batch was submitted to
  *                        the streaming scheduler queue
@@ -33,25 +34,27 @@ import org.apache.spark.streaming.Time
 @DeveloperApi
 case class BatchInfo(
     batchTime: Time,
-    streamIdToInputInfo: Map[Int, StreamInputInfo],
-    submissionTime: Long,
-    processingStartTime: Option[Long],
-    processingEndTime: Option[Long]
+    streamIdToInputInfo: Map[Int, StreamInputInfo],//stream集合,key是streamId
+    submissionTime: Long,//提交时间
+    processingStartTime: Option[Long],//开始处理时间
+    processingEndTime: Option[Long] //完成时间
   ) {
 
   @deprecated("Use streamIdToInputInfo instead", "1.5.0")
-  def streamIdToNumRecords: Map[Int, Long] = streamIdToInputInfo.mapValues(_.numRecords)
+  def streamIdToNumRecords: Map[Int, Long] = streamIdToInputInfo.mapValues(_.numRecords) //每一个stream中有多少条记录数据
 
   /**
    * Time taken for the first job of this batch to start processing from the time this batch
    * was submitted to the streaming scheduler. Essentially, it is
    * `processingStartTime` - `submissionTime`.
+    * 调度等待时间
    */
   def schedulingDelay: Option[Long] = processingStartTime.map(_ - submissionTime)
 
   /**
    * Time taken for the all jobs of this batch to finish processing from the time they started
    * processing. Essentially, it is `processingEndTime` - `processingStartTime`.
+    * 处理时间
    */
   def processingDelay: Option[Long] = processingEndTime.zip(processingStartTime)
     .map(x => x._1 - x._2).headOption
@@ -59,12 +62,14 @@ case class BatchInfo(
   /**
    * Time taken for all the jobs of this batch to finish processing from the time they
    * were submitted.  Essentially, it is `processingDelay` + `schedulingDelay`.
+    * 等待调度+处理时间 = 总时间
    */
   def totalDelay: Option[Long] = schedulingDelay.zip(processingDelay)
     .map(x => x._1 + x._2).headOption
 
   /**
    * The number of recorders received by the receivers in this batch.
+    * 一个batch的总记录数量
    */
   def numRecords: Long = streamIdToInputInfo.values.map(_.numRecords).sum
 }

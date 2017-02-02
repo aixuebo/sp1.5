@@ -134,12 +134,14 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
   /**
    * Track all receivers' information. The key is the receiver id, the value is the receiver info.
    * It's only accessed in ReceiverTrackerEndpoint.
+    * 为每一个receiver分配一个详细信息,只是该receiver可以在哪些host上被调度,以及已经在哪个host上调度了
    */
   private val receiverTrackingInfos = new HashMap[Int, ReceiverTrackingInfo]
 
   /**
    * Store all preferred locations for all receivers. We need this information to schedule
    * receivers. It's only accessed in ReceiverTrackerEndpoint.
+    * 记录该receiver建议在哪些host上去执行
    */
   private val receiverPreferredLocations = new HashMap[Int, Option[String]]
 
@@ -346,6 +348,8 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
     scheduledExecutors
   }
 
+  //更新receiver的执行调度
+  //为该receiverId分配了哪些host可以去执行
   private def updateReceiverScheduledExecutors(
       receiverId: Int, scheduledExecutors: Seq[String]): Unit = {
     val newReceiverTrackingInfo = receiverTrackingInfos.get(receiverId) match {
@@ -362,20 +366,23 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
     receiverTrackingInfos.put(receiverId, newReceiverTrackingInfo)
   }
 
-  /** Check if any blocks are left to be processed */
+  /** Check if any blocks are left to be processed
+    * 是否现在有未提交到批处理的数据信息
+    **/
   def hasUnallocatedBlocks: Boolean = {
     receivedBlockTracker.hasUnallocatedReceivedBlocks
   }
 
   /**
    * Get the list of executors excluding driver
+    * 获取所有的执行节点集合--刨除driver节点
    */
   private def getExecutors: Seq[String] = {
     if (ssc.sc.isLocal) {
       Seq(ssc.sparkContext.env.blockManager.blockManagerId.hostPort)
     } else {
       ssc.sparkContext.env.blockManager.master.getMemoryStatus.filter { case (blockManagerId, _) =>
-        blockManagerId.executorId != SparkContext.DRIVER_IDENTIFIER // Ignore the driver location
+        blockManagerId.executorId != SparkContext.DRIVER_IDENTIFIER // Ignore the driver location 忽略driver的节点
       }.map { case (blockManagerId, _) => blockManagerId.hostPort }.toSeq
     }
   }
@@ -425,20 +432,22 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
   private class ReceiverTrackerEndpoint(override val rpcEnv: RpcEnv) extends ThreadSafeRpcEndpoint {
 
     // TODO Remove this thread pool after https://github.com/apache/spark/issues/7385 is merged
+    //提交的线程池
     private val submitJobThreadPool = ExecutionContext.fromExecutorService(
       ThreadUtils.newDaemonCachedThreadPool("submit-job-thead-pool"))
 
+    //接受到的信息
     override def receive: PartialFunction[Any, Unit] = {
       // Local messages
-      case StartAllReceivers(receivers) =>
-        val scheduledExecutors = schedulingPolicy.scheduleReceivers(receivers, getExecutors)
-        for (receiver <- receivers) {
-          val executors = scheduledExecutors(receiver.streamId)
-          updateReceiverScheduledExecutors(receiver.streamId, executors)
-          receiverPreferredLocations(receiver.streamId) = receiver.preferredLocation
+      case StartAllReceivers(receivers) => //开启所有的接受者,参数就是接受者集合
+        val scheduledExecutors = schedulingPolicy.scheduleReceivers(receivers, getExecutors) //为每一个receiver分配可以再哪些host上去运行  返回值表示每一个streaming 运行在哪些host节点集合上
+        for (receiver <- receivers) {//循环每一个接受者
+          val executors = scheduledExecutors(receiver.streamId) //该receiver可以在哪些host上去运行
+          updateReceiverScheduledExecutors(receiver.streamId, executors) //更新该receiver的调度详细内容
+          receiverPreferredLocations(receiver.streamId) = receiver.preferredLocation //记录该receiver建议在哪些host上去执行
           startReceiver(receiver, executors)
         }
-      case RestartReceiver(receiver) =>
+      case RestartReceiver(receiver) => //重新打开一个接受者
         // Old scheduled executors minus the ones that are not active any more
         val oldScheduledExecutors = getStoredScheduledExecutors(receiver.streamId)
         val scheduledExecutors = if (oldScheduledExecutors.nonEmpty) {
@@ -459,14 +468,14 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
         // Assume there is one receiver restarting at one time, so we don't need to update
         // receiverTrackingInfos
         startReceiver(receiver, scheduledExecutors)
-      case c: CleanupOldBlocks =>
+      case c: CleanupOldBlocks => //清理老数据
         receiverTrackingInfos.values.flatMap(_.endpoint).foreach(_.send(c))
       case UpdateReceiverRateLimit(streamUID, newRate) =>
         for (info <- receiverTrackingInfos.get(streamUID); eP <- info.endpoint) {
           eP.send(UpdateRateLimit(newRate))
         }
       // Remote messages
-      case ReportError(streamId, message, error) =>
+      case ReportError(streamId, message, error) => //有异常信息
         reportError(streamId, message, error)
     }
 
@@ -510,6 +519,8 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
 
     /**
      * Start a receiver along with its scheduled executors
+      * 开启一个receiver,
+      * 参数scheduledExecutors 表示该receiver可以在哪些host上去开启
      */
     private def startReceiver(receiver: Receiver[_], scheduledExecutors: Seq[String]): Unit = {
       def shouldStartReceiver: Boolean = {

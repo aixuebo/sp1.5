@@ -68,6 +68,13 @@ private[streaming] class ReceiverSchedulingPolicy {
    * </ol>
    *
    * This method is called when we start to launch receivers at the first time.
+    * 第一次开始启动receivers的时候调用该方法
+    *
+    * 该方法为每一个接受者分配一个节点运行
+    * 参数receivers 表示所有的接受者
+    * 参数executors 表示可以运行该接受者的节点host集合
+    *
+    *  返回值表示每一个streaming 运行在哪些host节点集合上
    */
   def scheduleReceivers(
       receivers: Seq[Receiver[_]], executors: Seq[String]): Map[Int, Seq[String]] = {
@@ -79,26 +86,29 @@ private[streaming] class ReceiverSchedulingPolicy {
       return receivers.map(_.streamId -> Seq.empty).toMap
     }
 
-    val hostToExecutors = executors.groupBy(_.split(":")(0))
-    val scheduledExecutors = Array.fill(receivers.length)(new mutable.ArrayBuffer[String])
-    val numReceiversOnExecutor = mutable.HashMap[String, Int]()
-    // Set the initial value to 0
+    val hostToExecutors = executors.groupBy(_.split(":")(0)) //按照host分组,因为节点可能在同一个host上不同端口存在多个,因此刨除端口的干扰  返回值是一个host上有多少个端口
+
+    //设置第i个receiver在哪个host上执行
+    val scheduledExecutors = Array.fill(receivers.length)(new mutable.ArrayBuffer[String]) //二维数组,每一个receiver一个数组,存储该receivers的host集合
+
+    val numReceiversOnExecutor = mutable.HashMap[String, Int]()//每一个host上有多少个receiver,初始值都是0
+    // Set the initial value to 0 设置初始值都是0
     executors.foreach(e => numReceiversOnExecutor(e) = 0)
 
     // Firstly, we need to respect "preferredLocation". So if a receiver has "preferredLocation",
     // we need to make sure the "preferredLocation" is in the candidate scheduled executor list.
-    for (i <- 0 until receivers.length) {
-      // Note: preferredLocation is host but executors are host:port
-      receivers(i).preferredLocation.foreach { host =>
+    for (i <- 0 until receivers.length) {//循环每一个接受者
+      // Note: preferredLocation is host but executors are host:port 注意 建议的host仅仅是host,但是executor是host:port形式
+      receivers(i).preferredLocation.foreach { host => //找到该receiver建议运行的host集合取遍历
         hostToExecutors.get(host) match {
-          case Some(executorsOnHost) =>
+          case Some(executorsOnHost) =>  //executorsOnHost表示该host有多少个端口
             // preferredLocation is a known host. Select an executor that has the least receivers in
             // this host
             val leastScheduledExecutor =
-              executorsOnHost.minBy(executor => numReceiversOnExecutor(executor))
+              executorsOnHost.minBy(executor => numReceiversOnExecutor(executor)) //选择该端口最少的一个
             scheduledExecutors(i) += leastScheduledExecutor
             numReceiversOnExecutor(leastScheduledExecutor) =
-              numReceiversOnExecutor(leastScheduledExecutor) + 1
+              numReceiversOnExecutor(leastScheduledExecutor) + 1 //该host:port上多了一个receiver
           case None =>
             // preferredLocation is an unknown host.
             // Note: There are two cases:
@@ -112,19 +122,21 @@ private[streaming] class ReceiverSchedulingPolicy {
 
     // For those receivers that don't have preferredLocation, make sure we assign at least one
     // executor to them.
-    for (scheduledExecutorsForOneReceiver <- scheduledExecutors.filter(_.isEmpty)) {
+    //对没有preferredLocation的receiver进行分配一个host去执行
+    for (scheduledExecutorsForOneReceiver <- scheduledExecutors.filter(_.isEmpty)) { //找到没有节点分配的receiver
       // Select the executor that has the least receivers
-      val (leastScheduledExecutor, numReceivers) = numReceiversOnExecutor.minBy(_._2)
-      scheduledExecutorsForOneReceiver += leastScheduledExecutor
-      numReceiversOnExecutor(leastScheduledExecutor) = numReceivers + 1
+      val (leastScheduledExecutor, numReceivers) = numReceiversOnExecutor.minBy(_._2) //找到最不繁忙的host和该host上有多少个接受者
+      scheduledExecutorsForOneReceiver += leastScheduledExecutor //为该receiver分配最不繁忙的host
+      numReceiversOnExecutor(leastScheduledExecutor) = numReceivers + 1 //不繁忙的host上的receiver数量+1
     }
 
     // Assign idle executors to receivers that have less executors
-    val idleExecutors = numReceiversOnExecutor.filter(_._2 == 0).map(_._1)
+    //找到闲置的host
+    val idleExecutors = numReceiversOnExecutor.filter(_._2 == 0).map(_._1) //找到闲置的host集合,即这些host上没有receiver任务
     for (executor <- idleExecutors) {
       // Assign an idle executor to the receiver that has least candidate executors.
-      val leastScheduledExecutors = scheduledExecutors.minBy(_.size)
-      leastScheduledExecutors += executor
+      val leastScheduledExecutors = scheduledExecutors.minBy(_.size) //找到receiver执行的host最少的receiver
+      leastScheduledExecutors += executor //将闲置的host分配给该receiver
     }
 
     receivers.map(_.streamId).zip(scheduledExecutors).toMap
