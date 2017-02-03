@@ -56,8 +56,7 @@ import org.apache.spark.util.{CallSite, MetadataCleaner, Utils}
  *  - A time interval at which the DStream generates an RDD
  *  - A function that is used to generate an RDD after each time interval
  */
-
-abstract class DStream[T: ClassTag] (
+abstract class DStream[T: ClassTag] ( //T可以是元组(KEY,VALUE)
     @transient private[streaming] var ssc: StreamingContext
   ) extends Serializable with Logging {
 
@@ -84,7 +83,7 @@ abstract class DStream[T: ClassTag] (
   @transient
   private[streaming] var generatedRDDs = new HashMap[Time, RDD[T]] ()
 
-  // Time zero for the DStream
+  // Time zero for the DStream 初始化DStream的时间点
   private[streaming] var zeroTime: Time = null
 
   // Duration for which the DStream will remember each RDD created
@@ -95,8 +94,8 @@ abstract class DStream[T: ClassTag] (
   private[streaming] var storageLevel: StorageLevel = StorageLevel.NONE
 
   // Checkpoint details
-  private[streaming] val mustCheckpoint = false
-  private[streaming] var checkpointDuration: Duration = null
+  private[streaming] val mustCheckpoint = false //true表示必须要进行checkpoint
+  private[streaming] var checkpointDuration: Duration = null //checkpoint的周期
   private[streaming] val checkpointData = new DStreamCheckpointData(this)
 
   // Reference to whole DStream graph
@@ -337,10 +336,11 @@ abstract class DStream[T: ClassTag] (
   private[streaming] final def getOrCompute(time: Time): Option[RDD[T]] = {
     // If RDD was already generated, then retrieve it from HashMap,
     // or else compute the RDD
+    //如果generatedRDDs.get(time)有内容,则直接返回即可,如果没有则进行else操作
     generatedRDDs.get(time).orElse {
       // Compute the RDD if time is valid (e.g. correct time in a sliding window)
       // of RDD generation, else generate nothing.
-      if (isTimeValid(time)) {
+      if (isTimeValid(time)) {//说明时间有效
 
         val rddOption = createRDDWithLocalProperties(time) {
           // Disable checks for existing output directories in jobs launched by the streaming
@@ -365,7 +365,7 @@ abstract class DStream[T: ClassTag] (
           generatedRDDs.put(time, newRDD)
         }
         rddOption
-      } else {
+      } else {//说明时间无效
         None
       }
     }
@@ -374,6 +374,7 @@ abstract class DStream[T: ClassTag] (
   /**
    * Wrap a body of code such that the call site and operation scope
    * information are passed to the RDDs created in this body properly.
+   * 其实就是执行body内容,返回U对象
    */
   protected def createRDDWithLocalProperties[U](time: Time)(body: => U): U = {
     val scopeKey = SparkContext.RDD_SCOPE_KEY
@@ -382,12 +383,13 @@ abstract class DStream[T: ClassTag] (
     // thread-local properties in our SparkContext. Since this method may be called from another
     // DStream, we need to temporarily store any old scope and creation site information to
     // restore them later after setting our own.
-    val prevCallSite = ssc.sparkContext.getCallSite()
+    val prevCallSite = ssc.sparkContext.getCallSite() //返回调用钱的堆栈内容
+    //先保留一下原有内容
     val prevScope = ssc.sparkContext.getLocalProperty(scopeKey)
     val prevScopeNoOverride = ssc.sparkContext.getLocalProperty(scopeNoOverrideKey)
 
     try {
-      ssc.sparkContext.setCallSite(creationSite)
+      ssc.sparkContext.setCallSite(creationSite) //设置此时的堆栈
       // Use the DStream's base scope for this RDD so we can (1) preserve the higher level
       // DStream operation name, and (2) share this scope with other DStreams created in the
       // same operation. Disallow nesting so that low-level Spark primitives do not show up.
@@ -400,9 +402,9 @@ abstract class DStream[T: ClassTag] (
       body
     } finally {
       // Restore any state that was modified before returning
-      ssc.sparkContext.setCallSite(prevCallSite)
-      ssc.sparkContext.setLocalProperty(scopeKey, prevScope)
-      ssc.sparkContext.setLocalProperty(scopeNoOverrideKey, prevScopeNoOverride)
+      ssc.sparkContext.setCallSite(prevCallSite) //还原原来的堆栈
+      ssc.sparkContext.setLocalProperty(scopeKey, prevScope) //还原原来的内容
+      ssc.sparkContext.setLocalProperty(scopeNoOverrideKey, prevScopeNoOverride) //还原原来的内容
     }
   }
 
@@ -414,12 +416,12 @@ abstract class DStream[T: ClassTag] (
    */
   private[streaming] def generateJob(time: Time): Option[Job] = {
     getOrCompute(time) match {
-      case Some(rdd) => {
+      case Some(rdd) => {//说明有RDD存在
         val jobFunc = () => {
           val emptyFunc = { (iterator: Iterator[T]) => {} }
           context.sparkContext.runJob(rdd, emptyFunc)
         }
-        Some(new Job(time, jobFunc))
+        Some(new Job(time, jobFunc)) //产生一个job,执行该rdd函数
       }
       case None => None
     }
@@ -934,13 +936,16 @@ object DStream {
   // it automatically. However, we still keep the old function in StreamingContext for backward
   // compatibility and forward to the following function directly.
 
+  //一个隐式转换,将元组(K, V)类型的,转换成PairDStreamFunctions对象,即对k,v结构的数据进行附加功能
   implicit def toPairDStreamFunctions[K, V](stream: DStream[(K, V)])
       (implicit kt: ClassTag[K], vt: ClassTag[V], ord: Ordering[K] = null):
     PairDStreamFunctions[K, V] = {
     new PairDStreamFunctions[K, V](stream)
   }
 
-  /** Get the creation site of a DStream from the stack trace of when the DStream is created. */
+  /** Get the creation site of a DStream from the stack trace of when the DStream is created.
+    * 获取创建DStream时候的堆栈信息
+    **/
   private[streaming] def getCreationSite(): CallSite = {
     val SPARK_CLASS_REGEX = """^org\.apache\.spark""".r
     val SPARK_STREAMING_TESTCLASS_REGEX = """^org\.apache\.spark\.streaming\.test""".r
@@ -958,6 +963,8 @@ object DStream {
       // If the class is a spark example class or a streaming test class then it is considered
       // as a streaming application class and don't exclude. Otherwise, exclude any
       // non-Spark and non-Scala class, as the rest would streaming application classes.
+      //如果class是spark的example的类或者streaming的test类,则返回false
+      //如果不是spark的example的类 也不是streaming的test类,又是scala或者org.apache.spark开头的类,则返回true
       (isSparkClass || isScalaClass) && !isSparkExampleClass && !isSparkStreamingTestClass
     }
     org.apache.spark.util.Utils.getCallSite(streamingExclustionFunction)

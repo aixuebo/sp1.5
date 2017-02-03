@@ -183,7 +183,7 @@ class StreamingContext private[streaming] (
     if (isCheckpointPresent) cp_.checkpointDuration else graph.batchDuration
   }
 
-  private[streaming] val scheduler = new JobScheduler(this)
+  private[streaming] val scheduler = new JobScheduler(this) //任务调度器
 
   private[streaming] val waiter = new ContextWaiter
 
@@ -201,7 +201,7 @@ class StreamingContext private[streaming] (
 
   private var state: StreamingContextState = INITIALIZED
 
-  private val startSite = new AtomicReference[CallSite](null)
+  private val startSite = new AtomicReference[CallSite](null) //保存开始时候的堆栈信息
 
   private var shutdownHookRef: AnyRef = _
 
@@ -592,10 +592,10 @@ class StreamingContext private[streaming] (
   def start(): Unit = synchronized {
     state match {
       case INITIALIZED =>
-        startSite.set(DStream.getCreationSite())
+        startSite.set(DStream.getCreationSite()) //保存开始时候的堆栈信息
         sparkContext.setCallSite(startSite.get)
         StreamingContext.ACTIVATION_LOCK.synchronized {
-          StreamingContext.assertNoOtherContextIsActive()
+          StreamingContext.assertNoOtherContextIsActive() //确保没有其他的StreamingContext存在
           try {
             validate()
             scheduler.start()
@@ -607,7 +607,7 @@ class StreamingContext private[streaming] (
               state = StreamingContextState.STOPPED
               throw e
           }
-          StreamingContext.setActiveContext(this)
+          StreamingContext.setActiveContext(this) //设置已经有一个StreamingContext已经活跃了
         }
         shutdownHookRef = ShutdownHookManager.addShutdownHook(
           StreamingContext.SHUTDOWN_HOOK_PRIORITY)(stopOnShutdown)
@@ -709,6 +709,7 @@ class StreamingContext private[streaming] (
     }
   }
 
+  //钩子函数
   private def stopOnShutdown(): Unit = {
     val stopGracefully = conf.getBoolean("spark.streaming.stopGracefullyOnShutdown", false)
     logInfo(s"Invoking stop(stopGracefully=$stopGracefully) from shutdown hook")
@@ -727,13 +728,15 @@ object StreamingContext extends Logging {
   /**
    * Lock that guards activation of a StreamingContext as well as access to the singleton active
    * StreamingContext in getActiveOrCreate().
+   * 监控唯一活跃的StreamingContext对象的锁
    */
   private val ACTIVATION_LOCK = new Object()
 
   private val SHUTDOWN_HOOK_PRIORITY = ShutdownHookManager.SPARK_CONTEXT_SHUTDOWN_PRIORITY + 1
 
-  private val activeContext = new AtomicReference[StreamingContext](null)
+  private val activeContext = new AtomicReference[StreamingContext](null) //当前活跃的唯一的一个StreamingContext是哪个实例对象
 
+  //确保没有其他的StreamingContext存在
   private def assertNoOtherContextIsActive(): Unit = {
     ACTIVATION_LOCK.synchronized {
       if (activeContext.get() != null) {
@@ -745,6 +748,7 @@ object StreamingContext extends Logging {
     }
   }
 
+  //设置当前活跃的唯一的一个StreamingContext是哪个实例对象
   private def setActiveContext(ssc: StreamingContext): Unit = {
     ACTIVATION_LOCK.synchronized {
       activeContext.set(ssc)
@@ -755,6 +759,7 @@ object StreamingContext extends Logging {
    * :: Experimental ::
    *
    * Get the currently active context, if there is one. Active means started but not stopped.
+   * 获取当前活跃的唯一的一个StreamingContext是哪个实例对象
    */
   @Experimental
   def getActive(): Option[StreamingContext] = {

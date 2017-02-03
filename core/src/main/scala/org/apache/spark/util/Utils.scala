@@ -54,12 +54,14 @@ import org.apache.spark.serializer.{DeserializationStream, SerializationStream, 
 /** CallSite represents a place in user code. It can have a short and a long form. 
  * 参数 shortForm 表示堆栈信息的短小名称
  * 参数  longForm表示堆栈信息的字符串形式
+  *
+  * 参考 该类的def getCallSite(skipClass: String => Boolean = sparkInternalExclusionFunction): CallSite方法
  **/
 private[spark] case class CallSite(shortForm: String, longForm: String)
 
 private[spark] object CallSite {
-  val SHORT_FORM = "callSite.short"
-  val LONG_FORM = "callSite.long"
+  val SHORT_FORM = "callSite.short"//更优雅的名字
+  val LONG_FORM = "callSite.long"//获取堆栈的前callStackDepth条数据
 }
 
 /**
@@ -1093,7 +1095,7 @@ private[spark] object Utils extends Logging {
    * Execute a command and return the process running the command.
    * 在workingDir目录下执行command命令集合,并且赋予环境变量集合extraEnvironment
    * 
-   * @redirectStderr true表示输出错误日志,将错误日志输出到log日志中
+   * redirectStderr true表示输出错误日志,将错误日志输出到log日志中
    */
   def executeCommand(
       command: Seq[String],
@@ -1118,9 +1120,9 @@ private[spark] object Utils extends Logging {
    * Execute a command and get its output, throwing an exception if it yields a code other than 0.
    * 在workingDir目录下执行command命令集合,并且赋予环境变量集合extraEnvironment
    * 
-   * @redirectStderr true表示输出错误日志,将错误日志输出到log日志中
+   * redirectStderr true表示输出错误日志,将错误日志输出到log日志中
    * 
-   * @return 返回正常的输出字符串
+   * return 返回正常的输出字符串
    */
   def executeAndGetOutput(
       command: Seq[String],
@@ -1151,7 +1153,7 @@ private[spark] object Utils extends Logging {
    * Return and start a daemon thread that processes the content of the input stream line by line.
    * 启动一个后台线程,去读取输入流,每一行信息使用processLine函数处理
    * 
-   * @processLine 表示读取一行数据进行处理的函数,参数是字符串,返回值是无
+   * processLine 表示读取一行数据进行处理的函数,参数是字符串,返回值是无
    */
   def processStreamByLine(
       threadName: String,//线程名称
@@ -1302,6 +1304,9 @@ private[spark] object Utils extends Logging {
    * 
    * 1.如果class以scala开头,则认为是spark内部类
    * 2.如果是org\.apache\.spark开头的,认为是spark内部类
+    *
+    *
+    * 一个函数,被使用于刨除非user定义的class,true表示spark自带的类,false表示用户自定义的类
    **/
   private def sparkInternalExclusionFunction(className: String): Boolean = {
     // A regular expression to match classes of the internal Spark API's
@@ -1321,41 +1326,45 @@ private[spark] object Utils extends Logging {
    * When called inside a class in the spark package, returns the name of the user code class
    * (outside the spark package) that called into Spark, as well as which Spark method they called.
    * This is used, for example, to tell users where in their code each RDD got created.
+   * 当被调用的时候,此时还在spark包的内部一个class被调用的,返回用户定义的class的name(用户自定义的代码是在spark包外,被spark程序出发的代码)
    *
-   * @param skipClass Function that is used to exclude non-user-code classes.
+   * @param skipClass Function that is used to exclude non-user-code classes.一个函数,被使用于刨除非user定义的class,true表示spark自带的类,false表示用户自定义的类
    * 参数是一个函数,该函数的参数是字符串,返回boolean,默认函数是sparkInternalExclusionFunction
    */
   def getCallSite(skipClass: String => Boolean = sparkInternalExclusionFunction): CallSite = {
     // Keep crawling up the stack trace until we find the first function not inside of the spark
-    // package. We track the last (shallowest) contiguous Spark method. This might be an RDD
+    // package.
+    // 保持按顺序爬行查找堆栈内容,直到我们找到第一个函数不是spark内部package产生的函数,即用户自定义的class
+    // We track the last (shallowest) contiguous Spark method. This might be an RDD
     // transformation, a SparkContext function (such as parallelize), or anything else that leads
     // to instantiation of an RDD. We also track the first (deepest) user method, file, and line.
     var lastSparkMethod = "<unknown>"//最后一个spark方法
     var firstUserFile = "<unknown>"//执行第一个用户定义的文件
     var firstUserLine = 0//执行第一个用户定义的文件的文件行
-    var insideSpark = true
-    var callStack = new ArrayBuffer[String]() :+ "<unknown>"
+    var insideSpark = true //默认是在spark内部调用的
+    var callStack = new ArrayBuffer[String]() :+ "<unknown>" //记录堆栈信息,记录该class在哪个文件里面,第几行是执行的方法行
 
+    //循环堆栈的每一个调用的方法
     Thread.currentThread.getStackTrace().foreach { ste: StackTraceElement =>
       // When running under some profilers, the current stack trace might contain some bogus
       // frames. This is intended to ensure that we don't crash in these situations by
       // ignoring any frames that we can't examine.
       if (ste != null && ste.getMethodName != null
-        && !ste.getMethodName.contains("getStackTrace")) {
-        if (insideSpark) {
-          if (skipClass(ste.getClassName)) {
-            lastSparkMethod = if (ste.getMethodName == "<init>") {
+        && !ste.getMethodName.contains("getStackTrace")) {//堆栈的第一个方法一定是getStackTrace方法,因此要刨除该方法
+        if (insideSpark) {//true 说明此时还在spark内部调用呢
+          if (skipClass(ste.getClassName)) {//ste.getClassName返回该调用的方法属于哪个class类,true表示跳过该类
+            lastSparkMethod = if (ste.getMethodName == "<init>") {//如果是init方法,则返回class对类名字即可
               // Spark method is a constructor; get its class name
               ste.getClassName.substring(ste.getClassName.lastIndexOf('.') + 1)
             } else {
               ste.getMethodName
             }
-            callStack(0) = ste.toString // Put last Spark method on top of the stack trace.
+            callStack(0) = ste.toString // Put last Spark method on top of the stack trace.//防止spark的最后一个方法在堆栈的第一个位置
           } else {
             firstUserLine = ste.getLineNumber
             firstUserFile = ste.getFileName
-            callStack += ste.toString
-            insideSpark = false
+            callStack += ste.toString //记录该class在哪个文件里面,第几行是执行的方法行
+            insideSpark = false //说明已经脱离spark内部调用了
           }
         } else {
           callStack += ste.toString
@@ -1365,14 +1374,14 @@ private[spark] object Utils extends Logging {
 
     val callStackDepth = System.getProperty("spark.callstack.depth", "20").toInt
     val shortForm =
-      if (firstUserFile == "HiveSessionImpl.java") {
+      if (firstUserFile == "HiveSessionImpl.java") {//更优雅的名字
         // To be more user friendly, show a nicer string for queries submitted from the JDBC
         // server.
         "Spark JDBC Server Query"
       } else {
-        s"$lastSparkMethod at $firstUserFile:$firstUserLine"
+        s"$lastSparkMethod at $firstUserFile:$firstUserLine" //更优雅的名字:最后一个spark的方法 at 第一个用户定义的文件中:第多少行开始执行的
       }
-    val longForm = callStack.take(callStackDepth).mkString("\n")
+    val longForm = callStack.take(callStackDepth).mkString("\n") //获取堆栈的前callStackDepth条数据
 
     CallSite(shortForm, longForm)
   }

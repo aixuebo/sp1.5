@@ -397,6 +397,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   private[spark] var checkpointDir: Option[String] = None //返回所有的RDD进行checkpoint的根目录,RDD写入的具体目录是checkpointDir/rdd-$rddId
 
   // Thread Local variable that can be used by users to pass information down the stack
+  //返回一个Properties对象
   protected[spark] val localProperties = new InheritableThreadLocal[Properties] {
     override protected def childValue(parent: Properties): Properties = {
       // Note: make a clone such that changes in the parent properties aren't reflected in
@@ -700,6 +701,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   /**
    * Set a local property that affects jobs submitted from this thread, such as the
    * Spark fair scheduler pool.
+   * 设置key对应的value值,如果value是null,则表示删除对应的key
    */
   def setLocalProperty(key: String, value: String) {
     if (value == null) {
@@ -712,11 +714,14 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   /**
    * Get a local property set in this thread, or null if it is missing. See
    * [[org.apache.spark.SparkContext.setLocalProperty]].
+   * 获取key对应的value值
    */
   def getLocalProperty(key: String): String =
     Option(localProperties.get).map(_.getProperty(key)).orNull
 
-  /** Set a human readable description of the current job. */
+  /** Set a human readable description of the current job.
+    * 设置key对应的value值
+    **/
   def setJobDescription(value: String) {
     setLocalProperty(SparkContext.SPARK_JOB_DESCRIPTION, value)
   }
@@ -1869,6 +1874,9 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   /**
    * Capture the current user callsite and return a formatted version for printing. If the user
    * has overridden the call site using `setCallSite()`, this will return the user's version.
+   *
+   * 1.先读取配置文件中的shortCallSite和longCallSite,
+   * 2.如果配置文件中没有配置,则调用此时堆栈信息,产生此时的堆栈内容
    */
   private[spark] def getCallSite(): CallSite = {
     Option(getLocalProperty(CallSite.SHORT_FORM)).map { case shortCallSite =>

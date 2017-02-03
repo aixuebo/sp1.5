@@ -36,6 +36,9 @@ private[scheduler] case class ErrorReported(msg: String, e: Throwable) extends J
 /**
  * This class schedules jobs to be run on Spark. It uses the JobGenerator to generate
  * the jobs and runs them using a thread pool.
+ *
+ * 该类在spark上进行任务job的调度工作
+ * JobGenerator产生job任务,去让线程池去运行这些job
  */
 private[streaming]
 class JobScheduler(val ssc: StreamingContext) extends Logging {
@@ -43,10 +46,11 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
   // Use of ConcurrentHashMap.keySet later causes an odd runtime problem due to Java 7/8 diff
   // https://gist.github.com/AlainODea/1375759b8720a3f9f094
   private val jobSets: java.util.Map[Time, JobSet] = new ConcurrentHashMap[Time, JobSet]
-  private val numConcurrentJobs = ssc.conf.getInt("spark.streaming.concurrentJobs", 1)
-  private val jobExecutor =
-    ThreadUtils.newDaemonFixedThreadPool(numConcurrentJobs, "streaming-job-executor")
-  private val jobGenerator = new JobGenerator(this)
+
+  private val numConcurrentJobs = ssc.conf.getInt("spark.streaming.concurrentJobs", 1) //多少个job任务可以并发执行
+  private val jobExecutor = ThreadUtils.newDaemonFixedThreadPool(numConcurrentJobs, "streaming-job-executor") //job任务的线程池
+
+  private val jobGenerator = new JobGenerator(this) //该对象会告诉我们如何产生job任务
   val clock = jobGenerator.clock
   val listenerBus = new StreamingListenerBus()
 
@@ -66,17 +70,17 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
     eventLoop = new EventLoop[JobSchedulerEvent]("JobScheduler") {
       override protected def onReceive(event: JobSchedulerEvent): Unit = processEvent(event) //处理该job的事件
 
-      override protected def onError(e: Throwable): Unit = reportError("Error in job scheduler", e)
+      override protected def onError(e: Throwable): Unit = reportError("Error in job scheduler", e) //事件接收异常时候执行该函数
     }
-    eventLoop.start()
+    eventLoop.start() //开启处理事件线程
 
     // attach rate controllers of input streams to receive batch completion updates
     for {
       inputDStream <- ssc.graph.getInputStreams
       rateController <- inputDStream.rateController
-    } ssc.addStreamingListener(rateController)
+    } ssc.addStreamingListener(rateController) //添加每一个输入流对应的rate流量控制监听器
 
-    listenerBus.start(ssc.sparkContext)
+    listenerBus.start(ssc.sparkContext) //开启监听器
     receiverTracker = new ReceiverTracker(ssc)
     inputInfoTracker = new InputInfoTracker(ssc)
     receiverTracker.start()

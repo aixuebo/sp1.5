@@ -26,7 +26,7 @@ import org.apache.spark.util.{Utils, Clock, EventLoop, ManualClock}
 
 /** Event classes for JobGenerator */
 private[scheduler] sealed trait JobGeneratorEvent
-private[scheduler] case class GenerateJobs(time: Time) extends JobGeneratorEvent
+private[scheduler] case class GenerateJobs(time: Time) extends JobGeneratorEvent //时间周期到了,该产生一个job了
 private[scheduler] case class ClearMetadata(time: Time) extends JobGeneratorEvent
 private[scheduler] case class DoCheckpoint(
     time: Time, clearCheckpointDataLater: Boolean) extends JobGeneratorEvent
@@ -35,6 +35,7 @@ private[scheduler] case class ClearCheckpointData(time: Time) extends JobGenerat
 /**
  * This class generates jobs from DStreams as well as drives checkpointing and cleaning
  * up DStream metadata.
+ * 每隔一定周期就产生一个job
  */
 private[streaming]
 class JobGenerator(jobScheduler: JobScheduler) extends Logging {
@@ -55,6 +56,7 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
     }
   }
 
+  //每隔一定周期就执行一次函数,longTime是周期到的时候传递进来的函数
   private val timer = new RecurringTimer(clock, ssc.graph.batchDuration.milliseconds,
     longTime => eventLoop.post(GenerateJobs(new Time(longTime))), "JobGenerator")
 
@@ -70,6 +72,7 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
 
   // eventLoop is created when generator starts.
   // This not being null means the scheduler has been started and not stopped
+  //处理事件
   private var eventLoop: EventLoop[JobGeneratorEvent] = null
 
   // last batch whose completion,checkpointing and metadata cleanup has been completed
@@ -90,9 +93,9 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
         jobScheduler.reportError("Error in job generator", e)
       }
     }
-    eventLoop.start()
+    eventLoop.start() //开启如何处理事件的线程
 
-    if (ssc.isCheckpointPresent) {
+    if (ssc.isCheckpointPresent) { //true表示需要从系统日志中还原接收到的内容
       restart()
     } else {
       startFirstTime()
@@ -174,7 +177,9 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
     }
   }
 
-  /** Processes all events */
+  /** Processes all events
+    * 处理事件
+    **/
   private def processEvent(event: JobGeneratorEvent) {
     logDebug("Got event " + event)
     event match {
@@ -186,7 +191,9 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
     }
   }
 
-  /** Starts the generator for the first time */
+  /** Starts the generator for the first time
+    * 任务第一次被开启
+    **/
   private def startFirstTime() {
     val startTime = new Time(timer.getStartTime())
     graph.start(startTime - graph.batchDuration)
@@ -195,7 +202,7 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
   }
 
   /** Restarts the generator based on the information in checkpoint */
-  private def restart() {
+  private def restart() { //表示需要从系统日志中还原接收到的内容
     // If manual clock is being used for testing, then
     // either set the manual clock to the last checkpointed time,
     // or if the property is defined set it to that time

@@ -21,8 +21,8 @@ package org.apache.spark.util
  * An interface to represent clocks, so that they can be mocked out in unit tests.
  */
 private[spark] trait Clock {
-  def getTimeMillis(): Long
-  def waitTillTime(targetTime: Long): Long
+  def getTimeMillis(): Long //返回当前的时间戳
+  def waitTillTime(targetTime: Long): Long //等待一直到targetTime时间戳为止,返回超过targetTime时间戳后的一个新的时间戳
 }
 
 /**
@@ -46,18 +46,18 @@ private[spark] class SystemClock extends Clock {
     var currentTime = 0L
     currentTime = System.currentTimeMillis()
 
-    var waitTime = targetTime - currentTime
-    if (waitTime <= 0) {
-      return currentTime
+    var waitTime = targetTime - currentTime //还需要等待多久
+    if (waitTime <= 0) {//不需要等候
+      return currentTime //直接返回当前时间
     }
 
     val pollTime = math.max(waitTime / 10.0, minPollTime).toLong
 
     while (true) {
-      currentTime = System.currentTimeMillis()
-      waitTime = targetTime - currentTime
-      if (waitTime <= 0) {
-        return currentTime
+      currentTime = System.currentTimeMillis() //获取当前时间
+      waitTime = targetTime - currentTime //还需要等待的时间
+      if (waitTime <= 0) {//不需要等候
+        return currentTime //直接返回当前时间
       }
       val sleepTime = math.min(waitTime, pollTime)
       Thread.sleep(sleepTime)

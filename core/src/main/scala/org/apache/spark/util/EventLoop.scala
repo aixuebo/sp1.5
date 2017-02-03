@@ -30,26 +30,27 @@ import org.apache.spark.Logging
  *
  * Note: The event queue will grow indefinitely. So subclasses should make sure `onReceive` can
  * handle events in time to avoid the potential OOM.
+ * 内部包含一个线程,去处理事件对象
  */
 private[spark] abstract class EventLoop[E](name: String) extends Logging {
 
-  private val eventQueue: BlockingQueue[E] = new LinkedBlockingDeque[E]()
+  private val eventQueue: BlockingQueue[E] = new LinkedBlockingDeque[E]() //事件对象的队列集合
 
-  private val stopped = new AtomicBoolean(false)
+  private val stopped = new AtomicBoolean(false) //是否已经停止了
 
-  private val eventThread = new Thread(name) {
+  private val eventThread = new Thread(name) { //真正的线程
     setDaemon(true)
 
     override def run(): Unit = {
       try {
-        while (!stopped.get) {
-          val event = eventQueue.take()
+        while (!stopped.get) {//没有停止则不断的执行循环
+          val event = eventQueue.take()//阻塞的获取一个事件
           try {
-            onReceive(event)
+            onReceive(event) //收到一个事件时候调用该函数
           } catch {
             case NonFatal(e) => {
               try {
-                onError(e)
+                onError(e) //事件接收异常时候执行该函数
               } catch {
                 case NonFatal(e) => logError("Unexpected error in " + name, e)
               }
@@ -70,7 +71,7 @@ private[spark] abstract class EventLoop[E](name: String) extends Logging {
     }
     // Call onStart before starting the event thread to make sure it happens before onReceive
     onStart()
-    eventThread.start()
+    eventThread.start() //打开事件处理线程
   }
 
   def stop(): Unit = {
@@ -98,6 +99,7 @@ private[spark] abstract class EventLoop[E](name: String) extends Logging {
 
   /**
    * Put the event into the event queue. The event thread will process it later.
+   * 存储一个事件
    */
   def post(event: E): Unit = {
     eventQueue.put(event)
@@ -124,12 +126,14 @@ private[spark] abstract class EventLoop[E](name: String) extends Logging {
    * Note: Should avoid calling blocking actions in `onReceive`, or the event thread will be blocked
    * and cannot process events in time. If you want to call some blocking actions, run them in
    * another thread.
+   * 收到一个事件时候调用该函数
    */
   protected def onReceive(event: E): Unit
 
   /**
    * Invoked if `onReceive` throws any non fatal error. Any non fatal error thrown from `onError`
    * will be ignored.
+   * 事件接收异常时候执行该函数
    */
   protected def onError(e: Throwable): Unit
 

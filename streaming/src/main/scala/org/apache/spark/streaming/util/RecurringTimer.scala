@@ -39,8 +39,12 @@ class RecurringTimer(clock: Clock, period: Long, callback: (Long) => Unit, name:
    * Get the time when this timer will fire if it is started right now.
    * The time will be a multiple of this timer's period and more than
    * current system time.
+   * 返回值是比当前时间戳大的一个时间戳,而具体的时间戳是大整数倍period周期的一个时间戳
    */
   def getStartTime(): Long = {
+    //math.floor(clock.getTimeMillis().toDouble / period) 表示当前时间 是period的几个整数倍,比如当前是105,周期是20,则返回5
+    //结果+1 表示肯定能超过一个周期
+    //然后结果*period 表示若干个周期后的时间是什么
     (math.floor(clock.getTimeMillis().toDouble / period) + 1).toLong * period
   }
 
