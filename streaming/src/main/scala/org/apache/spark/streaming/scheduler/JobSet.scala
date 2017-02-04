@@ -26,8 +26,8 @@ import org.apache.spark.streaming.Time
   */
 private[streaming]
 case class JobSet(
-    time: Time,
-    jobs: Seq[Job],
+    time: Time,//什么时间点产生的job集合
+    jobs: Seq[Job],//每一个streaming对应一个job对象
     streamIdToInputInfo: Map[Int, StreamInputInfo] = Map.empty) {
 
   private val incompleteJobs = new HashSet[Job]()

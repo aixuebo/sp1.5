@@ -263,7 +263,9 @@ abstract class Receiver[T](val storageLevel: StorageLevel) extends Serializable 
   /** Handler object that runs the receiver. This is instantiated lazily in the worker. */
   @transient private var _supervisor : ReceiverSupervisor = null
 
-  /** Set the ID of the DStream that this receiver is associated with. */
+  /** Set the ID of the DStream that this receiver is associated with.
+    * 设置DStream的ID,表示该DStream属于第几个receiver
+    **/
   private[streaming] def setReceiverId(id_ : Int) {
     id = id_
   }

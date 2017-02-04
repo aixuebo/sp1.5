@@ -29,8 +29,8 @@ import org.apache.spark.util.{EventLoop, ThreadUtils}
 
 
 private[scheduler] sealed trait JobSchedulerEvent
-private[scheduler] case class JobStarted(job: Job) extends JobSchedulerEvent
-private[scheduler] case class JobCompleted(job: Job) extends JobSchedulerEvent
+private[scheduler] case class JobStarted(job: Job) extends JobSchedulerEvent //开始执行一个job
+private[scheduler] case class JobCompleted(job: Job) extends JobSchedulerEvent //job完成执行
 private[scheduler] case class ErrorReported(msg: String, e: Throwable) extends JobSchedulerEvent
 
 /**
@@ -195,6 +195,7 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
     ssc.waiter.notifyError(e)
   }
 
+  //处理每一个Job
   private class JobHandler(job: Job) extends Runnable with Logging {
     def run() {
       ssc.sc.setLocalProperty(JobScheduler.BATCH_TIME_PROPERTY_KEY, job.time.milliseconds.toString)

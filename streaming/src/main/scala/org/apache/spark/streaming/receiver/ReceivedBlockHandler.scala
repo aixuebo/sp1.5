@@ -139,6 +139,7 @@ private[streaming] class WriteAheadLogBasedBlockHandler(
     clock: Clock = new SystemClock
   ) extends ReceivedBlockHandler with Logging {
 
+  //存储的超时时间
   private val blockStoreTimeout = conf.getInt(
     "spark.streaming.receiver.blockStoreTimeout", 30).seconds
 

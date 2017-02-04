@@ -24,9 +24,9 @@ import org.apache.spark.streaming.Time
   **/
 private[streaming] sealed trait ReceiverMessage extends Serializable
 
-private[streaming] object StopReceiver extends ReceiverMessage //停止Receiver
+private[streaming] object StopReceiver extends ReceiverMessage //让Receiver停止
 
-private[streaming] case class CleanupOldBlocks(threshTime: Time) extends ReceiverMessage //清理Receiver的老一些的数据块信息
+private[streaming] case class CleanupOldBlocks(threshTime: Time) extends ReceiverMessage //让Receiver清理老一些的数据块信息
 
 private[streaming] case class UpdateRateLimit(elementsPerSecond: Long)
-                   extends ReceiverMessage //更新Receiver的带宽速度
+                   extends ReceiverMessage //让Receiver更新带宽速度

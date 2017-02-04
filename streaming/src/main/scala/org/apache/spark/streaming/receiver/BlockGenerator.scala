@@ -89,6 +89,7 @@ private[streaming] class BlockGenerator(
     clock: Clock = new SystemClock()
   ) extends RateLimiter(conf) with Logging {
 
+  //数据块存储的ID和内容
   private case class Block(id: StreamBlockId, buffer: ArrayBuffer[Any])
 
   /**
@@ -283,8 +284,9 @@ private[streaming] class BlockGenerator(
 
     try {
       // While blocks are being generated, keep polling for to-be-pushed blocks and push them.
+      //不断的推送数据块
       while (areBlocksBeingGenerated) {
-        Option(blocksForPushing.poll(10, TimeUnit.MILLISECONDS)) match {//从队列中获取10个元素,
+        Option(blocksForPushing.poll(10, TimeUnit.MILLISECONDS)) match {//从队列中获取元素,每一个元素都是一个数据块,超时时间是10毫秒
           case Some(block) => pushBlock(block)
           case None =>
         }

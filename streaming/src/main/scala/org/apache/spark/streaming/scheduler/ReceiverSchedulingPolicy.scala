@@ -171,10 +171,11 @@ private[streaming] class ReceiverSchedulingPolicy {
    * This method is called when a receiver is registering with ReceiverTracker or is restarting.
    */
   def rescheduleReceiver(
-      receiverId: Int,
-      preferredLocation: Option[String],
-      receiverTrackingInfoMap: Map[Int, ReceiverTrackingInfo],
-      executors: Seq[String]): Seq[String] = {
+      receiverId: Int,//
+      preferredLocation: Option[String],//该receiverId被建议到哪个host上去执行
+      receiverTrackingInfoMap: Map[Int, ReceiverTrackingInfo],//每一个receiverId 已经在哪些host上执行了
+      executors: Seq[String]) //全部的执行者host集合
+      : Seq[String] = {
     if (executors.isEmpty) {
       return Seq.empty
     }

@@ -25,7 +25,7 @@ private[streaming] case class ReceiverErrorInfo(
 
 /**
  * Class having information about a receiver.
- *
+ * 对一个receriver的描述
  * @param receiverId the unique receiver id
  * @param state the current Receiver state
  * @param scheduledExecutors the scheduled executors provided by ReceiverSchedulingPolicy
@@ -38,10 +38,10 @@ private[streaming] case class ReceiverTrackingInfo(
     receiverId: Int,
     state: ReceiverState,
     scheduledExecutors: Option[Seq[String]],//该receiver在哪些host上可以去被调度
-    runningExecutor: Option[String],//真正在哪个host上运行的该receiver
+    runningExecutor: Option[String],//真正在哪个host上运行的该receiver,去接收streamid对应的流信息
     name: Option[String] = None,
-    endpoint: Option[RpcEndpointRef] = None,
-    errorInfo: Option[ReceiverErrorInfo] = None) {
+    endpoint: Option[RpcEndpointRef] = None,//如果与receiver与交互的socket
+    errorInfo: Option[ReceiverErrorInfo] = None) { //错误信息对象
 
   def toReceiverInfo: ReceiverInfo = ReceiverInfo(
     receiverId,

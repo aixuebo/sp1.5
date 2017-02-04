@@ -50,7 +50,7 @@ private[streaming] case class ReceivedBlockInfo(
   /**
    * Set the block ID as invalid. This is useful when it is known that the block is not present
    * in the Spark executors.
-    * 校验该数据块是否有效,
+    * 设置数据块失效
    */
   def setBlockIdInvalid(): Unit = {
     _isBlockIdValid = false

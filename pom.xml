@@ -96,6 +96,10 @@
     <module>external/kafka</module>
     <module>external/kafka-assembly</module>
     <module>examples</module>
+    <module>mllib</module>
+    <module>sql/catalyst</module>
+    <module>sql/core</module>
+    <module>sql/hive</module>
   </modules>
 
   <properties>

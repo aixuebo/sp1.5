@@ -40,15 +40,15 @@ case class StreamingListenerBatchStarted(batchInfo: BatchInfo) extends Streaming
 
 @DeveloperApi
 case class StreamingListenerReceiverStarted(receiverInfo: ReceiverInfo)
-  extends StreamingListenerEvent
-
-@DeveloperApi
-case class StreamingListenerReceiverError(receiverInfo: ReceiverInfo)
-  extends StreamingListenerEvent
+  extends StreamingListenerEvent //说明一个streaming的receiver已经被注册了
 
 @DeveloperApi
 case class StreamingListenerReceiverStopped(receiverInfo: ReceiverInfo)
-  extends StreamingListenerEvent
+  extends StreamingListenerEvent  //说明一个streaming的receiver已经被取消注册了
+
+@DeveloperApi
+case class StreamingListenerReceiverError(receiverInfo: ReceiverInfo)
+  extends StreamingListenerEvent //说明一个streaming的receiver接收到了错误信息
 
 /**
  * :: DeveloperApi ::
