@@ -23,13 +23,13 @@ import org.apache.spark.streaming.Time
 /**
  * :: DeveloperApi ::
  * Class having information on completed batches.
-  * 关于一个batch的信息,表示一组批处理
- * @param batchTime   Time of the batch 批处理时间
+  * 关于一个jobSet进行批处理batch的信息,表示一组批处理
+ * @param batchTime   Time of the batch 批处理JobSet的创建时间
  * @param streamIdToInputInfo A map of input stream id to its input info
  * @param submissionTime  Clock time of when jobs of this batch was submitted to
- *                        the streaming scheduler queue
- * @param processingStartTime Clock time of when the first job of this batch started processing
- * @param processingEndTime Clock time of when the last job of this batch finished processing
+ *                        the streaming scheduler queue 提交时间
+ * @param processingStartTime Clock time of when the first job of this batch started processing 第一个job开始处理的时间
+ * @param processingEndTime Clock time of when the last job of this batch finished processing 最后一个job处理完成的时间
  */
 @DeveloperApi
 case class BatchInfo(
@@ -54,7 +54,7 @@ case class BatchInfo(
   /**
    * Time taken for the all jobs of this batch to finish processing from the time they started
    * processing. Essentially, it is `processingEndTime` - `processingStartTime`.
-    * 处理时间
+    * 处理总时间
    */
   def processingDelay: Option[Long] = processingEndTime.zip(processingStartTime)
     .map(x => x._1 - x._2).headOption

@@ -22,6 +22,7 @@ import org.apache.spark.streaming.receiver.{ReceivedBlockStoreResult, WriteAhead
 import org.apache.spark.streaming.util.WriteAheadLogRecordHandle
 
 /** Information about blocks received by the receiver
+  * 该对象是receiver向磁盘写入具体数据块后,产生的对象,该对象用于receiver向driver发送信息,driver可以了解该receiver接收一个数据块的具体情况
   * 接收到的一个数据块的信息,是一个基本单位,一个streaming每次接受,都产生一个该对象
   **/
 private[streaming] case class ReceivedBlockInfo(

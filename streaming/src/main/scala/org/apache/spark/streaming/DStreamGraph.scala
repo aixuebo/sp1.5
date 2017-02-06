@@ -26,15 +26,15 @@ import org.apache.spark.util.Utils
 
 final private[streaming] class DStreamGraph extends Serializable with Logging {
 
-  private val inputStreams = new ArrayBuffer[InputDStream[_]]()
+  private val inputStreams = new ArrayBuffer[InputDStream[_]]() //receiver的数据源
   private val outputStreams = new ArrayBuffer[DStream[_]]()
 
-  var rememberDuration: Duration = null
+  var rememberDuration: Duration = null //保留周期
   var checkpointInProgress = false
 
   var zeroTime: Time = null
   var startTime: Time = null
-  var batchDuration: Duration = null
+  var batchDuration: Duration = null //多久产生一次job
 
   def start(time: Time) {
     this.synchronized {
@@ -170,6 +170,7 @@ final private[streaming] class DStreamGraph extends Serializable with Logging {
   /**
    * Get the maximum remember duration across all the input streams. This is a conservative but
    * safe remember duration which can be used to perform cleanup operations.
+   * 返回所有的receiver中保留记录周期最长的周期时间
    */
   def getMaxInputStreamRememberDuration(): Duration = {
     inputStreams.map { _.rememberDuration }.maxBy { _.milliseconds }

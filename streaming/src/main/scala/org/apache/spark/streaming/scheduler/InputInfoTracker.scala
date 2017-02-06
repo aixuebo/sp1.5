@@ -61,6 +61,7 @@ private[streaming] class InputInfoTracker(ssc: StreamingContext) extends Logging
 
   // Map to track all the InputInfo related to specific batch time and input stream.
   //key是batch time value的key是inputStreamId value的value是该inputStreamId对应的StreamInputInfo对象
+  //即该对象存储的是JobSet内容,JobSet在每一个时间点都会产生一个JobSet,而JobSet又包含多个streaming,因此就是这样的数据结构
   private val batchTimeToInputInfos =
     new mutable.HashMap[Time, mutable.HashMap[Int, StreamInputInfo]]
 

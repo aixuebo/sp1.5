@@ -32,15 +32,15 @@ import org.apache.spark.streaming.scheduler.JobGenerator
 
 
 private[streaming]
-class Checkpoint(@transient ssc: StreamingContext, val checkpointTime: Time)
-  extends Logging with Serializable {
+class Checkpoint(@transient ssc: StreamingContext, val checkpointTime: Time) //checkpointTime表示此时执行checkpoint的时间点
+  extends Logging with Serializable { //该对象表示一次checkPoint
   val master = ssc.sc.master
   val framework = ssc.sc.appName
   val jars = ssc.sc.jars
   val graph = ssc.graph
   val checkpointDir = ssc.checkpointDir
-  val checkpointDuration = ssc.checkpointDuration
-  val pendingTimes = ssc.scheduler.getPendingTimes().toArray
+  val checkpointDuration = ssc.checkpointDuration //checkpoint的周期
+  val pendingTimes = ssc.scheduler.getPendingTimes().toArray //此时正在调度器中调度的jobset集合
   val delaySeconds = MetadataCleaner.getDelaySeconds(ssc.conf)
   val sparkConfPairs = ssc.conf.getAll
 
@@ -48,6 +48,7 @@ class Checkpoint(@transient ssc: StreamingContext, val checkpointTime: Time)
 
     // Reload properties for the checkpoint application since user wants to set a reload property
     // or spark had changed its value and user wants to set it back.
+    //需要重新覆盖的配置key
     val propertiesToReload = List(
       "spark.driver.host",
       "spark.driver.port",

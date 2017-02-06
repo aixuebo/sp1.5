@@ -44,6 +44,7 @@ class SocketInputDStream[T: ClassTag](
   }
 }
 
+//如何接收数据,并且存储数据
 private[streaming]
 class SocketReceiver[T: ClassTag](
     host: String,

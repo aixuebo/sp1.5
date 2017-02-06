@@ -33,7 +33,9 @@ import org.apache.spark.streaming.receiver._
 import org.apache.spark.util.{ThreadUtils, SerializableConfiguration}
 
 
-/** Enumeration to identify current state of a Receiver */
+/** Enumeration to identify current state of a Receiver
+  * 管理每一个receiver,即每一个receiver都持有一个该状态
+  **/
 private[streaming] object ReceiverState extends Enumeration {
   type ReceiverState = Value
   val INACTIVE, SCHEDULED, ACTIVE = Value // 非注册  已经调度了  已经完成注册了
@@ -42,6 +44,7 @@ private[streaming] object ReceiverState extends Enumeration {
 /**
  * Messages used by the NetworkReceiver and the ReceiverTracker to communicate
  * with each other.
+ * 每一个receive可以向该driver发送什么内容
  */
 private[streaming] sealed trait ReceiverTrackerMessage
 private[streaming] case class RegisterReceiver(
@@ -49,13 +52,14 @@ private[streaming] case class RegisterReceiver(
     typ: String,
     hostPort: String,
     receiverEndpoint: RpcEndpointRef
-  ) extends ReceiverTrackerMessage
-private[streaming] case class AddBlock(receivedBlockInfo: ReceivedBlockInfo) extends ReceiverTrackerMessage
-private[streaming] case class ReportError(streamId: Int, message: String, error: String)
-private[streaming] case class DeregisterReceiver(streamId: Int, msg: String, error: String) extends ReceiverTrackerMessage
+  ) extends ReceiverTrackerMessage //当一个receiver启动后,向该socket server发来消息,让driver知道一个receiver启动了
+private[streaming] case class AddBlock(receivedBlockInfo: ReceivedBlockInfo) extends ReceiverTrackerMessage //该receiver已经接收了一个数据块
+private[streaming] case class ReportError(streamId: Int, message: String, error: String) //该receiver有异常报告
+private[streaming] case class DeregisterReceiver(streamId: Int, msg: String, error: String) extends ReceiverTrackerMessage //rteceiver发送停止该receiver
 
 /**
  * Messages used by the driver and ReceiverTrackerEndpoint to communicate locally.
+ * 该对象表示driver要主动向receiver发送的信息
  */
 private[streaming] sealed trait ReceiverTrackerLocalMessage
 
@@ -88,7 +92,8 @@ private[streaming] case object StopAllReceivers extends ReceiverTrackerLocalMess
  */
 private[streaming] case object AllReceiverIds extends ReceiverTrackerLocalMessage
 
-private[streaming] case class UpdateReceiverRateLimit(streamUID: Int, newRate: Long) extends ReceiverTrackerLocalMessage //让Receiver更新带宽速度
+//让Receiver更新带宽速度
+private[streaming] case class UpdateReceiverRateLimit(streamUID: Int, newRate: Long) extends ReceiverTrackerLocalMessage
 
 
 /**
@@ -115,7 +120,9 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
   )
   private val listenerBus = ssc.scheduler.listenerBus
 
-  /** Enumeration to identify current state of the ReceiverTracker */
+  /** Enumeration to identify current state of the ReceiverTracker
+    * 管理driver的状态,即就存在一个该状态对象
+    **/
   object TrackerState extends Enumeration {
     type TrackerState = Value
     val Initialized, Started, Stopping, Stopped = Value
@@ -149,7 +156,10 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
    */
   private val receiverPreferredLocations = new HashMap[Int, Option[String]]
 
-  /** Start the endpoint and receiver execution thread. */
+  /** Start the endpoint and receiver execution thread.
+a.在该driver上开启一个socket服务端,名字是ReceiverTracker,类是ReceiverTrackerEndpoint
+b.launchReceivers() 启动该driver管理的所有receiver
+    **/
   def start(): Unit = synchronized {
     if (isTrackerStarted) {
       throw new SparkException("ReceiverTracker already started")
@@ -568,7 +578,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
             throw new SparkException(
               "Could not start receiver as object not found.")
           }
-          if (TaskContext.get().attemptNumber() == 0) {
+          if (TaskContext.get().attemptNumber() == 0) {//在该节点上开启一个receiver的接收器
             val receiver = iterator.next()
             assert(iterator.hasNext == false)
             val supervisor = new ReceiverSupervisorImpl(
@@ -589,11 +599,11 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
         }
       receiverRDD.setName(s"Receiver $receiverId")
 
-      val future = ssc.sparkContext.submitJob[Receiver[_], Unit, Unit](receiverRDD, startReceiverFunc, Seq(0), (_, _) => Unit, ())
+      val future = ssc.sparkContext.submitJob[Receiver[_], Unit, Unit](receiverRDD, startReceiverFunc, Seq(0), (_, _) => Unit, ()) //该线程会在executor节点上不断的接收数据,理论上不接收到stop方法前是不会停止的
 
       // We will keep restarting the receiver job until ReceiverTracker is stopped
       //不断的重新启动该receiver,直到ReceiverTracker stop为止
-      future.onComplete {
+      future.onComplete {//该receiver会一直运行,直到停止为止,但是停止是否是因为节点失败或者其他原因影响的不得而知,因此要再一次重新启动该receiver的可能
         case Success(_) =>
           if (!shouldStartReceiver) {
             onReceiverJobFinish(receiverId)

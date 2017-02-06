@@ -87,7 +87,7 @@ abstract class DStream[T: ClassTag] ( //T可以是元组(KEY,VALUE)
   private[streaming] var zeroTime: Time = null
 
   // Duration for which the DStream will remember each RDD created
-  //记忆周期
+  //记忆周期,保留这些周期内的数据
   private[streaming] var rememberDuration: Duration = null
 
   // Storage level of the RDDs in the stream

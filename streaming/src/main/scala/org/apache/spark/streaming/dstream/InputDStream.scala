@@ -29,13 +29,21 @@ import org.apache.spark.util.Utils
 /**
  * This is the abstract base class for all input streams. This class provides methods
  * start() and stop() which is called by Spark Streaming system to start and stop receiving data.
+ * 该类是所有input输入流的抽象类,该类有start和stop方法当spark的steaming系统开始接收数据的时候被调用
+ *
  * Input streams that can generate RDDs from new data by running a service/thread only on
  * the driver node (that is, without running a receiver on worker nodes), can be
- * implemented by directly inheriting this InputDStream. For example,
+ * implemented by directly inheriting this InputDStream.
+ * Input streams 可以从新的数据中产生RDD,纯粹的Input streams只能运行在driver节点上
+ *
+ * For example,
  * FileInputDStream, a subclass of InputDStream, monitors a HDFS directory from the driver for
- * new files and generates RDDs with the new files. For implementing input streams
- * that requires running a receiver on the worker nodes, use
+ * new files and generates RDDs with the new files.
+ * 例如FileInputDStream 可以监控HDFS上的一个目录,当新文件产生的时候,则产生RDD
+ *
+ * For implementing input streams that requires running a receiver on the worker nodes, use
  * [[org.apache.spark.streaming.dstream.ReceiverInputDStream]] as the parent class.
+ * 实现input streams运行在work节点,则使用ReceiverInputDStream类
  *
  * @param ssc_ Streaming context that will execute this input stream
  */
@@ -52,7 +60,9 @@ abstract class InputDStream[T: ClassTag] (@transient ssc_ : StreamingContext)
   // Keep track of the freshest rate for this stream using the rateEstimator
   protected[streaming] val rateController: Option[RateController] = None
 
-  /** A human-readable name of this InputDStream */
+  /** A human-readable name of this InputDStream
+    * 人们可读的名字
+   */
   private[streaming] def name: String = {
     // e.g. FlumePollingDStream -> "Flume polling stream"
     val newName = Utils.getFormattedClassName(this)
@@ -100,6 +110,7 @@ abstract class InputDStream[T: ClassTag] (@transient ssc_ : StreamingContext)
 
   override def dependencies: List[DStream[_]] = List()
 
+  //多久返回一个job任务集合
   override def slideDuration: Duration = {
     if (ssc == null) throw new Exception("ssc is null")
     if (ssc.graph.batchDuration == null) throw new Exception("batchDuration is null")

@@ -26,11 +26,10 @@ import org.apache.spark.util.{Utils, Clock, EventLoop, ManualClock}
 
 /** Event classes for JobGenerator */
 private[scheduler] sealed trait JobGeneratorEvent
-private[scheduler] case class GenerateJobs(time: Time) extends JobGeneratorEvent //时间周期到了,该产生一个job了
-private[scheduler] case class ClearMetadata(time: Time) extends JobGeneratorEvent
-private[scheduler] case class DoCheckpoint(
-    time: Time, clearCheckpointDataLater: Boolean) extends JobGeneratorEvent
-private[scheduler] case class ClearCheckpointData(time: Time) extends JobGeneratorEvent
+private[scheduler] case class GenerateJobs(time: Time) extends JobGeneratorEvent //本类时间周期到了,该产生一个job了
+private[scheduler] case class ClearMetadata(time: Time) extends JobGeneratorEvent //JobScheduler类当job完成的时候产生该事件,此时,说明该时间点的jobSet已经全部执行完了
+private[scheduler] case class DoCheckpoint(time: Time, clearCheckpointDataLater: Boolean) extends JobGeneratorEvent //该类产生该事件,表示准备去做checkpoint操作
+private[scheduler] case class ClearCheckpointData(time: Time) extends JobGeneratorEvent //CheckpointWriter类产生该事件
 
 /**
  * This class generates jobs from DStreams as well as drives checkpointing and cleaning
@@ -163,6 +162,7 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
 
   /**
    * Callback called when a batch has been completely processed.
+   * 此时,说明该时间点的jobSet已经全部执行完了
    */
   def onBatchCompletion(time: Time) {
     eventLoop.post(ClearMetadata(time))
@@ -250,7 +250,7 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
     // Update: This is probably redundant after threadlocal stuff in SparkEnv has been removed.
     SparkEnv.set(ssc.env)
     Try {
-      jobScheduler.receiverTracker.allocateBlocksToBatch(time) // allocate received blocks to batch
+      jobScheduler.receiverTracker.allocateBlocksToBatch(time) // allocate received blocks to batch 分配一个批处理,将未分配的数据块进行整理
       graph.generateJobs(time) // generate jobs using allocated block
     } match {
       case Success(jobs) =>
@@ -262,7 +262,9 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
     eventLoop.post(DoCheckpoint(time, clearCheckpointDataLater = false))
   }
 
-  /** Clear DStream metadata for the given `time`. */
+  /** Clear DStream metadata for the given `time`.
+    * 因为此时该时间点的jobset都已经执行完了,因此可以清理日志了
+    **/
   private def clearMetadata(time: Time) {
     ssc.graph.clearMetadata(time)
 
@@ -287,18 +289,18 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
 
     // All the checkpoint information about which batches have been processed, etc have
     // been saved to checkpoints, so its safe to delete block metadata and data WAL files
-    val maxRememberDuration = graph.getMaxInputStreamRememberDuration()
-    jobScheduler.receiverTracker.cleanupOldBlocksAndBatches(time - maxRememberDuration)
+    val maxRememberDuration = graph.getMaxInputStreamRememberDuration() //计算保留的最大周期
+    jobScheduler.receiverTracker.cleanupOldBlocksAndBatches(time - maxRememberDuration) //清理数据
     jobScheduler.inputInfoTracker.cleanup(time - maxRememberDuration)
     markBatchFullyProcessed(time)
   }
 
   /** Perform checkpoint for the give `time`. */
   private def doCheckpoint(time: Time, clearCheckpointDataLater: Boolean) {
-    if (shouldCheckpoint && (time - graph.zeroTime).isMultipleOf(ssc.checkpointDuration)) {
+    if (shouldCheckpoint && (time - graph.zeroTime).isMultipleOf(ssc.checkpointDuration)) { //说明现在的时间已经是checkpoint周期的倍数了,则要开始进行checkpoint操作了
       logInfo("Checkpointing graph for time " + time)
       ssc.graph.updateCheckpointData(time)
-      checkpointWriter.write(new Checkpoint(ssc, time), clearCheckpointDataLater)
+      checkpointWriter.write(new Checkpoint(ssc, time), clearCheckpointDataLater) //写入一次checkpoint
     }
   }
 

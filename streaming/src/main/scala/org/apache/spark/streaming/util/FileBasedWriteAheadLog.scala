@@ -40,6 +40,9 @@ import org.apache.spark.{Logging, SparkConf}
  *
  * @param logDirectory Directory when rotating log files will be created.
  * @param hadoopConf Hadoop configuration for reading/writing log files.
+ *
+ * FileBasedWriteAheadLog 表示监听一个根目录,在根目录下定期创建一个文件
+ * 向文件中写入真正的数据块内容,返回一个FileBasedWriteAheadLogSegment对象作为返回值,该对象表示这个数据块写入到哪个文件下了,从该文件的第几个字节开始属于该数据块的,一共写入多少个字节
  */
 private[streaming] class FileBasedWriteAheadLog(
     conf: SparkConf,

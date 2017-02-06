@@ -30,13 +30,13 @@ import org.apache.spark.annotation.DeveloperApi
 sealed trait StreamingListenerEvent
 
 @DeveloperApi
-case class StreamingListenerBatchSubmitted(batchInfo: BatchInfo) extends StreamingListenerEvent
+case class StreamingListenerBatchSubmitted(batchInfo: BatchInfo) extends StreamingListenerEvent //说明jobGenerator每隔一段时间就产生的一组要执行的任务,即产生的JobSet已经给调度器了
 
 @DeveloperApi
-case class StreamingListenerBatchCompleted(batchInfo: BatchInfo) extends StreamingListenerEvent
+case class StreamingListenerBatchCompleted(batchInfo: BatchInfo) extends StreamingListenerEvent //当一个jobset中全部job都完成的时候调用该事件
 
 @DeveloperApi
-case class StreamingListenerBatchStarted(batchInfo: BatchInfo) extends StreamingListenerEvent
+case class StreamingListenerBatchStarted(batchInfo: BatchInfo) extends StreamingListenerEvent //说明jobSet中第一个job开始执行了
 
 @DeveloperApi
 case class StreamingListenerReceiverStarted(receiverInfo: ReceiverInfo)

@@ -29,8 +29,8 @@ import org.apache.spark.util.{EventLoop, ThreadUtils}
 
 
 private[scheduler] sealed trait JobSchedulerEvent
-private[scheduler] case class JobStarted(job: Job) extends JobSchedulerEvent //开始执行一个job
-private[scheduler] case class JobCompleted(job: Job) extends JobSchedulerEvent //job完成执行
+private[scheduler] case class JobStarted(job: Job) extends JobSchedulerEvent //开始执行jobset中的一个job
+private[scheduler] case class JobCompleted(job: Job) extends JobSchedulerEvent //表示jobset中的一个job完成执行
 private[scheduler] case class ErrorReported(msg: String, e: Throwable) extends JobSchedulerEvent
 
 /**
@@ -45,6 +45,7 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
 
   // Use of ConcurrentHashMap.keySet later causes an odd runtime problem due to Java 7/8 diff
   // https://gist.github.com/AlainODea/1375759b8720a3f9f094
+  //已经被提交上来的job任务集合
   private val jobSets: java.util.Map[Time, JobSet] = new ConcurrentHashMap[Time, JobSet]
 
   private val numConcurrentJobs = ssc.conf.getInt("spark.streaming.concurrentJobs", 1) //多少个job任务可以并发执行
@@ -121,17 +122,19 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
     logInfo("Stopped JobScheduler")
   }
 
+  //是jobGenerator每隔一段时间就产生的一组要执行的任务
   def submitJobSet(jobSet: JobSet) {
     if (jobSet.jobs.isEmpty) {
       logInfo("No jobs added for time " + jobSet.time)
     } else {
       listenerBus.post(StreamingListenerBatchSubmitted(jobSet.toBatchInfo))
       jobSets.put(jobSet.time, jobSet)
-      jobSet.jobs.foreach(job => jobExecutor.execute(new JobHandler(job)))
+      jobSet.jobs.foreach(job => jobExecutor.execute(new JobHandler(job))) //线程池去调用每一个job任务
       logInfo("Added jobs for time " + jobSet.time)
     }
   }
 
+  //有哪些jobset还在等待中
   def getPendingTimes(): Seq[Time] = {
     jobSets.keySet.toSeq
   }
@@ -158,10 +161,11 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
     }
   }
 
+  //说明此时jobset中的一个job的任务已经开始运行了
   private def handleJobStart(job: Job) {
-    val jobSet = jobSets.get(job.time)
+    val jobSet = jobSets.get(job.time) //获取该job对应的jobSet对象
     val isFirstJobOfJobSet = !jobSet.hasStarted //true表示该jobset第一次启动
-    jobSet.handleJobStart(job)
+    jobSet.handleJobStart(job) //通知jobSet,其中的一个job开始执行了
     if (isFirstJobOfJobSet) {//第一次启动时候产生事件
       // "StreamingListenerBatchStarted" should be posted after calling "handleJobStart" to get the
       // correct "jobSet.processingStartTime".
@@ -170,19 +174,20 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
     logInfo("Starting job " + job.id + " from job set of time " + jobSet.time)
   }
 
+  //说明此时jobset中的一个job的任务已经运行结束了
   private def handleJobCompletion(job: Job) {
     job.result match {
       case Success(_) =>
         val jobSet = jobSets.get(job.time)
-        jobSet.handleJobCompletion(job)
+        jobSet.handleJobCompletion(job) //通知jobSet,其中的一个job执行完了
         logInfo("Finished job " + job.id + " from job set of time " + jobSet.time)
-        if (jobSet.hasCompleted) {
-          jobSets.remove(jobSet.time)
-          jobGenerator.onBatchCompletion(jobSet.time)
+        if (jobSet.hasCompleted) { //如果已经没有job可以执行了
+          jobSets.remove(jobSet.time) //移除该jobset
+          jobGenerator.onBatchCompletion(jobSet.time) //设置该jobSet全部完成
           logInfo("Total delay: %.3f s for time %s (execution: %.3f s)".format(
             jobSet.totalDelay / 1000.0, jobSet.time.toString,
             jobSet.processingDelay / 1000.0
-          ))
+          )) //打印日志
           listenerBus.post(StreamingListenerBatchCompleted(jobSet.toBatchInfo))
         }
       case Failure(e) =>
@@ -195,11 +200,11 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
     ssc.waiter.notifyError(e)
   }
 
-  //处理每一个Job
+  //处理每一个Job,线程池去调用该任务
   private class JobHandler(job: Job) extends Runnable with Logging {
     def run() {
-      ssc.sc.setLocalProperty(JobScheduler.BATCH_TIME_PROPERTY_KEY, job.time.milliseconds.toString)
-      ssc.sc.setLocalProperty(JobScheduler.OUTPUT_OP_ID_PROPERTY_KEY, job.outputOpId.toString)
+      ssc.sc.setLocalProperty(JobScheduler.BATCH_TIME_PROPERTY_KEY, job.time.milliseconds.toString) //该jobset的创建时间
+      ssc.sc.setLocalProperty(JobScheduler.OUTPUT_OP_ID_PROPERTY_KEY, job.outputOpId.toString) //属于jobset中第几个任务
       try {
         // We need to assign `eventLoop` to a temp variable. Otherwise, because
         // `JobScheduler.stop(false)` may set `eventLoop` to null when this method is running, then
@@ -229,6 +234,6 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
 }
 
 private[streaming] object JobScheduler {
-  val BATCH_TIME_PROPERTY_KEY = "spark.streaming.internal.batchTime"
-  val OUTPUT_OP_ID_PROPERTY_KEY = "spark.streaming.internal.outputOpId"
+  val BATCH_TIME_PROPERTY_KEY = "spark.streaming.internal.batchTime" //该jobset的创建时间
+  val OUTPUT_OP_ID_PROPERTY_KEY = "spark.streaming.internal.outputOpId" //该jobset的创建时间
 }

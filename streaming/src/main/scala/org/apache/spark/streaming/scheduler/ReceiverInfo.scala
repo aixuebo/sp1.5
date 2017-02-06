@@ -26,10 +26,10 @@ import org.apache.spark.rpc.RpcEndpointRef
  */
 @DeveloperApi
 case class ReceiverInfo(
-    streamId: Int,
-    name: String,
-    active: Boolean,
-    location: String,
+    streamId: Int,//表示哪一个receiver
+    name: String,//该receiver的名字
+    active: Boolean,//该receiver是否还活跃
+    location: String,//该receiver在哪个节点上运行
     lastErrorMessage: String = "",
     lastError: String = "",
     lastErrorTime: Long = -1L

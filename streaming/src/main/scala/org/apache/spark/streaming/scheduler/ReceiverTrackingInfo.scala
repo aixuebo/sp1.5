@@ -33,6 +33,8 @@ private[streaming] case class ReceiverErrorInfo(
  * @param name the receiver name
  * @param endpoint the receiver endpoint. It can be used to send messages to the receiver
  * @param errorInfo the receiver error information if it fails
+ * 因为该driver上可以启动好多个receiver去接收数据,因此每一个receiver对应一个streamid
+  而该receiver是在其他executor上执行的,因此driver上要为每一个receiver保持一个对象在内存中,该对象即ReceiverTrackingInfo
  */
 private[streaming] case class ReceiverTrackingInfo(
     receiverId: Int,

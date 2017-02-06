@@ -23,8 +23,10 @@ import scala.reflect.ClassTag
 
 /**
  * An input stream that always returns the same RDD on each timestep. Useful for testing.
+ * 被使用于测试,该类每个时间点返回的总是相同的RDD
+ * 由于该类继承InputDStream,因此该类只能在driver节点上产生数据流
  */
-class ConstantInputDStream[T: ClassTag](ssc_ : StreamingContext, rdd: RDD[T])
+class ConstantInputDStream[T: ClassTag](ssc_ : StreamingContext, rdd: RDD[T]) //返回参数指定的RDD[T]
   extends InputDStream[T](ssc_) {
 
   override def start() {}
