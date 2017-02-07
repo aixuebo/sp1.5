@@ -870,6 +870,8 @@ object StreamingContext extends Logging {
     new SparkContext(conf)
   }
 
+  //将一个时间点产生的streaming存储成文件,文件的名字就是prefix + "-" + time.milliseconds + "." + suffix
+  //产生文件名字,prefix 可以是path路径+前缀
   private[streaming] def rddToFileName[T](prefix: String, suffix: String, time: Time): String = {
     if (prefix == null) {
       time.milliseconds.toString

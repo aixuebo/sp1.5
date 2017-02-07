@@ -63,6 +63,7 @@ case class Time(private val millis: Long) {
     new Time((this.millis / t) * t)
   }
 
+  //因为此时的时间不是that的整数倍,因此要设置刚刚接近that整数倍的时间
   def floor(that: Duration, zeroTime: Time): Time = {
     val t = that.milliseconds
     new Time(((this.millis - zeroTime.milliseconds) / t) * t + zeroTime.milliseconds)
@@ -79,6 +80,7 @@ case class Time(private val millis: Long) {
     (this.milliseconds) until (that.milliseconds) by (interval.milliseconds) map (new Time(_))
   }
 
+  //返回从现在时间点到that时间点中每隔interval周期就确定一个Time时间点,因此返回收集到的Time时间点集合
   def to(that: Time, interval: Duration): Seq[Time] = {
     (this.milliseconds) to (that.milliseconds) by (interval.milliseconds) map (new Time(_))
   }

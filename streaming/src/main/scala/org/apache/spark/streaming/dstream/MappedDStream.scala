@@ -32,6 +32,7 @@ class MappedDStream[T: ClassTag, U: ClassTag] (
   override def slideDuration: Duration = parent.slideDuration
 
   override def compute(validTime: Time): Option[RDD[U]] = {
+    //_.map[U](mapFunc) 表示 RDD[T]的每一个元素经过mapFunc函数处理,转换成RDD[U]对象
     parent.getOrCompute(validTime).map(_.map[U](mapFunc))
   }
 }

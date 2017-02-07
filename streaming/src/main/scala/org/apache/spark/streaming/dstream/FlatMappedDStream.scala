@@ -32,7 +32,7 @@ class FlatMappedDStream[T: ClassTag, U: ClassTag](
   override def slideDuration: Duration = parent.slideDuration
 
   override def compute(validTime: Time): Option[RDD[U]] = {
-    parent.getOrCompute(validTime).map(_.flatMap(flatMapFunc))
+    parent.getOrCompute(validTime).map(_.flatMap(flatMapFunc)) //RDD[T]的每一个元素经过flatMapFunc函数处理,转换成RDD[U]集合,最终转换成RDD[U]对象
   }
 }
 

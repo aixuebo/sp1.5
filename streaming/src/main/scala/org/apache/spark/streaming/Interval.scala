@@ -50,7 +50,7 @@ class Interval(val beginTime: Time, val endTime: Time) {
 
 private[streaming]
 object Interval {
-  def currentInterval(duration: Duration): Interval = {
+  def currentInterval(duration: Duration): Interval = { //传入周期即可
     val time = new Time(System.currentTimeMillis)
     val intervalBegin = time.floor(duration)
     new Interval(intervalBegin, intervalBegin + duration)

@@ -97,6 +97,7 @@ class PairDStreamFunctions[K, V](self: DStream[(K, V)])
    * Return a new DStream by applying `reduceByKey` to each RDD. The values for each key are
    * merged using the supplied reduce function. org.apache.spark.Partitioner is used to control
    * the partitioning of each RDD.
+   * 对相同的key对对应的value进行集合,生成新的K,V
    */
   def reduceByKey(
       reduceFunc: (V, V) => V,

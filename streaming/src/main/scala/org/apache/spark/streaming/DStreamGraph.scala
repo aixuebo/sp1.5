@@ -27,7 +27,7 @@ import org.apache.spark.util.Utils
 final private[streaming] class DStreamGraph extends Serializable with Logging {
 
   private val inputStreams = new ArrayBuffer[InputDStream[_]]() //receiver的数据源
-  private val outputStreams = new ArrayBuffer[DStream[_]]()
+  private val outputStreams = new ArrayBuffer[DStream[_]]() //目前是ForEachDStream类具有该功能的DStream
 
   var rememberDuration: Duration = null //保留周期
   var checkpointInProgress = false

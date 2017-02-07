@@ -25,12 +25,12 @@ import scala.reflect.ClassTag
 
 private[streaming]
 class ShuffledDStream[K: ClassTag, V: ClassTag, C: ClassTag](
-    parent: DStream[(K, V)],
+    parent: DStream[(K, V)],//对该父RDD进行shuffle处理
     createCombiner: V => C,
     mergeValue: (C, V) => C,
     mergeCombiner: (C, C) => C,
     partitioner: Partitioner,
-    mapSideCombine: Boolean = true
+    mapSideCombine: Boolean = true //是否map端进行合并
   ) extends DStream[(K, C)] (parent.ssc) {
 
   override def dependencies: List[DStream[_]] = List(parent)

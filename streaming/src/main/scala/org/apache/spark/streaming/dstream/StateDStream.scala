@@ -31,7 +31,7 @@ class StateDStream[K: ClassTag, V: ClassTag, S: ClassTag](
     updateFunc: (Iterator[(K, Seq[V], Option[S])]) => Iterator[(K, S)],
     partitioner: Partitioner,
     preservePartitioning: Boolean,
-    initialRDD : Option[RDD[(K, S)]]
+    initialRDD : Option[RDD[(K, S)]] //初始化信息
   ) extends DStream[(K, S)](parent.ssc) {
 
   super.persist(StorageLevel.MEMORY_ONLY_SER)
@@ -43,20 +43,20 @@ class StateDStream[K: ClassTag, V: ClassTag, S: ClassTag](
   override val mustCheckpoint = true
 
   private [this] def computeUsingPreviousRDD (
-    parentRDD : RDD[(K, V)], prevStateRDD : RDD[(K, S)]) = {
+    parentRDD : RDD[(K, V)], prevStateRDD : RDD[(K, S)]) = {//对当前的RDD信息和前一次的RDD信息进行合并,参数分别对应的是当前RDD信息和前一次的RDD结果信息
     // Define the function for the mapPartition operation on cogrouped RDD;
     // first map the cogrouped tuple to tuples of required type,
     // and then apply the update function
     val updateFuncLocal = updateFunc
     val finalFunc = (iterator: Iterator[(K, (Iterable[V], Iterable[S]))]) => {
       val i = iterator.map(t => {
-        val itr = t._2._2.iterator
+        val itr = t._2._2.iterator //迭代s
         val headOption = if (itr.hasNext) Some(itr.next()) else None
-        (t._1, t._2._1.toSeq, headOption)
+        (t._1, t._2._1.toSeq, headOption) //获取K V集合 S
       })
       updateFuncLocal(i)
     }
-    val cogroupedRDD = parentRDD.cogroup(prevStateRDD, partitioner)
+    val cogroupedRDD = parentRDD.cogroup(prevStateRDD, partitioner) //组成Iterator[(K, (Iterable[V], Iterable[S])) 集合
     val stateRDD = cogroupedRDD.mapPartitions(finalFunc, preservePartitioning)
     Some(stateRDD)
   }
@@ -64,21 +64,21 @@ class StateDStream[K: ClassTag, V: ClassTag, S: ClassTag](
   override def compute(validTime: Time): Option[RDD[(K, S)]] = {
 
     // Try to get the previous state RDD
-    getOrCompute(validTime - slideDuration) match {
+    getOrCompute(validTime - slideDuration) match {//validTime - slideDuration是上一个点的信息,即查看上一个点的状态
 
-      case Some(prevStateRDD) => {    // If previous state RDD exists
+      case Some(prevStateRDD) => {    // If previous state RDD exists  说明上一个点的信息是存在的
 
         // Try to get the parent RDD
-        parent.getOrCompute(validTime) match {
+        parent.getOrCompute(validTime) match {//获取当前点的信息
           case Some(parentRDD) => {   // If parent RDD exists, then compute as usual
             computeUsingPreviousRDD (parentRDD, prevStateRDD)
           }
-          case None => {    // If parent RDD does not exist
+          case None => {    // If parent RDD does not exist 说明当前没有信息
 
             // Re-apply the update function to the old state RDD
             val updateFuncLocal = updateFunc
-            val finalFunc = (iterator: Iterator[(K, S)]) => {
-              val i = iterator.map(t => (t._1, Seq[V](), Option(t._2)))
+            val finalFunc = (iterator: Iterator[(K, S)]) => { //仅仅存在前面的K S集合
+              val i = iterator.map(t => (t._1, Seq[V](), Option(t._2))) //V的集合是空的
               updateFuncLocal(i)
             }
             val stateRDD = prevStateRDD.mapPartitions(finalFunc, preservePartitioning)
@@ -87,13 +87,13 @@ class StateDStream[K: ClassTag, V: ClassTag, S: ClassTag](
         }
       }
 
-      case None => {    // If previous session RDD does not exist (first input data)
+      case None => {    // If previous session RDD does not exist (first input data) 第一次的数据,因为以前的数据不存在
 
         // Try to get the parent RDD
-        parent.getOrCompute(validTime) match {
+        parent.getOrCompute(validTime) match {//获取当前RDD信息
           case Some(parentRDD) => {   // If parent RDD exists, then compute as usual
-            initialRDD match {
-              case None => {
+            initialRDD match {//对初始化信息进行判断
+              case None => {//说明初始化信息不存在
                 // Define the function for the mapPartition operation on grouped RDD;
                 // first map the grouped tuple to tuples of required type,
                 // and then apply the update function
@@ -107,7 +107,7 @@ class StateDStream[K: ClassTag, V: ClassTag, S: ClassTag](
                 // logDebug("Generating state RDD for time " + validTime + " (first)")
                 Some (sessionRDD)
               }
-              case Some (initialStateRDD) => {
+              case Some (initialStateRDD) => {//说明初始化信息存在
                 computeUsingPreviousRDD(parentRDD, initialStateRDD)
               }
             }

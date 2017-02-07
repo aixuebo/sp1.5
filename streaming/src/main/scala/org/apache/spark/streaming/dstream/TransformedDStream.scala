@@ -21,23 +21,26 @@ import org.apache.spark.rdd.{PairRDDFunctions, RDD}
 import org.apache.spark.streaming.{Duration, Time}
 import scala.reflect.ClassTag
 
+/**
+ * 对所有依赖的父RDD集合进行转换,转换成一个RDD
+ */
 private[streaming]
 class TransformedDStream[U: ClassTag] (
-    parents: Seq[DStream[_]],
-    transformFunc: (Seq[RDD[_]], Time) => RDD[U]
+    parents: Seq[DStream[_]],//依赖的父RDD集合
+    transformFunc: (Seq[RDD[_]], Time) => RDD[U] //对所有依赖的父RDD集合进行转换,转换成一个RDD
   ) extends DStream[U](parents.head.ssc) {
 
   require(parents.length > 0, "List of DStreams to transform is empty")
-  require(parents.map(_.ssc).distinct.size == 1, "Some of the DStreams have different contexts")
+  require(parents.map(_.ssc).distinct.size == 1, "Some of the DStreams have different contexts") //依赖的父亲必须有相同的上下文对象
   require(parents.map(_.slideDuration).distinct.size == 1,
-    "Some of the DStreams have different slide durations")
+    "Some of the DStreams have different slide durations") //依赖的父亲必须有相同的job时间间隔
 
   override def dependencies: List[DStream[_]] = parents.toList
 
   override def slideDuration: Duration = parents.head.slideDuration
 
   override def compute(validTime: Time): Option[RDD[U]] = {
-    val parentRDDs = parents.map(_.getOrCompute(validTime).orNull).toSeq
-    Some(transformFunc(parentRDDs, validTime))
+    val parentRDDs = parents.map(_.getOrCompute(validTime).orNull).toSeq //获取此时所有的依赖的父RDD
+    Some(transformFunc(parentRDDs, validTime)) //对父RDD集合进行转换
   }
 }

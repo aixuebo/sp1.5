@@ -25,15 +25,16 @@ import scala.reflect.ClassTag
 private[streaming]
 class ForEachDStream[T: ClassTag] (
     parent: DStream[T],
-    foreachFunc: (RDD[T], Time) => Unit
+    foreachFunc: (RDD[T], Time) => Unit //函数将一个RDD和时间点作为参数,无返回值
   ) extends DStream[Unit](parent.ssc) {
 
   override def dependencies: List[DStream[_]] = List(parent)
 
   override def slideDuration: Duration = parent.slideDuration
 
-  override def compute(validTime: Time): Option[RDD[Unit]] = None
+  override def compute(validTime: Time): Option[RDD[Unit]] = None //该DStream是要执行的最终的DStream,因此不用去计算RDD了,因此是依赖父RDD去计算的
 
+  //对父RDD进行处理,产生该时间点的一个RDD结果集,然后针对该RDD结果集进行函数处理,函数需要传入收集的RDD以及此时的时间点
   override def generateJob(time: Time): Option[Job] = {
     parent.getOrCompute(time) match {
       case Some(rdd) =>

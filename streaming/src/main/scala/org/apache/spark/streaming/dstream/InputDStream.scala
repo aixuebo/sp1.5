@@ -117,7 +117,9 @@ abstract class InputDStream[T: ClassTag] (@transient ssc_ : StreamingContext)
     ssc.graph.batchDuration
   }
 
-  /** Method called to start receiving data. Subclasses must implement this method. */
+  /** Method called to start receiving data. Subclasses must implement this method.
+    * DStreamGraph的start方法初始化的时候调用的DStream
+    **/
   def start()
 
   /** Method called to stop receiving data. Subclasses must implement this method. */

@@ -56,10 +56,11 @@ import org.apache.spark.util.{CallSite, MetadataCleaner, Utils}
  *  - A time interval at which the DStream generates an RDD
  *  - A function that is used to generate an RDD after each time interval
  */
-abstract class DStream[T: ClassTag] ( //T可以是元组(KEY,VALUE)
+abstract class DStream[T: ClassTag] ( //T可以是元组(KEY,VALUE)   简单的就是说是RDD[T]的流式结构,根本还是RDD[T],只是多了流的功能,因此套了一个DStream的名字
     @transient private[streaming] var ssc: StreamingContext
   ) extends Serializable with Logging {
 
+  //初始化的时候就去校验StreamingContext的状态,该状态必须只能是初始化状态
   validateAtInit()
 
   // =======================================================================
@@ -80,6 +81,7 @@ abstract class DStream[T: ClassTag] ( //T可以是元组(KEY,VALUE)
   // =======================================================================
 
   // RDDs generated, marked as private[streaming] so that testsuites can access it
+  //为了防止经常对已经计算好的RDD进行访问,比如在window窗口函数中访问过去的RDD信息.因此对他进行缓存是有必要的,即每个时间点产生的RDD有必要去缓存一下
   @transient
   private[streaming] var generatedRDDs = new HashMap[Time, RDD[T]] ()
 
@@ -184,6 +186,7 @@ abstract class DStream[T: ClassTag] ( //T可以是元组(KEY,VALUE)
    * Initialize the DStream by setting the "zero" time, based on which
    * the validity of future times is calculated. This method also recursively initializes
    * its parent DStreams.
+   * DStreamGraph的start方法初始化的时候调用的DStream
    */
   private[streaming] def initialize(time: Time) {
     if (zeroTime != null && zeroTime != time) {
@@ -194,17 +197,17 @@ abstract class DStream[T: ClassTag] ( //T可以是元组(KEY,VALUE)
 
     // Set the checkpoint interval to be slideDuration or 10 seconds, which ever is larger
     if (mustCheckpoint && checkpointDuration == null) {
-      checkpointDuration = slideDuration * math.ceil(Seconds(10) / slideDuration).toInt
+      checkpointDuration = slideDuration * math.ceil(Seconds(10) / slideDuration).toInt //计算checkpoint的周期
       logInfo("Checkpoint interval automatically set to " + checkpointDuration)
     }
 
     // Set the minimum value of the rememberDuration if not already set
     var minRememberDuration = slideDuration
     if (checkpointDuration != null && minRememberDuration <= checkpointDuration) {
-      // times 2 just to be sure that the latest checkpoint is not forgotten (#paranoia)
+      // times 2 just to be sure that the latest checkpoint is not forgotten (#paranoia) //最小时间要至少是checkpoint的2倍
       minRememberDuration = checkpointDuration * 2
     }
-    if (rememberDuration == null || rememberDuration < minRememberDuration) {
+    if (rememberDuration == null || rememberDuration < minRememberDuration) {//如果rememberDuration是null或者rememberDuration比minRememberDuration小,那就让他等于minRememberDuration
       rememberDuration = minRememberDuration
     }
 
@@ -212,6 +215,7 @@ abstract class DStream[T: ClassTag] ( //T可以是元组(KEY,VALUE)
     dependencies.foreach(_.initialize(zeroTime))
   }
 
+  //初始化的时候就去校验StreamingContext的状态,该状态必须只能是初始化状态
   private def validateAtInit(): Unit = {
     ssc.getState() match {
       case StreamingContextState.INITIALIZED =>
@@ -227,6 +231,7 @@ abstract class DStream[T: ClassTag] ( //T可以是元组(KEY,VALUE)
     }
   }
 
+  //DStreamGraph的start方法初始化的时候调用的DStream
   private[streaming] def validateAtStart() {
     require(rememberDuration != null, "Remember duration is set to null")
 
@@ -307,6 +312,7 @@ abstract class DStream[T: ClassTag] ( //T可以是元组(KEY,VALUE)
     dependencies.foreach(_.setGraph(graph))
   }
 
+  //DStreamGraph的start方法初始化的时候调用的DStream
   private[streaming] def remember(duration: Duration) {
     if (duration != null && (rememberDuration == null || duration > rememberDuration)) {
       rememberDuration = duration
@@ -315,11 +321,13 @@ abstract class DStream[T: ClassTag] ( //T可以是元组(KEY,VALUE)
     dependencies.foreach(_.remember(parentRememberDuration))
   }
 
-  /** Checks whether the 'time' is valid wrt slideDuration for generating RDD */
+  /** Checks whether the 'time' is valid wrt slideDuration for generating RDD
+    时间点是周期的整数倍就是合法的,返回true
+  */
   private[streaming] def isTimeValid(time: Time): Boolean = {
     if (!isInitialized) {
       throw new SparkException (this + " has not been initialized")
-    } else if (time <= zeroTime || ! (time - zeroTime).isMultipleOf(slideDuration)) {
+    } else if (time <= zeroTime || ! (time - zeroTime).isMultipleOf(slideDuration)) {//说明时间点不是周期的整数倍
       logInfo("Time " + time + " is invalid as zeroTime is " + zeroTime +
         " and slideDuration is " + slideDuration + " and difference is " + (time - zeroTime))
       false
@@ -340,6 +348,7 @@ abstract class DStream[T: ClassTag] ( //T可以是元组(KEY,VALUE)
     generatedRDDs.get(time).orElse {
       // Compute the RDD if time is valid (e.g. correct time in a sliding window)
       // of RDD generation, else generate nothing.
+      //如果此时时间点是有效的(即时间点是周期的整数倍),则计算RDD
       if (isTimeValid(time)) {//说明时间有效
 
         val rddOption = createRDDWithLocalProperties(time) {
@@ -352,17 +361,18 @@ abstract class DStream[T: ClassTag] ( //T可以是元组(KEY,VALUE)
           }
         }
 
+	//对处理后的RDD进行persist存储以及checkpoint存储,以及缓存已经计算好的RDD
         rddOption.foreach { case newRDD =>
           // Register the generated RDD for caching and checkpointing
           if (storageLevel != StorageLevel.NONE) {
             newRDD.persist(storageLevel)
             logDebug(s"Persisting RDD ${newRDD.id} for time $time to $storageLevel")
           }
-          if (checkpointDuration != null && (time - zeroTime).isMultipleOf(checkpointDuration)) {
+          if (checkpointDuration != null && (time - zeroTime).isMultipleOf(checkpointDuration)) {//说明此时是checkpoint的周期的倍数,则进行checkpoint操作
             newRDD.checkpoint()
             logInfo(s"Marking RDD ${newRDD.id} for time $time for checkpointing")
           }
-          generatedRDDs.put(time, newRDD)
+          generatedRDDs.put(time, newRDD) //缓存已经计算好的RDD
         }
         rddOption
       } else {//说明时间无效
@@ -413,6 +423,7 @@ abstract class DStream[T: ClassTag] ( //T可以是元组(KEY,VALUE)
    * should not be called directly. This default implementation creates a job
    * that materializes the corresponding RDD. Subclasses of DStream may override this
    * to generate their own jobs.
+   * 创建一个给定时间点的job任务,这个是内部方法,属于默认的实现,因此是空实现,没有什么意义,有意义的需要被子类去实现该generateJob方法,比如ForEachDStream
    */
   private[streaming] def generateJob(time: Time): Option[Job] = {
     getOrCompute(time) match {
@@ -432,22 +443,24 @@ abstract class DStream[T: ClassTag] ( //T可以是元组(KEY,VALUE)
    * This is an internal method that should not be called directly. This default
    * implementation clears the old generated RDDs. Subclasses of DStream may override
    * this to clear their own metadata along with the generated RDDs.
+   * 删除老的RDD的映射以及RDD内容
    */
   private[streaming] def clearMetadata(time: Time) {
-    val unpersistData = ssc.conf.getBoolean("spark.streaming.unpersist", true)
-    val oldRDDs = generatedRDDs.filter(_._1 <= (time - rememberDuration))
+    val unpersistData = ssc.conf.getBoolean("spark.streaming.unpersist", true) //true表示要对老的RDD的磁盘或者内存内容也要删除
+    val oldRDDs = generatedRDDs.filter(_._1 <= (time - rememberDuration)) //找到老的RDD信息
     logDebug("Clearing references to old RDDs: [" +
-      oldRDDs.map(x => s"${x._1} -> ${x._2.id}").mkString(", ") + "]")
-    generatedRDDs --= oldRDDs.keys
+      oldRDDs.map(x => s"${x._1} -> ${x._2.id}").mkString(", ") + "]") //打印日志.说明要清理的是哪个时间点产生的哪个RDD
+    generatedRDDs --= oldRDDs.keys //内存移除这些老的RDD映射关系
     if (unpersistData) {
       logDebug("Unpersisting old RDDs: " + oldRDDs.values.map(_.id).mkString(", "))
+      //对每一个老的RDD也要删除
       oldRDDs.values.foreach { rdd =>
-        rdd.unpersist(false)
+        rdd.unpersist(false) //针对RDD的磁盘或者内存进行删除
         // Explicitly remove blocks of BlockRDD
         rdd match {
           case b: BlockRDD[_] =>
             logInfo("Removing blocks of RDD " + b + " of time " + time)
-            b.removeBlocks()
+            b.removeBlocks() //移除数据块信息
           case _ =>
         }
       }
@@ -526,7 +539,9 @@ abstract class DStream[T: ClassTag] ( //T可以是元组(KEY,VALUE)
   // DStream operations
   // =======================================================================
 
-  /** Return a new DStream by applying a function to all elements of this DStream. */
+  /** Return a new DStream by applying a function to all elements of this DStream.
+    * RDD[T]的每一个元素经过mapFunc函数处理,转换成RDD[U]对象
+    **/
   def map[U: ClassTag](mapFunc: T => U): DStream[U] = ssc.withScope {
     new MappedDStream(this, context.sparkContext.clean(mapFunc))
   }
@@ -534,12 +549,15 @@ abstract class DStream[T: ClassTag] ( //T可以是元组(KEY,VALUE)
   /**
    * Return a new DStream by applying a function to all elements of this DStream,
    * and then flattening the results
+   * RDD[T]的每一个元素经过flatMapFunc函数处理,转换成RDD[U]集合,最终转换成RDD[U]对象
    */
   def flatMap[U: ClassTag](flatMapFunc: T => Traversable[U]): DStream[U] = ssc.withScope {
     new FlatMappedDStream(this, context.sparkContext.clean(flatMapFunc))
   }
 
-  /** Return a new DStream containing only the elements that satisfy a predicate. */
+  /** Return a new DStream containing only the elements that satisfy a predicate.
+    * RDD[T]的每一个元素经过filterFunc函数处理,返回结果是true的RDD[T]
+    **/
   def filter(filterFunc: T => Boolean): DStream[T] = ssc.withScope {
     new FilteredDStream(this, context.sparkContext.clean(filterFunc))
   }
@@ -548,6 +566,8 @@ abstract class DStream[T: ClassTag] ( //T可以是元组(KEY,VALUE)
    * Return a new DStream in which each RDD is generated by applying glom() to each RDD of
    * this DStream. Applying glom() to an RDD coalesces all elements within each partition into
    * an array.
+   * RDD[T]的每一个分区内所有元素都进入到一个数组中
+   * 函数是将RDD中每一个分区中类型为T的元素转换成Array[T]，这样每一个分区就只有一个数组元素。
    */
   def glom(): DStream[Array[T]] = ssc.withScope {
     new GlommedDStream(this)
@@ -556,6 +576,7 @@ abstract class DStream[T: ClassTag] ( //T可以是元组(KEY,VALUE)
   /**
    * Return a new DStream with an increased or decreased level of parallelism. Each RDD in the
    * returned DStream has exactly numPartitions partitions.
+   * 重新分区,设置新的分区数量
    */
   def repartition(numPartitions: Int): DStream[T] = ssc.withScope {
     this.transform(_.repartition(numPartitions))
@@ -565,9 +586,10 @@ abstract class DStream[T: ClassTag] ( //T可以是元组(KEY,VALUE)
    * Return a new DStream in which each RDD is generated by applying mapPartitions() to each RDDs
    * of this DStream. Applying mapPartitions() to an RDD applies a function to each partition
    * of the RDD.
+   * 对一个分区内的全部元素进行处理,返回一个新的迭代器
    */
   def mapPartitions[U: ClassTag](
-      mapPartFunc: Iterator[T] => Iterator[U],
+      mapPartFunc: Iterator[T] => Iterator[U],//对一个分区内的全部元素进行处理,返回一个新的迭代器
       preservePartitioning: Boolean = false
     ): DStream[U] = ssc.withScope {
     new MapPartitionedDStream(this, context.sparkContext.clean(mapPartFunc), preservePartitioning)
@@ -576,20 +598,24 @@ abstract class DStream[T: ClassTag] ( //T可以是元组(KEY,VALUE)
   /**
    * Return a new DStream in which each RDD has a single element generated by reducing each RDD
    * of this DStream.
+   * 首先将RDD[T]每一个元素转换成元组(null,T),然后饮食转换成PairDStreamFunctions,然后调用reduceByKey,
+   * 即将RDD[T]中相同的Key的每两个元素value都相互处理,最终产生一个新的元素RDD[T]
    */
   def reduce(reduceFunc: (T, T) => T): DStream[T] = ssc.withScope {
-    this.map(x => (null, x)).reduceByKey(reduceFunc, 1).map(_._2)
+    this.map(x => (null, x)).reduceByKey(reduceFunc, 1) //表示最终使用1个partition即可
+      .map(_._2) //因为key都是null,因此返回就一个K,V,因此直接过去V就是最终的内容
   }
 
   /**
    * Return a new DStream in which each RDD has a single element generated by counting each RDD
    * of this DStream.
+   * 返回RDD[T]中元素数量
    */
   def count(): DStream[Long] = ssc.withScope {
-    this.map(_ => (null, 1L))
-        .transform(_.union(context.sparkContext.makeRDD(Seq((null, 0L)), 1)))
-        .reduceByKey(_ + _)
-        .map(_._2)
+    this.map(_ => (null, 1L)) //每一个元素都转换成元组,表示每一个元素都代表1
+        .transform(_.union(context.sparkContext.makeRDD(Seq((null, 0L)), 1))) //union的前面_代表的是map结果集RDD[(K,V)],union后面的表示一个默认值,即每一个元素的默认值都是0,用1个并发度执行产生的RDD
+        .reduceByKey(_ + _) //相同key的元素,value值相加
+        .map(_._2) //因为就一个Key为null,因此返回值就是对应的Value即可
   }
 
   /**
@@ -597,6 +623,7 @@ abstract class DStream[T: ClassTag] ( //T可以是元组(KEY,VALUE)
    * each RDD of this DStream. Hash partitioning is used to generate
    * the RDDs with `numPartitions` partitions (Spark's default number of partitions if
    * `numPartitions` not specified).
+   * 返回RDD[T]中每一个元素出现的次数
    */
   def countByValue(numPartitions: Int = ssc.sc.defaultParallelism)(implicit ord: Ordering[T] = null)
       : DStream[(T, Long)] = ssc.withScope {
@@ -608,6 +635,7 @@ abstract class DStream[T: ClassTag] ( //T可以是元组(KEY,VALUE)
    * 'this' DStream will be registered as an output stream and therefore materialized.
    *
    * @deprecated As of 0.9.0, replaced by `foreachRDD`.
+   * 等同于foreachRDD
    */
   @deprecated("use foreachRDD", "0.9.0")
   def foreach(foreachFunc: RDD[T] => Unit): Unit = ssc.withScope {
@@ -619,6 +647,7 @@ abstract class DStream[T: ClassTag] ( //T可以是元组(KEY,VALUE)
    * 'this' DStream will be registered as an output stream and therefore materialized.
    *
    * @deprecated As of 0.9.0, replaced by `foreachRDD`.
+   * 等同于foreachRDD
    */
   @deprecated("use foreachRDD", "0.9.0")
   def foreach(foreachFunc: (RDD[T], Time) => Unit): Unit = ssc.withScope {
@@ -637,6 +666,7 @@ abstract class DStream[T: ClassTag] ( //T可以是元组(KEY,VALUE)
   /**
    * Apply a function to each RDD in this DStream. This is an output operator, so
    * 'this' DStream will be registered as an output stream and therefore materialized.
+   * 对每一个RDD应用一个函数
    */
   def foreachRDD(foreachFunc: (RDD[T], Time) => Unit): Unit = ssc.withScope {
     // because the DStream is reachable from the outer object here, and because
@@ -648,6 +678,7 @@ abstract class DStream[T: ClassTag] ( //T可以是元组(KEY,VALUE)
   /**
    * Return a new DStream in which each RDD is generated by applying a function
    * on each RDD of 'this' DStream.
+   * 转换函数,可以将一个RDD[T]转换成RDD[U]的函数作用于一个时间点的RDD集合上
    */
   def transform[U: ClassTag](transformFunc: RDD[T] => RDD[U]): DStream[U] = ssc.withScope {
     // because the DStream is reachable from the outer object here, and because
@@ -660,6 +691,7 @@ abstract class DStream[T: ClassTag] ( //T可以是元组(KEY,VALUE)
   /**
    * Return a new DStream in which each RDD is generated by applying a function
    * on each RDD of 'this' DStream.
+   * 转换函数,可以将一个RDD[T]转换成RDD[U]的函数作用于一个时间点的RDD集合上
    */
   def transform[U: ClassTag](transformFunc: (RDD[T], Time) => RDD[U]): DStream[U] = ssc.withScope {
     // because the DStream is reachable from the outer object here, and because
@@ -676,6 +708,7 @@ abstract class DStream[T: ClassTag] ( //T可以是元组(KEY,VALUE)
   /**
    * Return a new DStream in which each RDD is generated by applying a function
    * on each RDD of 'this' DStream and 'other' DStream.
+   * 转换函数,可以将一个RDD[T]和RDD[U]转换成RDD[V]的函数作用于一个时间点的RDD[T]和RDD[U]集合上
    */
   def transformWith[U: ClassTag, V: ClassTag](
       other: DStream[U], transformFunc: (RDD[T], RDD[U]) => RDD[V]
@@ -690,6 +723,7 @@ abstract class DStream[T: ClassTag] ( //T可以是元组(KEY,VALUE)
   /**
    * Return a new DStream in which each RDD is generated by applying a function
    * on each RDD of 'this' DStream and 'other' DStream.
+   * 转换函数,可以将一个RDD[T]和RDD[U]转换成RDD[V]的函数作用于一个时间点的RDD[T]和RDD[U]集合上
    */
   def transformWith[U: ClassTag, V: ClassTag](
       other: DStream[U], transformFunc: (RDD[T], RDD[U], Time) => RDD[V]
@@ -710,6 +744,7 @@ abstract class DStream[T: ClassTag] ( //T可以是元组(KEY,VALUE)
   /**
    * Print the first ten elements of each RDD generated in this DStream. This is an output
    * operator, so this DStream will be registered as an output stream and there materialized.
+   * 仅仅打印10个元素
    */
   def print(): Unit = ssc.withScope {
     print(10)
@@ -718,11 +753,12 @@ abstract class DStream[T: ClassTag] ( //T可以是元组(KEY,VALUE)
   /**
    * Print the first num elements of each RDD generated in this DStream. This is an output
    * operator, so this DStream will be registered as an output stream and there materialized.
+   * 仅仅打印num个元素
    */
   def print(num: Int): Unit = ssc.withScope {
     def foreachFunc: (RDD[T], Time) => Unit = {
       (rdd: RDD[T], time: Time) => {
-        val firstNum = rdd.take(num + 1)
+        val firstNum = rdd.take(num + 1) //获取前num+1个元素,这些元素是从第0个partition开始获取,一直获取到num+1数量为止,获取的数据跟排序没关系
         // scalastyle:off println
         println("-------------------------------------------")
         println("Time: " + time)
@@ -752,6 +788,12 @@ abstract class DStream[T: ClassTag] ( //T可以是元组(KEY,VALUE)
    * @param slideDuration  sliding interval of the window (i.e., the interval after which
    *                       the new DStream will generate RDDs); must be a multiple of this
    *                       DStream's batching interval
+   *
+   * windowDuration=3*batchInterval，
+slideDuration=10*batchInterval,
+表示的含义是每个10个时间间隔对之前的3个RDD进行统计计算，也意味着有7个RDD没在window窗口的统计范围内。slideDuration的默认值是batchInterval
+
+即每一次对前N次的处理结果进一步进行处理,因为默认非WindowedDStream,都是一个时间片段下只能处理该时间点的聚合.不能让全局聚合
    */
   def window(windowDuration: Duration, slideDuration: Duration): DStream[T] = ssc.withScope {
     new WindowedDStream(this, windowDuration, slideDuration)
@@ -766,19 +808,24 @@ abstract class DStream[T: ClassTag] ( //T可以是元组(KEY,VALUE)
    * @param slideDuration  sliding interval of the window (i.e., the interval after which
    *                       the new DStream will generate RDDs); must be a multiple of this
    *                       DStream's batching interval
+   * 1.先在该时间点对RDD数据进行一次聚合,产生唯一的一个RDD[T],即就有一个元素结果
+   * 2.对此时间点的之前的若干次聚合结果进一步reduce,获取到唯一的一个RDD[T],即就有一个元素结果
+   * 比如时间间隔为3.则目的是每次都要获取3次的总结果集,比如用于股票分析中,看过去12小时的总和
    */
   def reduceByWindow(
       reduceFunc: (T, T) => T,
       windowDuration: Duration,
       slideDuration: Duration
     ): DStream[T] = ssc.withScope {
-    this.reduce(reduceFunc).window(windowDuration, slideDuration).reduce(reduceFunc)
+    this.reduce(reduceFunc) //先对当前的数据RDD进行reduce计算,算出来的结果集后,在进行窗口运算
+      .window(windowDuration, slideDuration).reduce(reduceFunc)
   }
 
   /**
    * Return a new DStream in which each RDD has a single element generated by reducing all
    * elements in a sliding window over this DStream. However, the reduction is done incrementally
    * using the old window's reduced value :
+   * 该函数是增量的方式完成的,因此效率会更高
    *  1. reduce the new values that entered the window (e.g., adding new counts)
    *  2. "inverse reduce" the old values that left the window (e.g., subtracting old counts)
    *  This is more efficient than reduceByWindow without "inverse reduce" function.
@@ -849,6 +896,7 @@ abstract class DStream[T: ClassTag] ( //T可以是元组(KEY,VALUE)
   /**
    * Return a new DStream by unifying data of another DStream with this DStream.
    * @param that Another DStream having the same slideDuration as this DStream.
+   * 将两个DStream合并成一个RDD[T]
    */
   def union(that: DStream[T]): DStream[T] = ssc.withScope {
     new UnionDStream[T](Array(this, that))
@@ -863,12 +911,14 @@ abstract class DStream[T: ClassTag] ( //T可以是元组(KEY,VALUE)
 
   /**
    * Return all the RDDs between 'fromTime' to 'toTime' (both included)
+   * 返回时间点区间中所有的时间点组成的RDD集合
    */
   def slice(fromTime: Time, toTime: Time): Seq[RDD[T]] = ssc.withScope {
     if (!isInitialized) {
       throw new SparkException(this + " has not been initialized")
     }
 
+    //设置刚好是整数倍的时间点
     val alignedToTime = if ((toTime - zeroTime).isMultipleOf(slideDuration)) {
       toTime
     } else {
@@ -888,7 +938,8 @@ abstract class DStream[T: ClassTag] ( //T可以是元组(KEY,VALUE)
     logInfo("Slicing from " + fromTime + " to " + toTime +
       " (aligned to " + alignedFromTime + " and " + alignedToTime + ")")
 
-    alignedFromTime.to(alignedToTime, slideDuration).flatMap(time => {
+    alignedFromTime.to(alignedToTime, slideDuration) //返回经过多少个Time时间点的集合
+      .flatMap(time => { //对每一个时间点都获取当时的RDD[T]
       if (time >= zeroTime) getOrCompute(time) else None
     })
   }
@@ -897,6 +948,7 @@ abstract class DStream[T: ClassTag] ( //T可以是元组(KEY,VALUE)
    * Save each RDD in this DStream as a Sequence file of serialized objects.
    * The file name at each batch interval is generated based on `prefix` and
    * `suffix`: "prefix-TIME_IN_MS.suffix".
+   * RDD保存到HDFS上,保存成序列化文件
    */
   def saveAsObjectFiles(prefix: String, suffix: String = ""): Unit = ssc.withScope {
     val saveFunc = (rdd: RDD[T], time: Time) => {
@@ -910,10 +962,11 @@ abstract class DStream[T: ClassTag] ( //T可以是元组(KEY,VALUE)
    * Save each RDD in this DStream as at text file, using string representation
    * of elements. The file name at each batch interval is generated based on
    * `prefix` and `suffix`: "prefix-TIME_IN_MS.suffix".
+   * RDD保存到HDFS上
    */
   def saveAsTextFiles(prefix: String, suffix: String = ""): Unit = ssc.withScope {
     val saveFunc = (rdd: RDD[T], time: Time) => {
-      val file = rddToFileName(prefix, suffix, time)
+      val file = rddToFileName(prefix, suffix, time) //产生文件名字,prefix 可以是path路径+前缀
       rdd.saveAsTextFile(file)
     }
     this.foreachRDD(saveFunc)
@@ -922,6 +975,7 @@ abstract class DStream[T: ClassTag] ( //T可以是元组(KEY,VALUE)
   /**
    * Register this streaming as an output stream. This would ensure that RDDs of this
    * DStream will be generated.
+   * 调用该方法的才会被最终被spark streaming调用去执行逻辑运算
    */
   private[streaming] def register(): DStream[T] = {
     ssc.graph.addOutputStream(this)

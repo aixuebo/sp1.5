@@ -867,10 +867,12 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   /** Distribute a local Scala collection to form an RDD.
    *
    * This method is identical to `parallelize`.
+    * 对集合seq进行并行度计算,产生一个新的RDD[T],此时seq就可以多节点运算了
    */
   def makeRDD[T: ClassTag](
-      seq: Seq[T],
-      numSlices: Int = defaultParallelism): RDD[T] = withScope {
+      seq: Seq[T],//要处理的集合
+      numSlices: Int = defaultParallelism) //并行度
+   : RDD[T] = withScope {
     parallelize(seq, numSlices)
   }
 

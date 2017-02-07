@@ -32,13 +32,14 @@ class DStreamCheckpointData[T: ClassTag] (dstream: DStream[T])
   protected val data = new HashMap[Time, AnyRef]()
 
   // Mapping of the batch time to the checkpointed RDD file of that time
+  //记录所有的每个时间点RDD对应的CheckpointFile文件映射,是currentCheckpointFiles的结果集
   @transient private var timeToCheckpointFile = new HashMap[Time, String]
   // Mapping of the batch time to the time of the oldest checkpointed RDD
   // in that batch's checkpoint data
-  @transient private var timeToOldestCheckpointFileTime = new HashMap[Time, Time]
+  @transient private var timeToOldestCheckpointFileTime = new HashMap[Time, Time] //记录key是update的时间,value是此时所有的RDD中最小的时间点是哪个时间
 
   @transient private var fileSystem : FileSystem = null
-  protected[streaming] def currentCheckpointFiles = data.asInstanceOf[HashMap[Time, String]]
+  protected[streaming] def currentCheckpointFiles = data.asInstanceOf[HashMap[Time, String]] //每个时间点RDD对应的CheckpointFile文件映射
 
   /**
    * Updates the checkpoint data of the DStream. This gets called every time
@@ -48,19 +49,19 @@ class DStreamCheckpointData[T: ClassTag] (dstream: DStream[T])
   def update(time: Time) {
 
     // Get the checkpointed RDDs from the generated RDDs
-    val checkpointFiles = dstream.generatedRDDs.filter(_._2.getCheckpointFile.isDefined)
-                                       .map(x => (x._1, x._2.getCheckpointFile.get))
+    val checkpointFiles = dstream.generatedRDDs.filter(_._2.getCheckpointFile.isDefined) //过滤保存的RDD中有CheckpointFile文件的RDD
+                                       .map(x => (x._1, x._2.getCheckpointFile.get))//获取对应的时间点以及CheckpointFile文件
     logDebug("Current checkpoint files:\n" + checkpointFiles.toSeq.mkString("\n"))
 
     // Add the checkpoint files to the data to be serialized
-    if (!checkpointFiles.isEmpty) {
+    if (!checkpointFiles.isEmpty) {//说明有内容
       currentCheckpointFiles.clear()
       currentCheckpointFiles ++= checkpointFiles
       // Add the current checkpoint files to the map of all checkpoint files
       // This will be used to delete old checkpoint files
       timeToCheckpointFile ++= currentCheckpointFiles
       // Remember the time of the oldest checkpoint RDD in current state
-      timeToOldestCheckpointFileTime(time) = currentCheckpointFiles.keys.min(Time.ordering)
+      timeToOldestCheckpointFileTime(time) = currentCheckpointFiles.keys.min(Time.ordering) //currentCheckpointFiles.keys.min(Time.ordering) 获取最小的RDD对应的时间点
     }
   }
 
@@ -71,18 +72,18 @@ class DStreamCheckpointData[T: ClassTag] (dstream: DStream[T])
   def cleanup(time: Time) {
     // Get the time of the oldest checkpointed RDD that was written as part of the
     // checkpoint of `time`
-    timeToOldestCheckpointFileTime.remove(time) match {
+    timeToOldestCheckpointFileTime.remove(time) match {//获取该时间点中最小的RDD对应的时间点
       case Some(lastCheckpointFileTime) =>
         // Find all the checkpointed RDDs (i.e. files) that are older than `lastCheckpointFileTime`
         // This is because checkpointed RDDs older than this are not going to be needed
         // even after master fails, as the checkpoint data of `time` does not refer to those files
-        val filesToDelete = timeToCheckpointFile.filter(_._1 < lastCheckpointFileTime)
+        val filesToDelete = timeToCheckpointFile.filter(_._1 < lastCheckpointFileTime) //要删除的文件
         logDebug("Files to delete:\n" + filesToDelete.mkString(","))
         filesToDelete.foreach {
           case (time, file) =>
             try {
               val path = new Path(file)
-              if (fileSystem == null) {
+              if (fileSystem == null) {//真正去删除这些文件,这些文件都是RDD文件
                 fileSystem = path.getFileSystem(dstream.ssc.sparkContext.hadoopConfiguration)
               }
               fileSystem.delete(path, true)
@@ -103,6 +104,7 @@ class DStreamCheckpointData[T: ClassTag] (dstream: DStream[T])
    * Restore the checkpoint data. This gets called once when the DStream graph
    * (along with its DStreams) are being restored from a graph checkpoint file.
    * Default implementation restores the RDDs from their checkpoint files.
+   * 重新恢复此时generatedRDDs的内容
    */
   def restore() {
     // Create RDDs from the checkpoint data

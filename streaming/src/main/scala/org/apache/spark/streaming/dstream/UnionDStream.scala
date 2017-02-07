@@ -24,6 +24,7 @@ import org.apache.spark.rdd.UnionRDD
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
 
+//将一组DStream[T] 进行合并
 private[streaming]
 class UnionDStream[T: ClassTag](parents: Array[DStream[T]])
   extends DStream[T](parents.head.ssc) {
@@ -38,14 +39,14 @@ class UnionDStream[T: ClassTag](parents: Array[DStream[T]])
   override def slideDuration: Duration = parents.head.slideDuration
 
   override def compute(validTime: Time): Option[RDD[T]] = {
-    val rdds = new ArrayBuffer[RDD[T]]()
+    val rdds = new ArrayBuffer[RDD[T]]() //最终该时间段内的全部RDD数组
     parents.map(_.getOrCompute(validTime)).foreach {
       case Some(rdd) => rdds += rdd
       case None => throw new Exception("Could not generate RDD from a parent for unifying at time "
         + validTime)
     }
     if (rdds.size > 0) {
-      Some(new UnionRDD(ssc.sc, rdds))
+      Some(new UnionRDD(ssc.sc, rdds)) //合并一组RDD成一个具体的RDD
     } else {
       None
     }
