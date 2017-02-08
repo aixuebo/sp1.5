@@ -180,7 +180,9 @@ trait Row extends Serializable {
    */
   def get(i: Int): Any
 
-  /** Checks whether the value at position i is null. */
+  /** Checks whether the value at position i is null.
+    * 判断i列是否是null
+    **/
   def isNullAt(i: Int): Boolean = get(i) == null
 
   /**
@@ -322,13 +324,14 @@ trait Row extends Serializable {
    * @throws IllegalArgumentException when fieldName do not exist.
    * @throws ClassCastException when data type does not match.
    */
-  def getAs[T](fieldName: String): T = getAs[T](fieldIndex(fieldName))
+  def getAs[T](fieldName: String): T = getAs[T](fieldIndex(fieldName)) //通过scheme找到对应列的值
 
   /**
    * Returns the index of a given field name.
    *
    * @throws UnsupportedOperationException when schema is not defined.
    * @throws IllegalArgumentException when fieldName do not exist.
+   * 通过scheme可以得到该数据是第几列,因此可以获取指定scheme列上的值
    */
   def fieldIndex(name: String): Int = {
     throw new UnsupportedOperationException("fieldIndex on a Row without schema is undefined.")
@@ -340,6 +343,7 @@ trait Row extends Serializable {
    * @throws UnsupportedOperationException when schema is not defined.
    * @throws IllegalArgumentException when fieldName do not exist.
    * @throws ClassCastException when data type does not match.
+   * 可以获取一组列对应的值,用Map作为返回值
    */
   def getValuesMap[T](fieldNames: Seq[String]): Map[String, T] = {
     fieldNames.map { name =>
@@ -427,6 +431,7 @@ trait Row extends Serializable {
 
   /**
    * Return a Scala Seq representing the row. Elements are placed in the same order in the Seq.
+   * 返回一行元素
    */
   def toSeq: Seq[Any] = {
     val n = length

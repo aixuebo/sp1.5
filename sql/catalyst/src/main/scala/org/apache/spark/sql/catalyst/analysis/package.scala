@@ -33,8 +33,8 @@ package object analysis {
    */
   type Resolver = (String, String) => Boolean
 
-  val caseInsensitiveResolution = (a: String, b: String) => a.equalsIgnoreCase(b)
-  val caseSensitiveResolution = (a: String, b: String) => a == b
+  val caseInsensitiveResolution = (a: String, b: String) => a.equalsIgnoreCase(b) //忽略大小写 是否相同
+  val caseSensitiveResolution = (a: String, b: String) => a == b //是否引用相同
 
   implicit class AnalysisErrorAt(t: TreeNode[_]) {
     /** Fails the analysis at the point where a specific tree node was parsed. */
@@ -43,7 +43,9 @@ package object analysis {
     }
   }
 
-  /** Catches any AnalysisExceptions thrown by `f` and attaches `t`'s position if any. */
+  /** Catches any AnalysisExceptions thrown by `f` and attaches `t`'s position if any.
+    * 该方法执行f函数,返回A,如果遇到异常,则抛异常,异常带有哪行 哪个位置开始出现的异常
+    **/
   def withPosition[A](t: TreeNode[_])(f: => A): A = {
     try f catch {
       case a: AnalysisException =>

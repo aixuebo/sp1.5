@@ -26,6 +26,8 @@ import org.apache.spark.sql.catalyst.SqlLexical
 /**
  * This is a data type parser that can be used to parse string representations of data types
  * provided in SQL queries. This parser is mixed in with DDLParser and SqlParser.
+ *
+ * 传入一个字符串,返回一个类型,比如传入的参数是int  string等
  */
 private[sql] trait DataTypeParser extends StandardTokenParsers {
 
@@ -37,6 +39,7 @@ private[sql] trait DataTypeParser extends StandardTokenParsers {
     { case Identifier(str) if regex.unapplySeq(str).isDefined => str }
   )
 
+  //i表示忽略大小写
   protected lazy val primitiveType: Parser[DataType] =
     "(?i)string".r ^^^ StringType |
     "(?i)float".r ^^^ FloatType |
@@ -108,6 +111,7 @@ private[sql] object DataTypeParser {
     override val lexical = new SqlLexical
   }
 
+  //传入一个字符串,返回一个类型,比如传入的参数是int  string等
   def parse(dataTypeString: String): DataType = dataTypeParser.toDataType(dataTypeString)
 }
 

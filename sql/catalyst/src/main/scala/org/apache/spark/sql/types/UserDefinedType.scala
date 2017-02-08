@@ -35,6 +35,7 @@ import org.apache.spark.annotation.DeveloperApi
  *
  * The conversion via `serialize` occurs when instantiating a `DataFrame` from another RDD.
  * The conversion via `deserialize` occurs when reading from a `DataFrame`.
+ * 用于用户自定义数据类型的基类,就用户自定义的数据类型要继承与
  */
 @DeveloperApi
 abstract class UserDefinedType[UserType] extends DataType with Serializable {
@@ -59,6 +60,7 @@ abstract class UserDefinedType[UserType] extends DataType with Serializable {
   /** Convert a SQL datum to the user type */
   def deserialize(datum: Any): UserType
 
+  //toString的json形式
   override private[sql] def jsonValue: JValue = {
     ("type" -> "udt") ~
       ("class" -> this.getClass.getName) ~

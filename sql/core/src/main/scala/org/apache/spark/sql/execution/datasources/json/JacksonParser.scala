@@ -108,7 +108,7 @@ private[sql] object JacksonParser {
       case (START_OBJECT, st: StructType) =>
         convertObject(factory, parser, st)
 
-      case (START_ARRAY, st: StructType) =>
+      case (START_ARRAY, st: StructType) => //解析数组
         // SPARK-3308: support reading top level JSON arrays and take every element
         // in such an array as a row
         convertArray(factory, parser, st)
@@ -116,7 +116,7 @@ private[sql] object JacksonParser {
       case (START_ARRAY, ArrayType(st, _)) =>
         convertArray(factory, parser, st)
 
-      case (START_OBJECT, ArrayType(st, _)) =>
+      case (START_OBJECT, ArrayType(st, _)) => //解析对象
         // the business end of SPARK-3308:
         // when an object is found but an array is requested just wrap it in a list
         convertField(factory, parser, st) :: Nil
@@ -185,33 +185,35 @@ private[sql] object JacksonParser {
       schema: StructType,
       columnNameOfCorruptRecords: String): RDD[InternalRow] = {
 
+    //参数record表示一行的原始内容
     def failedRecord(record: String): Seq[InternalRow] = {
       // create a row even if no corrupt record column is present
       val row = new GenericMutableRow(schema.length)
       for (corruptIndex <- schema.getFieldIndex(columnNameOfCorruptRecords)) {
-        require(schema(corruptIndex).dataType == StringType)
+        require(schema(corruptIndex).dataType == StringType) //corruptIndex序号对应的StructField必须是String类型的
         row.update(corruptIndex, UTF8String.fromString(record))
       }
 
       Seq(row)
     }
 
+    //解析一个partition的数据
     json.mapPartitions { iter =>
       val factory = new JsonFactory()
 
-      iter.flatMap { record =>
+      iter.flatMap { record => //一行的原始内容
         try {
-          val parser = factory.createParser(record)
+          val parser = factory.createParser(record) //解析该json内容
           parser.nextToken()
 
           convertField(factory, parser, schema) match {
             case null => failedRecord(record)
-            case row: InternalRow => row :: Nil
+            case row: InternalRow => row :: Nil //转换成一行数据
             case array: ArrayData =>
               if (array.numElements() == 0) {
                 Nil
               } else {
-                array.toArray[InternalRow](schema)
+                array.toArray[InternalRow](schema) //转换成一组数据
               }
             case _ =>
               sys.error(

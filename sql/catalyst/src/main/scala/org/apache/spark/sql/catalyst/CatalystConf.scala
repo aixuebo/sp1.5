@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst
 
 private[spark] trait CatalystConf {
-  def caseSensitiveAnalysis: Boolean
+  def caseSensitiveAnalysis: Boolean //敏感分析,true表示敏感,即table名字大小写是敏感的
 }
 
 /**

@@ -24,7 +24,7 @@ import org.apache.spark.sql.types.Decimal;
 import org.apache.spark.sql.types.MapData;
 import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
-
+//从数组中获取一个元素,并且返回的是该元素对应的类型
 public interface SpecializedGetters {
 
   boolean isNullAt(int ordinal);
@@ -57,5 +57,6 @@ public interface SpecializedGetters {
 
   MapData getMap(int ordinal);
 
+    //获取第ordinal个元素,该元素是dataType类型的
   Object get(int ordinal, DataType dataType);
 }

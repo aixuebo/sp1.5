@@ -33,7 +33,7 @@ private[sql] object Column {
 
   def apply(expr: Expression): Column = new Column(expr)
 
-  def unapply(col: Column): Option[Expression] = Some(col.expr)
+  def unapply(col: Column): Option[Expression] = Some(col.expr) //给定一个Column对象,抽取其中的Expression
 }
 
 

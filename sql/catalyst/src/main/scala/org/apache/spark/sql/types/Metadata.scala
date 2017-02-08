@@ -218,6 +218,7 @@ object Metadata {
 @DeveloperApi
 class MetadataBuilder {
 
+  //备注数据集合
   private val map: mutable.Map[String, Any] = mutable.Map.empty
 
   /** Returns the immutable version of this map.  Used for java interop. */

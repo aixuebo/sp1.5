@@ -26,9 +26,10 @@ import org.apache.spark.sql.types.{DataType, StructType}
  */
 abstract class InternalRow extends SpecializedGetters with Serializable {
 
-  def numFields: Int
+  def numFields: Int //这一行包含多少列
 
   // This is only use for test and will throw a null pointer exception if the position is null.
+  //获取某一个列对应的值
   def getString(ordinal: Int): String = getUTF8String(ordinal).toString
 
   /**

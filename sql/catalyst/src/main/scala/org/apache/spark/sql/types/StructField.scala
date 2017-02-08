@@ -27,12 +27,13 @@ import org.json4s.JsonDSL._
  * @param nullable Indicates if values of this field can be `null` values.
  * @param metadata The metadata of this field. The metadata should be preserved during
  *                 transformation if the content of the column is not modified, e.g, in selection.
+ * 代表对象类型中的一个属性
  */
 case class StructField(
-    name: String,
-    dataType: DataType,
-    nullable: Boolean = true,
-    metadata: Metadata = Metadata.empty) {
+    name: String,//属性名称
+    dataType: DataType,//属性类型
+    nullable: Boolean = true,//是否可以为null
+    metadata: Metadata = Metadata.empty) {//备注数据集合,内部由Map的key_value组成的备注信息
 
   /** No-arg constructor for kryo. */
   protected def this() = this(null, null)

@@ -87,6 +87,8 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference,
  * val row = Row(Row(1, 2, true))
  * // row: Row = [[1,2,true]]
  * }}}
+ *
+ * 对象类型,由多个StructField属性对象组成
  */
 @DeveloperApi
 case class StructType(fields: Array[StructField]) extends DataType with Seq[StructField] {
@@ -94,12 +96,14 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
   /** No-arg constructor for kryo. */
   def this() = this(Array.empty[StructField])
 
-  /** Returns all field names in an array. */
+  /** Returns all field names in an array.
+    * 返回属性名称集合
+    **/
   def fieldNames: Array[String] = fields.map(_.name)
 
   private lazy val fieldNamesSet: Set[String] = fieldNames.toSet
-  private lazy val nameToField: Map[String, StructField] = fields.map(f => f.name -> f).toMap
-  private lazy val nameToIndex: Map[String, Int] = fieldNames.zipWithIndex.toMap
+  private lazy val nameToField: Map[String, StructField] = fields.map(f => f.name -> f).toMap //name和StructField映射
+  private lazy val nameToIndex: Map[String, Int] = fieldNames.zipWithIndex.toMap //name和序号映射
 
   /**
    * Creates a new [[StructType]] by adding a new field.
@@ -206,6 +210,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
   /**
    * Extracts a [[StructField]] of the given name. If the [[StructType]] object does not
    * have a name matching the given name, `null` will be returned.
+   * 通过name查找对应的属性对象
    */
   def apply(name: String): StructField = {
     nameToField.getOrElse(name,
@@ -228,18 +233,21 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
 
   /**
    * Returns index of a given field
+   * 返回该field是第几个属性
    */
   def fieldIndex(name: String): Int = {
     nameToIndex.getOrElse(name,
       throw new IllegalArgumentException(s"""Field "$name" does not exist."""))
   }
 
+  //返回该field是第几个属性
   private[sql] def getFieldIndex(name: String): Option[Int] = {
     nameToIndex.get(name)
   }
 
+  //返回每一个属性StructField的详细信息
   protected[sql] def toAttributes: Seq[AttributeReference] =
-    map(f => AttributeReference(f.name, f.dataType, f.nullable, f.metadata)())
+    map(f => AttributeReference(f.name, f.dataType, f.nullable, f.metadata)()) //f就代表StructField对象
 
   def treeString: String = {
     val builder = new StringBuilder
@@ -264,15 +272,17 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
 
   override def apply(fieldIndex: Int): StructField = fields(fieldIndex)
 
-  override def length: Int = fields.length
+  override def length: Int = fields.length //该对象有多少个field属性
 
-  override def iterator: Iterator[StructField] = fields.iterator
+  override def iterator: Iterator[StructField] = fields.iterator //迭代全部的field属性集合
 
   /**
    * The default size of a value of the StructType is the total default sizes of all field types.
+   * 该对象对应的属性一共占多少字节
    */
   override def defaultSize: Int = fields.map(_.dataType.defaultSize).sum
 
+  //struct<fieldName:fieldDataType,fieldName:fieldDataType,fieldName:fieldDataType>
   override def simpleString: String = {
     val fieldTypes = fields.map(field => s"${field.name}:${field.dataType.simpleString}")
     s"struct<${fieldTypes.mkString(",")}>"

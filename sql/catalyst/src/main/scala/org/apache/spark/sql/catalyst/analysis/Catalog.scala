@@ -31,9 +31,9 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Subquery}
  * Thrown by a catalog when a table cannot be found.  The analyzer will rethrow the exception
  * as an AnalysisException with the correct position information.
  */
-class NoSuchTableException extends Exception
+class NoSuchTableException extends Exception //没有表异常
 
-class NoSuchDatabaseException extends Exception
+class NoSuchDatabaseException extends Exception //没有数据库异常
 
 /**
  * An interface for looking up relations by name.  Used by an [[Analyzer]].
@@ -65,15 +65,17 @@ trait Catalog {
   def unregisterAllTables(): Unit
 
   // TODO: Refactor it in the work of SPARK-10104
+  //对表名进行处理,让其都转换成大写
   protected def processTableIdentifier(tableIdentifier: Seq[String]): Seq[String] = {
-    if (conf.caseSensitiveAnalysis) {
-      tableIdentifier
+    if (conf.caseSensitiveAnalysis) {//对大小写敏感
+      tableIdentifier //保持原样
     } else {
-      tableIdentifier.map(_.toLowerCase)
+      tableIdentifier.map(_.toLowerCase) //对大小写不敏感,都让其大写
     }
   }
 
   // TODO: Refactor it in the work of SPARK-10104
+  //转换成datababses.table形式 或者table形式
   protected def getDbTableName(tableIdent: Seq[String]): String = {
     val size = tableIdent.size
     if (size <= 2) {
@@ -84,6 +86,7 @@ trait Catalog {
   }
 
   // TODO: Refactor it in the work of SPARK-10104
+  //返回databases,table的元组
   protected def getDBTable(tableIdent: Seq[String]) : (Option[String], String) = {
     (tableIdent.lift(tableIdent.size - 2), tableIdent.last)
   }
@@ -91,6 +94,7 @@ trait Catalog {
   /**
    * It is not allowed to specifiy database name for tables stored in [[SimpleCatalog]].
    * We use this method to check it.
+   * 校验table名字是否合法
    */
   protected def checkTableIdentifier(tableIdentifier: Seq[String]): Unit = {
     if (tableIdentifier.length > 1) {
@@ -170,12 +174,12 @@ trait OverrideCatalog extends Catalog {
   val overrides = new mutable.HashMap[(Option[String], String), LogicalPlan]()
 
   abstract override def tableExists(tableIdentifier: Seq[String]): Boolean = {
-    val tableIdent = processTableIdentifier(tableIdentifier)
+    val tableIdent = processTableIdentifier(tableIdentifier) //对table名字进行大小写处理
     // A temporary tables only has a single part in the tableIdentifier.
     val overriddenTable = if (tableIdentifier.length > 1) {
       None: Option[LogicalPlan]
     } else {
-      overrides.get(getDBTable(tableIdent))
+      overrides.get(getDBTable(tableIdent)) //返回databases,table的元组
     }
     overriddenTable match {
       case Some(_) => true

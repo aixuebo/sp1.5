@@ -25,14 +25,15 @@ import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 /**
  * An extended version of [[InternalRow]] that implements all special getters, toString
  * and equals/hashCode by `genericGet`.
+ * 代表一行
  */
 trait BaseGenericInternalRow extends InternalRow {
 
   protected def genericGet(ordinal: Int): Any
 
   // default implementation (slow)
-  private def getAs[T](ordinal: Int) = genericGet(ordinal).asInstanceOf[T]
-  override def isNullAt(ordinal: Int): Boolean = getAs[AnyRef](ordinal) eq null
+  private def getAs[T](ordinal: Int) = genericGet(ordinal).asInstanceOf[T] //获取ordinal列,并且将其转换成指定类型T
+  override def isNullAt(ordinal: Int): Boolean = getAs[AnyRef](ordinal) eq null //true表示是null
   override def get(ordinal: Int, dataType: DataType): AnyRef = getAs(ordinal)
   override def getBoolean(ordinal: Int): Boolean = getAs(ordinal)
   override def getByte(ordinal: Int): Byte = getAs(ordinal)
@@ -49,6 +50,7 @@ trait BaseGenericInternalRow extends InternalRow {
   override def getMap(ordinal: Int): MapData = getAs(ordinal)
   override def getStruct(ordinal: Int, numFields: Int): InternalRow = getAs(ordinal)
 
+  //只要有一个值是null,则结果都是true
   override def anyNull: Boolean = {
     val len = numFields
     var i = 0
@@ -159,9 +161,10 @@ trait BaseGenericInternalRow extends InternalRow {
 /**
  * An extended interface to [[InternalRow]] that allows the values for each column to be updated.
  * Setting a value through a primitive function implicitly marks that column as not null.
+ * 可变的行,允许每一列的值可以update
  */
 abstract class MutableRow extends InternalRow {
-  def setNullAt(i: Int): Unit
+  def setNullAt(i: Int): Unit //将第i列的值设置为null
 
   def update(i: Int, value: Any)
 
@@ -203,19 +206,22 @@ class GenericRow(protected[sql] val values: Array[Any]) extends Row {
   override def copy(): Row = this
 }
 
+//带有scheme的行
 class GenericRowWithSchema(values: Array[Any], override val schema: StructType)
   extends GenericRow(values) {
 
   /** No-arg constructor for serialization. */
   protected def this() = this(null, null)
 
-  override def fieldIndex(name: String): Int = schema.fieldIndex(name)
+  //通过scheme可以得到该数据是第几列,因此可以获取指定scheme列上的值
+  override def fieldIndex(name: String): Int = schema.fieldIndex(name) //找到name是第几个列
 }
 
 /**
  * A internal row implementation that uses an array of objects as the underlying storage.
  * Note that, while the array is not copied, and thus could technically be mutated after creation,
  * this is not allowed.
+ * 将一行信息组装成一行对象
  */
 class GenericInternalRow(private[sql] val values: Array[Any]) extends BaseGenericInternalRow {
   /** No-arg constructor for serialization. */
@@ -234,6 +240,7 @@ class GenericInternalRow(private[sql] val values: Array[Any]) extends BaseGeneri
 
 /**
  * This is used for serialization of Python DataFrame
+ * 带有scheme的行
  */
 class GenericInternalRowWithSchema(values: Array[Any], val schema: StructType)
   extends GenericInternalRow(values) {
@@ -244,6 +251,7 @@ class GenericInternalRowWithSchema(values: Array[Any], val schema: StructType)
   def fieldIndex(name: String): Int = schema.fieldIndex(name)
 }
 
+//列的值可变的行
 class GenericMutableRow(values: Array[Any]) extends MutableRow with BaseGenericInternalRow {
   /** No-arg constructor for serialization. */
   protected def this() = this(null)

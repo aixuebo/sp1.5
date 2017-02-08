@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.types
 
+//key和value的类型固定
 abstract class MapData extends Serializable {
 
   def numElements(): Int
@@ -27,6 +28,7 @@ abstract class MapData extends Serializable {
 
   def copy(): MapData
 
+  //循环每一个元素,每一个元素的key 和 value调用f函数处理
   def foreach(keyType: DataType, valueType: DataType, f: (Any, Any) => Unit): Unit = {
     val length = numElements()
     val keys = keyArray()

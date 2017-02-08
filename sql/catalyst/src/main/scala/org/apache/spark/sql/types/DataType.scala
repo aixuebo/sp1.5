@@ -47,6 +47,7 @@ abstract class DataType extends AbstractDataType {
 
   /**
    * The default size of a value of this data type, used internally for size estimation.
+   * 该元素占用字节,有时候是预估字节.比如Map等
    */
   def defaultSize: Int
 

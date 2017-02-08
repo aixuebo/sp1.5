@@ -351,7 +351,7 @@ private[spark] object SQLConf {
     defaultValue = Some(200),
     doc = "The number of SQL client sessions kept in the JDBC/ODBC web UI history.")
 
-  // This is used to set the default data source
+  // This is used to set the default data source 指明输入源是什么类型的,orc 还是json等,默认类型配置
   val DEFAULT_DATA_SOURCE_NAME = stringConf("spark.sql.sources.default",
     defaultValue = Some("org.apache.spark.sql.parquet"),
     doc = "The default data source to use in input/output.")

@@ -24,6 +24,7 @@ import org.apache.spark.annotation.DeveloperApi;
 /**
  * ::DeveloperApi::
  * A user-defined type which can be automatically recognized by a SQLContext and registered.
+ * 用于用户自定义类型,可能自动识别
  * <p>
  * WARNING: This annotation will only work if both Java and Scala reflection return the same class
  *          names (after erasure) for the UDT.  This will NOT be the case when, e.g., the UDT class
@@ -40,6 +41,7 @@ public @interface SQLUserDefinedType {
   /**
    * Returns an instance of the UserDefinedType which can serialize and deserialize the user
    * class to and from Catalyst built-in types.
+   * 自定义的类必须是该类的子类
    */
   Class<? extends UserDefinedType<?> > udt();
 }

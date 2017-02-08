@@ -51,7 +51,7 @@ class DefaultSource extends HadoopFsRelationProvider with DataSourceRegister {
       dataSchema: Option[StructType],
       partitionColumns: Option[StructType],
       parameters: Map[String, String]): HadoopFsRelation = {
-    val samplingRatio = parameters.get("samplingRatio").map(_.toDouble).getOrElse(1.0)
+    val samplingRatio = parameters.get("samplingRatio").map(_.toDouble).getOrElse(1.0) //默认是1.0
 
     new JSONRelation(None, samplingRatio, dataSchema, None, partitionColumns, paths)(sqlContext)
   }

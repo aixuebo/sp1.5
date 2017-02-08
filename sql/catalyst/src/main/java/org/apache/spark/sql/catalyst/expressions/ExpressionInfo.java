@@ -19,12 +19,13 @@ package org.apache.spark.sql.catalyst.expressions;
 
 /**
  * Expression information, will be used to describe a expression.
+ * 用于描述一个表达式的信息
  */
 public class ExpressionInfo {
-    private String className;
-    private String usage;
-    private String name;
-    private String extended;
+    private String className;//Expression的类全路径
+    private String usage;//Expression的Annotation--->ExpressionDescription.usage
+    private String name;//别名
+    private String extended;//Expression的Annotation--->ExpressionDescription.extended
 
     public String getClassName() {
         return className;

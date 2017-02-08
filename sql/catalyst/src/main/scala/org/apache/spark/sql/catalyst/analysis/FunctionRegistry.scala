@@ -27,35 +27,48 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.StringKeyHashMap
 
 
-/** A catalog for looking up user defined functions, used by an [[Analyzer]]. */
+/** A catalog for looking up user defined functions, used by an [[Analyzer]].
+  * 该类用于管理所有的函数信息
+  **/
 trait FunctionRegistry {
 
+  //添加一个函数
   final def registerFunction(name: String, builder: FunctionBuilder): Unit = {
     registerFunction(name, new ExpressionInfo(builder.getClass.getCanonicalName, name), builder)
   }
 
+  //添加一个函数
   def registerFunction(name: String, info: ExpressionInfo, builder: FunctionBuilder): Unit
 
+  //name是函数名,Seq[Expression]是函数的构造函数需要的Expression参数集合
   @throws[AnalysisException]("If function does not exist")
   def lookupFunction(name: String, children: Seq[Expression]): Expression
 
-  /* List all of the registered function names. */
+  /* List all of the registered function names.
+  * 返回注册的所有函数name集合
+  **/
   def listFunction(): Seq[String]
 
-  /* Get the class of the registered function by specified name. */
+  /* Get the class of the registered function by specified name.
+  * 返回name函数对应的ExpressionInfo对象
+  **/
   def lookupFunction(name: String): Option[ExpressionInfo]
 }
 
 class SimpleFunctionRegistry extends FunctionRegistry {
 
+  //Map,key是name别名,value是元组(Expression表达式信息对象,表达式T的class实例)
   private val functionBuilders =
     StringKeyHashMap[(ExpressionInfo, FunctionBuilder)](caseSensitive = false)
 
+  //添加一个表达式
   override def registerFunction(name: String, info: ExpressionInfo, builder: FunctionBuilder)
   : Unit = {
     functionBuilders.put(name, (info, builder))
   }
 
+  //查获表达式对应的实例类
+  //name是函数名,Seq[Expression]是函数的构造函数需要的Expression参数集合
   override def lookupFunction(name: String, children: Seq[Expression]): Expression = {
     val func = functionBuilders.get(name).map(_._2).getOrElse {
       throw new AnalysisException(s"undefined function $name")
@@ -63,8 +76,10 @@ class SimpleFunctionRegistry extends FunctionRegistry {
     func(children)
   }
 
+  //返回注册的所有函数name集合
   override def listFunction(): Seq[String] = functionBuilders.iterator.map(_._1).toList.sorted
 
+  //返回name函数对应的ExpressionInfo对象
   override def lookupFunction(name: String): Option[ExpressionInfo] = {
     functionBuilders.get(name).map(_._1)
   }
@@ -96,8 +111,9 @@ object EmptyFunctionRegistry extends FunctionRegistry {
 
 object FunctionRegistry {
 
-  type FunctionBuilder = Seq[Expression] => Expression
+  type FunctionBuilder = Seq[Expression] => Expression //FunctionBuilder 是一个函数,参数是Expression对象,返回值是该表达式的class实例对象,即FunctionBuilder表示的是函数
 
+  // 给定参数表达式对象Expression 以及别名name, 返回一个Map,key是name别名,value是元组(Expression表达式信息对象,表达式T的class实例)
   val expressions: Map[String, (ExpressionInfo, FunctionBuilder)] = Map(
     // misc non-aggregate functions
     expression[Abs]("abs"),
@@ -259,37 +275,41 @@ object FunctionRegistry {
     fr
   }
 
-  /** See usage above. */
+  /** See usage above.
+    * 给定参数表达式对象Expression 以及别名name,
+    * 返回一个Map,key是name别名,value是元组(Expression表达式信息对象,表达式T的class实例)
+    **/
   def expression[T <: Expression](name: String)
       (implicit tag: ClassTag[T]): (String, (ExpressionInfo, FunctionBuilder)) = {
 
     // See if we can find a constructor that accepts Seq[Expression]
-    val varargCtor = Try(tag.runtimeClass.getDeclaredConstructor(classOf[Seq[_]])).toOption
-    val builder = (expressions: Seq[Expression]) => {
+    val varargCtor = Try(tag.runtimeClass.getDeclaredConstructor(classOf[Seq[_]])).toOption //找到接收 Seq[Expression]为参数的构造函数
+
+    val builder = (expressions: Seq[Expression]) => {//builder是一个函数,参数是Seq[Expression]  返回T对应的实例化对象
       if (varargCtor.isDefined) {
         // If there is an apply method that accepts Seq[Expression], use that one.
-        Try(varargCtor.get.newInstance(expressions).asInstanceOf[Expression]) match {
-          case Success(e) => e
+        Try(varargCtor.get.newInstance(expressions).asInstanceOf[Expression]) match {//使用expressions去实例化该构造函数
+          case Success(e) => e //实例化成功
           case Failure(e) => throw new AnalysisException(e.getMessage)
         }
-      } else {
+      } else {//说明T没有Seq[Expression]为参数的构造函数
         // Otherwise, find an ctor method that matches the number of arguments, and use that.
         val params = Seq.fill(expressions.size)(classOf[Expression])
-        val f = Try(tag.runtimeClass.getDeclaredConstructor(params : _*)) match {
+        val f = Try(tag.runtimeClass.getDeclaredConstructor(params : _*)) match {//比如Expression有三个,那么就找到构造函数中有三个Expression的构造函数
           case Success(e) =>
             e
           case Failure(e) =>
             throw new AnalysisException(s"Invalid number of arguments for function $name")
         }
-        Try(f.newInstance(expressions : _*).asInstanceOf[Expression]) match {
+        Try(f.newInstance(expressions : _*).asInstanceOf[Expression]) match {//找到Expression数组对应的构造函数
           case Success(e) => e
           case Failure(e) => throw new AnalysisException(e.getMessage)
         }
       }
     }
 
-    val clazz = tag.runtimeClass
-    val df = clazz.getAnnotation(classOf[ExpressionDescription])
+    val clazz = tag.runtimeClass //T对应的class
+    val df = clazz.getAnnotation(classOf[ExpressionDescription]) //获取Annotation--->ExpressionDescription
     if (df != null) {
       (name,
         (new ExpressionInfo(clazz.getCanonicalName, name, df.usage(), df.extended()),

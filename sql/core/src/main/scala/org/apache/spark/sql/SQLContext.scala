@@ -1284,6 +1284,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
   // Register a succesfully instantiatd context to the singleton. This should be at the end of
   // the class definition so that the singleton is updated only if there is no exception in the
   // construction of the instance.
+  //成功注册一个实例
   SQLContext.setLastInstantiatedContext(self)
 }
 
@@ -1293,10 +1294,12 @@ class SQLContext(@transient val sparkContext: SparkContext)
  */
 object SQLContext {
 
+  //SQLContext对象的锁
   private val INSTANTIATION_LOCK = new Object()
 
   /**
    * Reference to the last created SQLContext.
+   * 仅仅保留一个SQLContext对象
    */
   @transient private val lastInstantiatedContext = new AtomicReference[SQLContext]()
 

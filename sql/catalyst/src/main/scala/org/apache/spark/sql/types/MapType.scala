@@ -32,7 +32,7 @@ import org.json4s.JsonDSL._
  * @param valueContainsNull Indicates if map values have `null` values.
  */
 case class MapType(
-  keyType: DataType,
+  keyType: DataType,//固定好Key和Value的类型
   valueType: DataType,
   valueContainsNull: Boolean) extends DataType {
 
@@ -58,9 +58,9 @@ case class MapType(
    * 100 * (the default size of the key type + the default size of the value type).
    * (We assume that there are 100 elements).
    */
-  override def defaultSize: Int = 100 * (keyType.defaultSize + valueType.defaultSize)
+  override def defaultSize: Int = 100 * (keyType.defaultSize + valueType.defaultSize) //占用字节,先按照100个元素算
 
-  override def simpleString: String = s"map<${keyType.simpleString},${valueType.simpleString}>"
+  override def simpleString: String = s"map<${keyType.simpleString},${valueType.simpleString}>" //格式 map<key,value>
 
   override private[spark] def asNullable: MapType =
     MapType(keyType.asNullable, valueType.asNullable, valueContainsNull = true)

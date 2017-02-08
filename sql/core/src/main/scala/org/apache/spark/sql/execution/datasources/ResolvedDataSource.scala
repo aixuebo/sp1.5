@@ -38,7 +38,9 @@ case class ResolvedDataSource(provider: Class[_], relation: BaseRelation)
 
 object ResolvedDataSource extends Logging {
 
-  /** A map to maintain backward compatibility in case we move data sources around. */
+  /** A map to maintain backward compatibility in case we move data sources around.
+    * 文件格式与解析类映射
+    **/
   private val backwardCompatibilityMap = Map(
     "org.apache.spark.sql.jdbc" -> classOf[jdbc.DefaultSource].getCanonicalName,
     "org.apache.spark.sql.jdbc.DefaultSource" -> classOf[jdbc.DefaultSource].getCanonicalName,
@@ -48,7 +50,9 @@ object ResolvedDataSource extends Logging {
     "org.apache.spark.sql.parquet.DefaultSource" -> classOf[parquet.DefaultSource].getCanonicalName
   )
 
-  /** Given a provider name, look up the data source class definition. */
+  /** Given a provider name, look up the data source class definition.
+    * 找到对应的data source的解析类
+    **/
   def lookupDataSource(provider0: String): Class[_] = {
     val provider = backwardCompatibilityMap.getOrElse(provider0, provider0)
     val provider2 = s"$provider.DefaultSource"
@@ -57,7 +61,7 @@ object ResolvedDataSource extends Logging {
 
     serviceLoader.iterator().filter(_.shortName().equalsIgnoreCase(provider)).toList match {
       /** the provider format did not match any given registered aliases */
-      case Nil => Try(loader.loadClass(provider)).orElse(Try(loader.loadClass(provider2))) match {
+      case Nil => Try(loader.loadClass(provider)).orElse(Try(loader.loadClass(provider2))) match {//没有匹配的
         case Success(dataSource) => dataSource
         case Failure(error) =>
           if (provider.startsWith("org.apache.spark.sql.hive.orc")) {
@@ -68,10 +72,10 @@ object ResolvedDataSource extends Logging {
               s"Failed to load class for data source: $provider.", error)
           }
       }
-      /** there is exactly one registered alias */
+      /** there is exactly one registered alias 只有一个匹配的*/
       case head :: Nil => head.getClass
       /** There are multiple registered aliases for the input */
-      case sources => sys.error(s"Multiple sources found for $provider, " +
+      case sources => sys.error(s"Multiple sources found for $provider, " + //说明有多个匹配的,则打印错误信息
         s"(${sources.map(_.getClass.getName).mkString(", ")}), " +
         "please specify the fully qualified class name.")
     }
@@ -82,10 +86,12 @@ object ResolvedDataSource extends Logging {
       sqlContext: SQLContext,
       userSpecifiedSchema: Option[StructType],
       partitionColumns: Array[String],
-      provider: String,
-      options: Map[String, String]): ResolvedDataSource = {
-    val clazz: Class[_] = lookupDataSource(provider)
+      provider: String,//source
+      options: Map[String, String]) //额外配置中包含path路径属性
+    : ResolvedDataSource = {
+    val clazz: Class[_] = lookupDataSource(provider)//解析类
     def className: String = clazz.getCanonicalName
+
     val relation = userSpecifiedSchema match {
       case Some(schema: StructType) => clazz.newInstance() match {
         case dataSource: SchemaRelationProvider =>
@@ -120,7 +126,7 @@ object ResolvedDataSource extends Logging {
           throw new AnalysisException(s"$className is not a RelationProvider.")
       }
 
-      case None => clazz.newInstance() match {
+      case None => clazz.newInstance() match {//创建一个解析类
         case dataSource: RelationProvider =>
           dataSource.createRelation(sqlContext, new CaseInsensitiveMap(options))
         case dataSource: HadoopFsRelationProvider =>

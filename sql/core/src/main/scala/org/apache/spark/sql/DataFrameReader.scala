@@ -44,7 +44,7 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
 
   /**
    * Specifies the input data source format.
-   *
+   * 指明输入源是什么类型的,orc 还是json等
    * @since 1.4.0
    */
   def format(source: String): DataFrameReader = {
@@ -107,7 +107,7 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
   /**
    * Loads input in as a [[DataFrame]], for data sources that don't require a path (e.g. external
    * key-value stores).
-   *
+   * 加载数据,比如加载json数据
    * @since 1.4.0
    */
   def load(): DataFrame = {
@@ -292,10 +292,11 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
   // Builder pattern config options
   ///////////////////////////////////////////////////////////////////////////////////////
 
-  private var source: String = sqlContext.conf.defaultDataSourceName
+  private var source: String = sqlContext.conf.defaultDataSourceName //指明输入源是什么类型的,orc 还是json等
 
   private var userSpecifiedSchema: Option[StructType] = None
 
+  //额外的信息.比如加载json时候的json 路径path
   private var extraOptions = new scala.collection.mutable.HashMap[String, String]
 
 }

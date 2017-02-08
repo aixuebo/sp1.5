@@ -426,7 +426,7 @@ abstract class DStream[T: ClassTag] ( //T可以是元组(KEY,VALUE)   简单的�
    * 创建一个给定时间点的job任务,这个是内部方法,属于默认的实现,因此是空实现,没有什么意义,有意义的需要被子类去实现该generateJob方法,比如ForEachDStream
    */
   private[streaming] def generateJob(time: Time): Option[Job] = {
-    getOrCompute(time) match {
+    getOrCompute(time) match { //虽然什么都不做默认,但是getOrCompute方法会收集RDD,并且存储在内部中,所谓的什么都不做,只是说此时不对RDD进行任何处理而已
       case Some(rdd) => {//说明有RDD存在
         val jobFunc = () => {
           val emptyFunc = { (iterator: Iterator[T]) => {} }
@@ -837,6 +837,7 @@ slideDuration=10*batchInterval,
    * @param slideDuration  sliding interval of the window (i.e., the interval after which
    *                       the new DStream will generate RDDs); must be a multiple of this
    *                       DStream's batching interval
+   * 增量的方式,更有效率,对若干次RDD时间点的数据进行统一聚合
    */
   def reduceByWindow(
       reduceFunc: (T, T) => T,
@@ -844,7 +845,7 @@ slideDuration=10*batchInterval,
       windowDuration: Duration,
       slideDuration: Duration
     ): DStream[T] = ssc.withScope {
-      this.map(x => (1, x))
+      this.map(x => (1, x)) //将元数据转换成K,V结构的,key是什么无所谓,现在设置为1了,其实null也没什么,因为最终都是按照key进行聚合的,key相同即可,是什么无所谓
           .reduceByKeyAndWindow(reduceFunc, invReduceFunc, windowDuration, slideDuration, 1)
           .map(_._2)
   }
@@ -858,11 +859,14 @@ slideDuration=10*batchInterval,
    * @param slideDuration  sliding interval of the window (i.e., the interval after which
    *                       the new DStream will generate RDDs); must be a multiple of this
    *                       DStream's batching interval
+   * 增量的方式,更有效率,对若干次RDD时间点的数据进行统一聚合
+   * 计算一共若干次RDD时间点的数据总条数
    */
   def countByWindow(
       windowDuration: Duration,
       slideDuration: Duration): DStream[Long] = ssc.withScope {
-    this.map(_ => 1L).reduceByWindow(_ + _, _ - _, windowDuration, slideDuration)
+    this.map(_ => 1L) //先将原数据转换成1,无论是什么,都转换成1,因为现在就是要计数,所以初始化都是1
+      .reduceByWindow(_ + _, _ - _, windowDuration, slideDuration) //对1进行累加
   }
 
   /**
@@ -876,6 +880,8 @@ slideDuration=10*batchInterval,
    *                       the new DStream will generate RDDs); must be a multiple of this
    *                       DStream's batching interval
    * @param numPartitions  number of partitions of each RDD in the new DStream.
+   * 增量的方式,更有效率,对若干次RDD时间点的数据进行统一聚合
+   * 计算一共若干次RDD时间点上,每一个记录出现的次数
    */
   def countByValueAndWindow(
       windowDuration: Duration,
@@ -883,9 +889,10 @@ slideDuration=10*batchInterval,
       numPartitions: Int = ssc.sc.defaultParallelism)
       (implicit ord: Ordering[T] = null)
       : DStream[(T, Long)] = ssc.withScope {
-    this.map(x => (x, 1L)).reduceByKeyAndWindow(
-      (x: Long, y: Long) => x + y,
-      (x: Long, y: Long) => x - y,
+    this.map(x => (x, 1L))//因为计算次数,因此key肯定还是原来的数据,value变成1,默认都是1条,这样就可以计算次数了
+      .reduceByKeyAndWindow(
+      (x: Long, y: Long) => x + y,//次数相加
+      (x: Long, y: Long) => x - y,//次数相减
       windowDuration,
       slideDuration,
       numPartitions,

@@ -18,8 +18,13 @@
 package org.apache.spark.sql
 
 /**
- * Catalyst is a library for manipulating relational query plans.  All classes in catalyst are
+ * Catalyst is a library for manipulating relational query plans.
+ * Catalyst是一个类库,用于操作关系型查询计划
+ *
+ *
+ * All classes in catalyst are
  * considered an internal API to Spark SQL and are subject to change between minor releases.
+ * catalyst里面所有的类都认为是spark sql的内部使用API,并且版本发型时候可能会更改
  */
 package object catalyst {
   /**

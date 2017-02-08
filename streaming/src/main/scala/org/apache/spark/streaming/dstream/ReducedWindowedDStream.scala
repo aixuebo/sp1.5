@@ -32,12 +32,14 @@ import scala.reflect.ClassTag
 /**
  * 背景描述：在社交网络（例如微博），电子商务（例如京东），热搜词（例如百度）等人们核心关注的内容之一就是我所关注的内容中，大家正在最关注什么或者说当前的热点是什么，
  * 这在市级企业级应用中是非常有价值，例如我们关心过去30分钟大家正在热搜什么，并且每5分钟更新一次，这就使得热点内容是动态更新的，当然更有价值
+ *
+ * 该类是增量的方式进行window运算,因此效率更高,具体运算逻辑参见下面算法详解
  */
 private[streaming]
 class ReducedWindowedDStream[K: ClassTag, V: ClassTag](
     parent: DStream[(K, V)],//要处理的K,V元组RDD
-    reduceFunc: (V, V) => V,
-    invReduceFunc: (V, V) => V,
+    reduceFunc: (V, V) => V,//做加法操作
+    invReduceFunc: (V, V) => V,//做减法操作
     filterFunc: Option[((K, V)) => Boolean],//最终只是要true的结果
     _windowDuration: Duration,
     _slideDuration: Duration,
@@ -102,6 +104,30 @@ class ReducedWindowedDStream[K: ClassTag, V: ClassTag](
     logDebug("Current window = " + currentWindow)
     logDebug("Previous window = " + previousWindow)
 
+    /**
+     * 算法详解
+demo背景:
+假设正常周期是5s一次,因此每个5s就有一个RDD产生
+而窗口滑动周期是10s一次,每次看过去20s内数据汇总
+
+因此
+结论1:产生8个RDD的时间点
+5 10 15 20 25 30 35 40
+
+注意:当时间点40已经存在的时候,说明数据已经加载了40-45s之间的数据了,即40表示的是40-45s的数据
+
+结论2:40时间点产生的滑动窗口看到的数据是25 30 35 40 这四个点数据----运算规则就是 40-20+5
+  而前一个滑动窗口是30s时间点,看到的数据是15 20 25 30 这四个点数据 ----运算规则就是 30-20+5
+
+结论3:通过结论2我们可以看到,40时间点产生的数据其实就是30s产生的数据 - 15 - 20点产生数据 + 35 + 40点产生的数据,
+ 因此我们称这种方式是增量的方式,避免重新重复运算中间数据内容,15和20点称之为2个老RDD,35和40称之为2个新的RDD
+ 因此接下来只要知道老数据和新数据内容即可
+
+结论4:推算老数据和新数据
+老数据算法:30时间点[15 20 25 30]的beginTime 即15,40时间点的[25 30 35 40]beginTime-5,即25-5=20,因此老的数据就是15,20
+新数据算法:30时间点[15 20 25 30]的endTime 即30+5,40时间点的[25 30 35 40]endTime,即40,因此老的数据就是35,40
+     *
+     */
     //  _____________________________
     // |  previous window   _________|___________________
     // |___________________|       current window        |  --------------> Time
