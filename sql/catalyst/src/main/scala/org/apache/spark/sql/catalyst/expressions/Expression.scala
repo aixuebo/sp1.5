@@ -36,16 +36,16 @@ import org.apache.spark.sql.types._
  *
  * There are a few important traits:
  *
- * - [[Nondeterministic]]: an expression that is not deterministic.
- * - [[Unevaluable]]: an expression that is not supposed to be evaluated.
+ * - [[Nondeterministic]]: an expression that is not deterministic.表达式的不确定性,如果一个表达式总是返回相同的结果,则说明是确定的
+ * - [[Unevaluable]]: an expression that is not supposed to be evaluated. 不能求值的表达式,比如 *
  * - [[CodegenFallback]]: an expression that does not have code gen implemented and falls back to
  *                        interpreted mode.
  *
- * - [[LeafExpression]]: an expression that has no child.
- * - [[UnaryExpression]]: an expression that has one child.
- * - [[BinaryExpression]]: an expression that has two children.
+ * - [[LeafExpression]]: an expression that has no child. 叶子表达式,表达式没有子表达式
+ * - [[UnaryExpression]]: an expression that has one child. 一元表达式,即一个输入 一个输出
+ * - [[BinaryExpression]]: an expression that has two children. 二元表达式,即两个输入 一个输出
  * - [[BinaryOperator]]: a special case of [[BinaryExpression]] that requires two children to have
- *                       the same output data type.
+ *                       the same output data type.一种特殊的二元表达式,即两个输入 一个输出,要求两个输入有相同的类型
  *
  */
 abstract class Expression extends TreeNode[Expression] {
@@ -53,6 +53,7 @@ abstract class Expression extends TreeNode[Expression] {
   /**
    * Returns true when an expression is a candidate for static evaluation before the query is
    * executed.
+   * 在执行查询之前，如果表达式是静态求值的候选项，则返回true
    *
    * The following conditions are used to determine suitability for constant folding:
    *  - A [[Coalesce]] is foldable if all of its children are foldable
@@ -66,7 +67,7 @@ abstract class Expression extends TreeNode[Expression] {
   /**
    * Returns true when the current expression always return the same result for fixed inputs from
    * children.
-   *
+   * 如果一个表达式总是返回相同的结果,则说明是确定的
    * Note that this means that an expression should be considered as non-deterministic if:
    * - if it relies on some mutable internal state, or
    * - if it relies on some implicit input that is not part of the children expression list.
@@ -181,6 +182,7 @@ abstract class Expression extends TreeNode[Expression] {
 /**
  * An expression that cannot be evaluated. Some expressions don't live past analysis or optimization
  * time (e.g. Star). This trait is used by those expressions.
+ * 不能求值的表达式,比如 *
  */
 trait Unevaluable extends Expression {
 
@@ -194,41 +196,46 @@ trait Unevaluable extends Expression {
 
 /**
  * An expression that is nondeterministic.
+ * 表达式的不确定性
  */
 trait Nondeterministic extends Expression {
-  final override def deterministic: Boolean = false
+  final override def deterministic: Boolean = false //不确定,因此是false
   final override def foldable: Boolean = false
 
-  private[this] var initialized = false
+  private[this] var initialized = false //已经初始化完成
 
   final def setInitialValues(): Unit = {
     initInternal()
     initialized = true
   }
 
-  protected def initInternal(): Unit
+  protected def initInternal(): Unit //初始化该表达式
 
+  //将一行数据转换成一个新的对象
   final override def eval(input: InternalRow = null): Any = {
     require(initialized, "nondeterministic expression should be initialized before evaluate")
     evalInternal(input)
   }
 
+  //将一行数据转换成一个新的对象
   protected def evalInternal(input: InternalRow): Any
 }
 
 
 /**
  * A leaf expression, i.e. one without any child expressions.
+ * 叶子表达式
  */
 abstract class LeafExpression extends Expression {
 
-  def children: Seq[Expression] = Nil
+  def children: Seq[Expression] = Nil //表达式没有子表达式
 }
 
 
 /**
  * An expression with one input and one output. The output is by default evaluated to null
  * if the input is evaluated to null.
+ * 一元表达式,即一个输入 一个输出
  */
 abstract class UnaryExpression extends Expression {
 
@@ -307,6 +314,7 @@ abstract class UnaryExpression extends Expression {
 /**
  * An expression with two inputs and one output. The output is by default evaluated to null
  * if any input is evaluated to null.
+ * 二元表达式,即两个输入 一个输出
  */
 abstract class BinaryExpression extends Expression {
 
@@ -399,6 +407,7 @@ abstract class BinaryExpression extends Expression {
  * 1. The string representation is "x symbol y", rather than "funcName(x, y)".
  * 2. Two inputs are expected to the be same type. If the two inputs have different types,
  *    the analyzer will find the tightest common type and do the proper type casting.
+ * 一种特殊的二元表达式,即两个输入 一个输出,要求两个输入有相同的类型
  */
 abstract class BinaryOperator extends BinaryExpression with ExpectsInputTypes {
 

@@ -51,9 +51,12 @@ object RDDConversions {
 
   /**
    * Convert the objects inside Row into the types Catalyst expected.
+   * 将Row对象转换成InternalRow对象
    */
-  def rowToRowRdd(data: RDD[Row], outputTypes: Seq[DataType]): RDD[InternalRow] = {
-    data.mapPartitions { iterator =>
+  def rowToRowRdd(data: RDD[Row],//Row对象集合
+                  outputTypes: Seq[DataType])//Row对象的每一个属性对应的类型
+     : RDD[InternalRow] = {
+    data.mapPartitions { iterator => //每一个Row对象
       val numColumns = outputTypes.length
       val mutableRow = new GenericMutableRow(numColumns)
       val converters = outputTypes.map(CatalystTypeConverters.createToCatalystConverter)

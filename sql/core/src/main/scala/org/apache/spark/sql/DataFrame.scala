@@ -169,19 +169,24 @@ class DataFrame private[sql](
 
   /**
    * Compose the string representing rows for output
-   * @param _numRows Number of rows to show
-   * @param truncate Whether truncate long strings and align cells right
+   * @param _numRows Number of rows to show 展示行数
+   * @param truncate Whether truncate long strings and align cells right 是否截断太长的字符串数据
+   * 展示数据
    */
   private[sql] def showString(_numRows: Int, truncate: Boolean = true): String = {
-    val numRows = _numRows.max(0)
+    val numRows = _numRows.max(0) //展示行数
     val sb = new StringBuilder
-    val takeResult = take(numRows + 1)
-    val hasMoreData = takeResult.length > numRows
+
+    val takeResult = take(numRows + 1) //获取数据
+    val hasMoreData = takeResult.length > numRows //判断是否有比需求的条数更多的数据
+
     val data = takeResult.take(numRows)
-    val numCols = schema.fieldNames.length
+
+    val numCols = schema.fieldNames.length //字段集合
 
     // For array values, replace Seq and Array with square brackets
     // For cells that are beyond 20 characters, replace it with the first 17 and "..."
+    //所有数据组成集合,第一个set存储记录集合,第二个set存储同一行记录的属性集合,最终属性内容是String类型
     val rows: Seq[Seq[String]] = schema.fieldNames.toSeq +: data.map { row =>
       row.toSeq.map { cell =>
         val str = cell match {
@@ -195,7 +200,7 @@ class DataFrame private[sql](
     }
 
     // Initialise the width of each column to a minimum value of '3'
-    val colWidths = Array.fill(numCols)(3)
+    val colWidths = Array.fill(numCols)(3) //默认每一列占用3个字节位置,该数据存储每一列数据的最大长度
 
     // Compute the width of each column
     for (row <- rows) {
@@ -207,7 +212,7 @@ class DataFrame private[sql](
     // Create SeparateLine
     val sep: String = colWidths.map("-" * _).addString(sb, "+", "+", "+\n").toString()
 
-    // column names
+    // column names 数据title信息,因为head就是第一条数据
     rows.head.zipWithIndex.map { case (cell, i) =>
       if (truncate) {
         StringUtils.leftPad(cell, colWidths(i))
@@ -218,7 +223,7 @@ class DataFrame private[sql](
 
     sb.append(sep)
 
-    // data
+    // data 数据信息  因为tail就是除了head外的其他数据集合
     rows.tail.map {
       _.zipWithIndex.map { case (cell, i) =>
         if (truncate) {
@@ -240,6 +245,7 @@ class DataFrame private[sql](
     sb.toString()
   }
 
+  //打印每一个属性的name和类型即可
   override def toString: String = {
     try {
       schema.map(f => s"${f.name}: ${f.dataType.simpleString}").mkString("[", ", ", "]")

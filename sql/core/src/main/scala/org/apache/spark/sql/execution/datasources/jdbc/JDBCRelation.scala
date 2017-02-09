@@ -29,12 +29,13 @@ import org.apache.spark.sql.{DataFrame, Row, SQLContext, SaveMode}
 
 /**
  * Instructions on how to partition the table among workers.
+ * 该对象表示如何对JDBC的数据进行拆分成partition
  */
 private[sql] case class JDBCPartitioningInfo(
-    column: String,
-    lowerBound: Long,
+    column: String,//要拆分的列,根据该列进行拆分数据
+    lowerBound: Long,//最大值和最小值
     upperBound: Long,
-    numPartitions: Int)
+    numPartitions: Int)//拆分成多少个partition
 
 private[sql] object JDBCRelation {
   /**
@@ -44,13 +45,15 @@ private[sql] object JDBCRelation {
    * exactly once.  The parameters minValue and maxValue are advisory in that
    * incorrect values may cause the partitioning to be poor, but no data
    * will fail to be represented.
+   * 真正对列进行拆分,返回拆分后的partition集合
    */
   def columnPartition(partitioning: JDBCPartitioningInfo): Array[Partition] = {
     if (partitioning == null) return Array[Partition](JDBCPartition(null, 0))
 
     val numPartitions = partitioning.numPartitions
     val column = partitioning.column
-    if (numPartitions == 1) return Array[Partition](JDBCPartition(null, 0))
+    if (numPartitions == 1) return Array[Partition](JDBCPartition(null, 0)) //不需要where条件
+
     // Overflow and silliness can happen if you subtract then divide.
     // Here we get a little roundoff, but that's (hopefully) OK.
     val stride: Long = (partitioning.upperBound / numPartitions
@@ -62,6 +65,8 @@ private[sql] object JDBCRelation {
       val lowerBound = if (i != 0) s"$column >= $currentValue" else null
       currentValue += stride
       val upperBound = if (i != numPartitions - 1) s"$column < $currentValue" else null
+
+      //where条件
       val whereClause =
         if (upperBound == null) {
           lowerBound
@@ -80,7 +85,7 @@ private[sql] object JDBCRelation {
 private[sql] case class JDBCRelation(
     url: String,
     table: String,
-    parts: Array[Partition],
+    parts: Array[Partition],//分区信息
     properties: Properties = new Properties())(@transient val sqlContext: SQLContext)
   extends BaseRelation
   with PrunedFilteredScan
@@ -88,7 +93,7 @@ private[sql] case class JDBCRelation(
 
   override val needConversion: Boolean = false
 
-  override val schema: StructType = JDBCRDD.resolveTable(url, table, properties)
+  override val schema: StructType = JDBCRDD.resolveTable(url, table, properties) //返回一个表的数据结构
 
   override def buildScan(requiredColumns: Array[String], filters: Array[Filter]): RDD[Row] = {
     val driver: String = DriverRegistry.getDriverClassName(url)

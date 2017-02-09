@@ -23,7 +23,7 @@ package org.apache.spark.sql.sources
 
 /**
  * A filter predicate for data sources.
- *
+ * 该类用于过滤数据
  * @since 1.3.0
  */
 abstract class Filter
@@ -33,6 +33,7 @@ abstract class Filter
  * equal to `value`.
  *
  * @since 1.3.0
+ * 表示一个属性值等于value的
  */
 case class EqualTo(attribute: String, value: Any) extends Filter
 

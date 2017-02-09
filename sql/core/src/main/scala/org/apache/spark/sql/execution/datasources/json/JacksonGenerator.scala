@@ -26,17 +26,20 @@ import com.fasterxml.jackson.core._
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.types._
 
+/**
+ * 该类表示如何让一个row对象转换成json字符串
+ */
 private[sql] object JacksonGenerator {
   /** Transforms a single Row to JSON using Jackson
-    *
+    * 将一个Row转换成json,使用的是jackson开源包处理
     * @param rowSchema the schema object used for conversion
     * @param gen a JsonGenerator object
-    * @param row The row to convert
+    * @param row The row to convert 要转换的Row对象
     */
   def apply(rowSchema: StructType, gen: JsonGenerator)(row: Row): Unit = {
-    def valWriter: (DataType, Any) => Unit = {
+    def valWriter: (DataType, Any) => Unit = {//DataType就是StructType类型,即数据结构,Any就是Row对象
       case (_, null) | (NullType, _) => gen.writeNull()
-      case (StringType, v: String) => gen.writeString(v)
+      case (StringType, v: String) => gen.writeString(v) //说明是String类型的,因此直接写入v即可
       case (TimestampType, v: java.sql.Timestamp) => gen.writeString(v.toString)
       case (IntegerType, v: Int) => gen.writeNumber(v)
       case (ShortType, v: Short) => gen.writeNumber(v)
@@ -50,14 +53,14 @@ private[sql] object JacksonGenerator {
       case (DateType, v) => gen.writeString(v.toString)
       case (udt: UserDefinedType[_], v) => valWriter(udt.sqlType, udt.serialize(v))
 
-      case (ArrayType(ty, _), v: Seq[_]) =>
-        gen.writeStartArray()
-        v.foreach(valWriter(ty, _))
-        gen.writeEndArray()
+      case (ArrayType(ty, _), v: Seq[_]) => //说明是数组类型,因此 ArrayType(ty, _)表示ArrayType(elementType: DataType, containsNull: Boolean)    ,v表示数组的内容
+        gen.writeStartArray() //写入数组开始
+        v.foreach(valWriter(ty, _)) //即每一个V的元素都是ArrayType类型的,_表示V对应的值
+        gen.writeEndArray() //写入数组结束
 
-      case (MapType(kv, vv, _), v: Map[_, _]) =>
-        gen.writeStartObject()
-        v.foreach { p =>
+      case (MapType(kv, vv, _), v: Map[_, _]) => //是Map结构,因此value也是map对象
+        gen.writeStartObject() //开始写入Map对象
+        v.foreach { p => //循环每一个map对象的key-value
           gen.writeFieldName(p._1.toString)
           valWriter(vv, p._2)
         }
@@ -65,11 +68,11 @@ private[sql] object JacksonGenerator {
 
       case (StructType(ty), v: Row) =>
         gen.writeStartObject()
-        ty.zip(v.toSeq).foreach {
-          case (_, null) =>
-          case (field, v) =>
-            gen.writeFieldName(field.name)
-            valWriter(field.dataType, v)
+        ty.zip(v.toSeq).foreach { //tv表示每一个属性StructField对象,与v对应的属性值映射
+          case (_, null) => //表示value为null,则忽略
+          case (field, v) => //表示属性类型和对应的值
+            gen.writeFieldName(field.name) //写入属性
+            valWriter(field.dataType, v) //写入值
         }
         gen.writeEndObject()
     }
@@ -78,7 +81,7 @@ private[sql] object JacksonGenerator {
   }
 
   /** Transforms a single InternalRow to JSON using Jackson
-   *
+   * 将一个InternalRow转换成json,使用的是jackson开源包处理
    * TODO: make the code shared with the other apply method.
    *
    * @param rowSchema the schema object used for conversion

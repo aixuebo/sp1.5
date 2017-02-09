@@ -30,10 +30,15 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Cast, Literal}
 import org.apache.spark.sql.types._
 
+//该类用于分区使用
+/**
+Partition(
+        values = Row(2, "world", 6.28),
+         path = "hdfs://<host>:<port>/path/to/partition/a=2/b=world/c=6.28")))
+ */
+private[sql] case class Partition(values: InternalRow, path: String) //表示一个分区路径
 
-private[sql] case class Partition(values: InternalRow, path: String)
-
-private[sql] case class PartitionSpec(partitionColumns: StructType, partitions: Seq[Partition])
+private[sql] case class PartitionSpec(partitionColumns: StructType, partitions: Seq[Partition]) //分区的数据类型   以及 分区的集合
 
 private[sql] object PartitionSpec {
   val emptySpec = PartitionSpec(StructType(Seq.empty[StructField]), Seq.empty[Partition])
@@ -70,6 +75,7 @@ private[sql] object PartitioningUtils {
    *         values = Row(2, "world", 6.28),
    *         path = "hdfs://<host>:<port>/path/to/partition/a=2/b=world/c=6.28")))
    * }}}
+   * 发现默认的分区
    */
   private[sql] def parsePartitions(
       paths: Seq[Path],

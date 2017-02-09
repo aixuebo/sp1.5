@@ -373,7 +373,7 @@ private[spark] object SQLConf {
   val PARTITION_COLUMN_TYPE_INFERENCE =
     booleanConf("spark.sql.sources.partitionColumnTypeInference.enabled",
       defaultValue = Some(true),
-      doc = "When true, automatically infer the data types for partitioned columns.")
+      doc = "When true, automatically infer the data types for partitioned columns.") //默认true,字段推断数据类型是作为分区字段
 
   val PARTITION_MAX_FILES =
     intConf("spark.sql.sources.maxConcurrentWrites",
@@ -391,6 +391,7 @@ private[spark] object SQLConf {
   val OUTPUT_COMMITTER_CLASS =
     stringConf("spark.sql.sources.outputCommitterClass", isPublic = false)
 
+  //默认值32
   val PARALLEL_PARTITION_DISCOVERY_THRESHOLD = intConf(
     key = "spark.sql.sources.parallelPartitionDiscovery.threshold",
     defaultValue = Some(32),
@@ -514,7 +515,7 @@ private[sql] class SQLConf extends Serializable with CatalystConf {
     getConf(SQLConf.PARTITION_COLUMN_TYPE_INFERENCE)
 
   private[spark] def parallelPartitionDiscoveryThreshold: Int =
-    getConf(SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD)
+    getConf(SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD) //并行伐值,超过该伐值就要并行处理 ,默认是32
 
   // Do not use a value larger than 4000 as the default value of this property.
   // See the comments of SCHEMA_STRING_LENGTH_THRESHOLD above for more information.

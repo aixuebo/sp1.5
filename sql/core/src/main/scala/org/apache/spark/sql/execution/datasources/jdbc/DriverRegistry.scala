@@ -34,6 +34,7 @@ object DriverRegistry extends Logging {
 
   private val wrapperMap: mutable.Map[String, DriverWrapper] = mutable.Map.empty
 
+  //注册一个driver
   def register(className: String): Unit = {
     val cls = Utils.getContextOrSparkClassLoader.loadClass(className)
     if (cls.getClassLoader == null) {

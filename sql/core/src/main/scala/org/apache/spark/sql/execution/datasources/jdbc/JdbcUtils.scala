@@ -57,6 +57,7 @@ object JdbcUtils extends Logging {
 
   /**
    * Returns a PreparedStatement that inserts a row into table via conn.
+   * 组装成insert的预编译对象
    */
   def insertStatement(conn: Connection, table: String, rddSchema: StructType): PreparedStatement = {
     val sql = new StringBuilder(s"INSERT INTO $table VALUES (")
@@ -73,6 +74,7 @@ object JdbcUtils extends Logging {
    * Saves a partition of a DataFrame to the JDBC database.  This is done in
    * a single database transaction in order to avoid repeatedly inserting
    * data as much as possible.
+   * 是在一个数据库事物里面完成的,避免重复插入的可能
    *
    * It is still theoretically possible for rows in a DataFrame to be
    * inserted into the database more than once if a stage somehow fails after
@@ -82,20 +84,22 @@ object JdbcUtils extends Logging {
    * implementation changes elsewhere might easily render such a closure
    * non-Serializable.  Instead, we explicitly close over all variables that
    * are used.
+   * insert语句向数据库插入数据,注意是在一个事物里面完成的,因此插入的数据亦不过多
    */
   def savePartition(
       getConnection: () => Connection,
-      table: String,
-      iterator: Iterator[Row],
-      rddSchema: StructType,
-      nullTypes: Array[Int]): Iterator[Byte] = {
+      table: String,//表名
+      iterator: Iterator[Row],//要插入的数据内容
+      rddSchema: StructType,//要插入哪些字段
+      nullTypes: Array[Int]) //要插入null的时候,对应的数据库的类型
+     : Iterator[Byte] = {
     val conn = getConnection()
     var committed = false
     try {
       conn.setAutoCommit(false) // Everything in the same db transaction.
-      val stmt = insertStatement(conn, table, rddSchema)
+      val stmt = insertStatement(conn, table, rddSchema) //组装成insert的预编译对象
       try {
-        while (iterator.hasNext) {
+        while (iterator.hasNext) {//一行一行插入数据
           val row = iterator.next()
           val numFields = rddSchema.fields.length
           var i = 0
@@ -150,6 +154,7 @@ object JdbcUtils extends Logging {
 
   /**
    * Compute the schema string for this RDD.
+   * 为该RDD生成数据库的建表语句Schema
    */
   def schemaString(df: DataFrame, url: String): String = {
     val sb = new StringBuilder()
@@ -181,6 +186,7 @@ object JdbcUtils extends Logging {
 
   /**
    * Saves the RDD to the database in a single transaction.
+   * 将RDD的数据全部保存到数据库中
    */
   def saveTable(
       df: DataFrame,
@@ -188,6 +194,8 @@ object JdbcUtils extends Logging {
       table: String,
       properties: Properties = new Properties()) {
     val dialect = JdbcDialects.get(url)
+
+    //要插入null的时候,对应的数据库的类型
     val nullTypes: Array[Int] = df.schema.fields.map { field =>
       dialect.getJDBCType(field.dataType).map(_.jdbcNullType).getOrElse(
         field.dataType match {
@@ -211,6 +219,8 @@ object JdbcUtils extends Logging {
     val rddSchema = df.schema
     val driver: String = DriverRegistry.getDriverClassName(url)
     val getConnection: () => Connection = JDBCRDD.getConnector(driver, url, properties)
+
+    //insert语句向数据库插入数据,注意是在一个事物里面完成的,因此插入的数据亦不过多
     df.foreachPartition { iterator =>
       savePartition(getConnection, table, iterator, rddSchema, nullTypes)
     }

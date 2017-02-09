@@ -68,6 +68,7 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    * Adds an input option for the underlying data source.
    *
    * @since 1.4.0
+   * 设置额外属性
    */
   def option(key: String, value: String): DataFrameReader = {
     this.extraOptions += (key -> value)
@@ -99,6 +100,7 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    * a local or distributed file system).
    *
    * @since 1.4.0
+   * 加载数据
    */
   def load(path: String): DataFrame = {
     option("path", path).load()
@@ -125,6 +127,7 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    * url named table and connection properties.
    *
    * @since 1.4.0
+   * 通过jdbc查询数据库,不支持分区方式
    */
   def jdbc(url: String, table: String, properties: Properties): DataFrame = {
     jdbc(url, table, JDBCRelation.columnPartition(null), properties)
@@ -150,16 +153,17 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    *                             should be included.
    *
    * @since 1.4.0
+   * 通过jdbc查询数据库,支持分区方式
    */
   def jdbc(
       url: String,
       table: String,
-      columnName: String,
-      lowerBound: Long,
+      columnName: String,//分区字段
+      lowerBound: Long,//最大值和最小值进行分区
       upperBound: Long,
-      numPartitions: Int,
+      numPartitions: Int,//最终分区数量
       connectionProperties: Properties): DataFrame = {
-    val partitioning = JDBCPartitioningInfo(columnName, lowerBound, upperBound, numPartitions)
+    val partitioning = JDBCPartitioningInfo(columnName, lowerBound, upperBound, numPartitions) //得到分区配置
     val parts = JDBCRelation.columnPartition(partitioning)
     jdbc(url, table, parts, connectionProperties)
   }
@@ -195,7 +199,7 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
   private def jdbc(
       url: String,
       table: String,
-      parts: Array[Partition],
+      parts: Array[Partition],//真正的partition集合
       connectionProperties: Properties): DataFrame = {
     val props = new Properties()
     extraOptions.foreach { case (key, value) =>
@@ -294,7 +298,7 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
 
   private var source: String = sqlContext.conf.defaultDataSourceName //指明输入源是什么类型的,orc 还是json等
 
-  private var userSpecifiedSchema: Option[StructType] = None
+  private var userSpecifiedSchema: Option[StructType] = None //用户定义的schema
 
   //额外的信息.比如加载json时候的json 路径path
   private var extraOptions = new scala.collection.mutable.HashMap[String, String]

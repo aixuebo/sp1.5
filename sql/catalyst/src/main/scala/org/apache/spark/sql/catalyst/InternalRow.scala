@@ -37,13 +37,16 @@ abstract class InternalRow extends SpecializedGetters with Serializable {
    */
   def copy(): InternalRow
 
-  /** Returns true if there are any NULL values in this row. */
+  /** Returns true if there are any NULL values in this row.
+    * true表示只要有任何一个field的值是null,则返回true
+    **/
   def anyNull: Boolean
 
   /* ---------------------- utility methods for Scala ---------------------- */
 
   /**
    * Return a Scala Seq representing the row. Elements are placed in the same order in the Seq.
+   * 返回每一个属性对应的属性值集合
    */
   def toSeq(fieldTypes: Seq[DataType]): Seq[Any] = {
     val len = numFields
@@ -58,6 +61,7 @@ abstract class InternalRow extends SpecializedGetters with Serializable {
     values
   }
 
+  //每一个属性对应的DataType集合
   def toSeq(schema: StructType): Seq[Any] = toSeq(schema.map(_.dataType))
 }
 

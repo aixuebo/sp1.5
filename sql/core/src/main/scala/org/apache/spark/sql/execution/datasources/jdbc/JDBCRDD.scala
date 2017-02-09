@@ -34,9 +34,10 @@ import org.apache.spark.{Logging, Partition, SparkContext, TaskContext}
 
 /**
  * Data corresponding to one partition of a JDBCRDD.
+ * 一个partiton拆分后对应一个独特的where条件,这部分where条件仅仅是用于分区的where条件,不是用户设置的where条件
  */
-private[sql] case class JDBCPartition(whereClause: String, idx: Int) extends Partition {
-  override def index: Int = idx
+private[sql] case class JDBCPartition(whereClause: String, idx: Int) extends Partition { //表示拆分的一个partition
+  override def index: Int = idx //表示是第几个partition
 }
 
 
@@ -48,12 +49,13 @@ private[sql] object JDBCRDD extends Logging {
    *
    * @param sqlType - A field of java.sql.Types
    * @return The Catalyst type corresponding to sqlType.
+   * 映射sql类型与spark的java类型
    */
   private def getCatalystType(
-      sqlType: Int,
+      sqlType: Int,//sql类型
       precision: Int,
       scale: Int,
-      signed: Boolean): DataType = {
+      signed: Boolean): DataType = {//返回spark的java类型
     val answer = sqlType match {
       // scalastyle:off
       case java.sql.Types.ARRAY         => null
@@ -107,7 +109,7 @@ private[sql] object JDBCRDD extends Logging {
   /**
    * Takes a (schema, table) specification and returns the table's Catalyst
    * schema.
-   *
+   * 返回一个表的数据结构
    * @param url - The JDBC url to fetch information from.
    * @param table - The table name of the desired table.  This may also be a
    *   SQL query wrapped in parentheses.
@@ -123,8 +125,8 @@ private[sql] object JDBCRDD extends Logging {
       val rs = conn.prepareStatement(s"SELECT * FROM $table WHERE 1=0").executeQuery()
       try {
         val rsmd = rs.getMetaData
-        val ncols = rsmd.getColumnCount
-        val fields = new Array[StructField](ncols)
+        val ncols = rsmd.getColumnCount //有多少列
+        val fields = new Array[StructField](ncols) //有多少列就有多少属性
         var i = 0
         while (i < ncols) {
           val columnName = rsmd.getColumnLabel(i + 1)
@@ -159,10 +161,11 @@ private[sql] object JDBCRDD extends Logging {
    * @param columns - The list of desired columns
    *
    * @return A Catalyst schema corresponding to columns in the given order.
+   * columns中指定的StructField对应的数据结构
    */
   private def pruneSchema(schema: StructType, columns: Array[String]): StructType = {
-    val fieldMap = Map(schema.fields map { x => x.metadata.getString("name") -> x }: _*)
-    new StructType(columns map { name => fieldMap(name) })
+    val fieldMap = Map(schema.fields map { x => x.metadata.getString("name") -> x }: _*) //映射成fieldNmae到StructField的映射
+    new StructType(columns map { name => fieldMap(name) }) //返回columns中指定的StructField对应的数据结构
   }
 
   /**
@@ -176,6 +179,7 @@ private[sql] object JDBCRDD extends Logging {
    * @param url - The JDBC url to connect to.
    *
    * @return A function that loads the driver and connects to the url.
+   * 创建连接
    */
   def getConnector(driver: String, url: String, properties: Properties): () => Connection = {
     () => {
@@ -206,20 +210,21 @@ private[sql] object JDBCRDD extends Logging {
    */
   def scanTable(
       sc: SparkContext,
-      schema: StructType,
+      schema: StructType,//表的全部数据结构
       driver: String,
       url: String,
       properties: Properties,
-      fqTable: String,
-      requiredColumns: Array[String],
-      filters: Array[Filter],
-      parts: Array[Partition]): RDD[InternalRow] = {
+      fqTable: String,//表名字
+      requiredColumns: Array[String],//要求的列
+      filters: Array[Filter],//过滤条件
+      parts: Array[Partition]) //数据源
+     : RDD[InternalRow] = {
     val dialect = JdbcDialects.get(url)
     val quotedColumns = requiredColumns.map(colName => dialect.quoteIdentifier(colName))
     new JDBCRDD(
       sc,
       getConnector(driver, url, properties),
-      pruneSchema(schema, requiredColumns),
+      pruneSchema(schema, requiredColumns),//只要要求的列对应的数据结构
       fqTable,
       quotedColumns,
       filters,
@@ -236,11 +241,11 @@ private[sql] object JDBCRDD extends Logging {
 private[sql] class JDBCRDD(
     sc: SparkContext,
     getConnection: () => Connection,
-    schema: StructType,
-    fqTable: String,
-    columns: Array[String],
-    filters: Array[Filter],
-    partitions: Array[Partition],
+    schema: StructType,//最终要获取的数据结构
+    fqTable: String,//表名字
+    columns: Array[String],//要求的列
+    filters: Array[Filter],//过滤条件
+    partitions: Array[Partition],//数据源
     properties: Properties)
   extends RDD[InternalRow](sc, Nil) {
 
@@ -251,6 +256,7 @@ private[sql] class JDBCRDD(
 
   /**
    * `columns`, but as a String suitable for injection into a SQL query.
+   * 设置select中需要的字段
    */
   private val columnList: String = {
     val sb = new StringBuilder()
@@ -284,18 +290,20 @@ private[sql] class JDBCRDD(
 
   /**
    * `filters`, but as a WHERE clause suitable for injection into a SQL query.
+   * 创建where条件
    */
   private val filterWhereClause: String = {
-    val filterStrings = filters map compileFilter filter (_ != null)
+    val filterStrings = filters map compileFilter filter (_ != null) //设置where条件集合
     if (filterStrings.size > 0) {
       val sb = new StringBuilder("WHERE ")
-      filterStrings.foreach(x => sb.append(x).append(" AND "))
+      filterStrings.foreach(x => sb.append(x).append(" AND ")) //添加where条件
       sb.substring(0, sb.length - 5)
     } else ""
   }
 
   /**
    * A WHERE clause representing both `filters`, if any, and the current partition.
+   * 添加where条件
    */
   private def getWhereClause(part: JDBCPartition): String = {
     if (part.whereClause != null && filterWhereClause.length > 0) {
@@ -327,6 +335,7 @@ private[sql] class JDBCRDD(
 
   /**
    * Maps a StructType to a type tag list.
+   * 类型转换
    */
   def getConversions(schema: StructType): Array[JDBCConversion] = {
     schema.fields.map(sf => sf.dataType match {
@@ -363,19 +372,19 @@ private[sql] class JDBCRDD(
     // fully-qualified table name in the SELECT statement.  I don't know how to
     // talk about a table in a completely portable way.
 
-    val myWhereClause = getWhereClause(part)
+    val myWhereClause = getWhereClause(part) //where条件语法
 
-    val sqlText = s"SELECT $columnList FROM $fqTable $myWhereClause"
+    val sqlText = s"SELECT $columnList FROM $fqTable $myWhereClause" //创建sql
     val stmt = conn.prepareStatement(sqlText,
         ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY)
     val fetchSize = properties.getProperty("fetchSize", "0").toInt
     stmt.setFetchSize(fetchSize)
-    val rs = stmt.executeQuery()
+    val rs = stmt.executeQuery() //执行sql
 
     val conversions = getConversions(schema)
-    val mutableRow = new SpecificMutableRow(schema.fields.map(x => x.dataType))
+    val mutableRow = new SpecificMutableRow(schema.fields.map(x => x.dataType))  //可变的一行对象
 
-    def getNext(): InternalRow = {
+    def getNext(): InternalRow = { //获取下一行数据
       if (rs.next()) {
         var i = 0
         while (i < conversions.length) {

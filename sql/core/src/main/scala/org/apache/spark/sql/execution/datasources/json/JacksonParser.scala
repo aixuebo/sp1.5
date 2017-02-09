@@ -31,10 +31,24 @@ import org.apache.spark.sql.execution.datasources.json.JacksonUtils.nextUntil
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
+/**
+NOT_AVAILABLE:说明json不可用,json解析都有问题
+START_OBJECT和END_OBJECT:说明此时json对应的是一个对象,即该name对应的又是一个json对象,映射到java中是StructType,里面每一个元素是StructField
+START_ARRAY和END_ARRAY:说明此时json解析对应的是一个数组类型,映射到java中是ArrayType类型.里面包含数字的类型,相当于List
+FIELD_NAME:说明此时json解析对应的是一个name,即此时需要进一步解析接下来的对象
+VALUE_TRUE和VALUE_FALSE:说明此时json对应的value值是boolean类型的
+VALUE_NULL:说明此时json对应的value值是NULL
+VALUE_STRING:说明此时json对应的value值是String类型
+VALUE_NUMBER_INT:说明此时json对应的value值是int或者long整数类型
+VALUE_NUMBER_FLOAT:说明此时json对应的value值是float或者double整数类型
+VALUE_EMBEDDED_OBJECT:暂时不太清楚含义
+
+该类表示去解析json字符串,转换成一个行对象
+ */
 private[sql] object JacksonParser {
   def apply(
       json: RDD[String],
-      schema: StructType,
+      schema: StructType,//每一行对象对应的scheme数据格式
       columnNameOfCorruptRecords: String): RDD[InternalRow] = {
     parseJson(json, schema, columnNameOfCorruptRecords)
   }
@@ -55,23 +69,23 @@ private[sql] object JacksonParser {
         parser.nextToken()
         convertField(factory, parser, schema)
 
-      case (VALUE_STRING, StringType) =>
+      case (VALUE_STRING, StringType) => //将字符串的json值转换成StringType对象
         UTF8String.fromString(parser.getText)
 
       case (VALUE_STRING, _) if parser.getTextLength < 1 =>
         // guard the non string type
         null
 
-      case (VALUE_STRING, DateType) =>
+      case (VALUE_STRING, DateType) => //将字符串的json值转换成DateType对象
         DateTimeUtils.millisToDays(DateTimeUtils.stringToTime(parser.getText).getTime)
 
-      case (VALUE_STRING, TimestampType) =>
+      case (VALUE_STRING, TimestampType) => //将字符串的json值转换成TimestampType对象
         DateTimeUtils.stringToTime(parser.getText).getTime * 1000L
 
-      case (VALUE_NUMBER_INT, TimestampType) =>
+      case (VALUE_NUMBER_INT, TimestampType) => //将Int的json值转换成TimestampType对象
         parser.getLongValue * 1000L
 
-      case (_, StringType) =>
+      case (_, StringType) => //将任意类型的的json值转换成StringType对象
         val writer = new ByteArrayOutputStream()
         val generator = factory.createGenerator(writer, JsonEncoding.UTF8)
         generator.copyCurrentStructure(parser)
@@ -105,15 +119,15 @@ private[sql] object JacksonParser {
       case (VALUE_FALSE, BooleanType) =>
         false
 
-      case (START_OBJECT, st: StructType) =>
+      case (START_OBJECT, st: StructType) => //将json的一个字符串转换成StructType对象
         convertObject(factory, parser, st)
 
-      case (START_ARRAY, st: StructType) => //解析数组
+      case (START_ARRAY, st: StructType) => //将json的一个字符串转换成数组
         // SPARK-3308: support reading top level JSON arrays and take every element
         // in such an array as a row
         convertArray(factory, parser, st)
 
-      case (START_ARRAY, ArrayType(st, _)) =>
+      case (START_ARRAY, ArrayType(st, _)) => ////将json的一个字符串转换成数组
         convertArray(factory, parser, st)
 
       case (START_OBJECT, ArrayType(st, _)) => //解析对象
@@ -124,7 +138,7 @@ private[sql] object JacksonParser {
       case (START_OBJECT, MapType(StringType, kt, _)) =>
         convertMap(factory, parser, kt)
 
-      case (_, udt: UserDefinedType[_]) =>
+      case (_, udt: UserDefinedType[_]) => //自定义函数解析失败
         convertField(factory, parser, udt.sqlType)
     }
   }
@@ -133,16 +147,18 @@ private[sql] object JacksonParser {
    * Parse an object from the token stream into a new Row representing the schema.
    *
    * Fields in the json that are not defined in the requested schema will be dropped.
+   * 将json的在一个字符串转换成StructType对象
    */
   private def convertObject(
       factory: JsonFactory,
       parser: JsonParser,
-      schema: StructType): InternalRow = {
+      schema: StructType) //表示最终的json字符串需要的结果
+     : InternalRow = {
     val row = new GenericMutableRow(schema.length)
-    while (nextUntil(parser, JsonToken.END_OBJECT)) {
-      schema.getFieldIndex(parser.getCurrentName) match {
+    while (nextUntil(parser, JsonToken.END_OBJECT)) {//直到对象结尾为止
+      schema.getFieldIndex(parser.getCurrentName) match {//找到name对应的field indx
         case Some(index) =>
-          row.update(index, convertField(factory, parser, schema(index).dataType))
+          row.update(index, convertField(factory, parser, schema(index).dataType)) //更新该值
 
         case None =>
           parser.skipChildren()
@@ -168,6 +184,7 @@ private[sql] object JacksonParser {
     ArrayBasedMapData(keys.toArray, values.toArray)
   }
 
+  //将json的一个字符串转换成数组
   private def convertArray(
       factory: JsonFactory,
       parser: JsonParser,
@@ -180,10 +197,11 @@ private[sql] object JacksonParser {
     new GenericArrayData(values.toArray)
   }
 
+  //去解析json集合
   private def parseJson(
       json: RDD[String],
-      schema: StructType,
-      columnNameOfCorruptRecords: String): RDD[InternalRow] = {
+      schema: StructType,//json集合对应的数据结构
+      columnNameOfCorruptRecords: String): RDD[InternalRow] = {//返回值是InternalRow组成的对象
 
     //参数record表示一行的原始内容
     def failedRecord(record: String): Seq[InternalRow] = {
@@ -206,7 +224,7 @@ private[sql] object JacksonParser {
           val parser = factory.createParser(record) //解析该json内容
           parser.nextToken()
 
-          convertField(factory, parser, schema) match {
+          convertField(factory, parser, schema) match {//解析一行数据,返回InternalRow对象
             case null => failedRecord(record)
             case row: InternalRow => row :: Nil //转换成一行数据
             case array: ArrayData =>

@@ -221,7 +221,9 @@ abstract class BaseRelation {
   def sizeInBytes: Long = sqlContext.conf.defaultSizeInBytes
 
   /**
-   * Whether does it need to convert the objects in Row to internal representation, for example:
+   * Whether does it need to convert the objects in Row to internal representation,
+   * 是否需要将Row对象转换成representation对象
+   * for example:
    *  java.lang.String -> UTF8String
    *  java.lang.Decimal -> Decimal
    *
@@ -231,6 +233,7 @@ abstract class BaseRelation {
    * of Spark SQL should leave this as true.
    *
    * @since 1.4.0
+   * true表示需要将将Row对象转换成representation对象
    */
   def needConversion: Boolean = true
 }
@@ -250,7 +253,7 @@ trait TableScan {
  * ::DeveloperApi::
  * A BaseRelation that can eliminate unneeded columns before producing an RDD
  * containing all of its tuples as Row objects.
- *
+ * 修剪扫描
  * @since 1.3.0
  */
 @DeveloperApi
@@ -350,6 +353,7 @@ abstract class OutputWriterFactory extends Serializable {
  * executor side.  This instance is used to persist rows to this single output file.
  *
  * @since 1.4.0
+ * 定义数据如何被写成
  */
 @Experimental
 abstract class OutputWriter {
@@ -358,6 +362,7 @@ abstract class OutputWriter {
    * tables, dynamic partition columns are not included in rows to be written.
    *
    * @since 1.4.0
+   * 如何将一行写入到文件中
    */
   def write(row: Row): Unit
 
@@ -369,7 +374,7 @@ abstract class OutputWriter {
    */
   def close(): Unit
 
-  private var converter: InternalRow => Row = _
+  private var converter: InternalRow => Row = _ //将InternalRow转换成Row对象
 
   protected[sql] def initConverter(dataSchema: StructType) = {
     converter =
@@ -385,6 +390,7 @@ abstract class OutputWriter {
  * ::Experimental::
  * A [[BaseRelation]] that provides much of the common code required for formats that store their
  * data to an HDFS compatible filesystem.
+ *  一个基类,要求格式化存储他们的数据在HDFS系统上
  *
  * For the read path, similar to [[PrunedFilteredScan]], it can eliminate unneeded columns and
  * filter using selected predicates before producing an RDD containing all matching tuples as
@@ -405,7 +411,7 @@ abstract class OutputWriter {
  * @since 1.4.0
  */
 @Experimental
-abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[PartitionSpec])
+abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[PartitionSpec]) //可能的分区字段
   extends BaseRelation with FileRelation with Logging {
 
   override def toString: String = getClass.getSimpleName + paths.mkString("[", ",", "]")
@@ -418,39 +424,42 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
 
   private var _partitionSpec: PartitionSpec = _
 
+  //文件的缓存
   private class FileStatusCache {
-    var leafFiles = mutable.Map.empty[Path, FileStatus]
+    var leafFiles = mutable.Map.empty[Path, FileStatus] //叶子文件映射关系
 
-    var leafDirToChildrenFiles = mutable.Map.empty[Path, Array[FileStatus]]
+    var leafDirToChildrenFiles = mutable.Map.empty[Path, Array[FileStatus]] //每一个父path,对应哪些子文件
 
+    //对文件内容进行初始化处理,返回文件状态
     private def listLeafFiles(paths: Array[String]): Set[FileStatus] = {
-      if (paths.length >= sqlContext.conf.parallelPartitionDiscoveryThreshold) {
+      if (paths.length >= sqlContext.conf.parallelPartitionDiscoveryThreshold) { //并行伐值,超过该伐值就要并行处理,默认是32
         HadoopFsRelation.listLeafFilesInParallel(paths, hadoopConf, sqlContext.sparkContext)
       } else {
-        val statuses = paths.flatMap { path =>
+        val statuses = paths.flatMap { path => //找到每一个path的所有子文件集合
           val hdfsPath = new Path(path)
           val fs = hdfsPath.getFileSystem(hadoopConf)
           val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
 
           logInfo(s"Listing $qualified on driver")
           Try(fs.listStatus(qualified)).getOrElse(Array.empty)
-        }.filterNot { status =>
+        }.filterNot { status => //继续过滤.开头或者_temporary文件,这两类文件是不要的
           val name = status.getPath.getName
           name.toLowerCase == "_temporary" || name.startsWith(".")
         }
 
-        val (dirs, files) = statuses.partition(_.isDir)
+        val (dirs, files) = statuses.partition(_.isDir) //结果根据是否是目录拆分成两个集合
 
-        if (dirs.isEmpty) {
+        if (dirs.isEmpty) {//说明都是文件,因此直接返回
           files.toSet
-        } else {
+        } else {//说明有目录存在,则继续递归
           files.toSet ++ listLeafFiles(dirs.map(_.getPath.toString))
         }
       }
     }
 
+    //重新初始化文件关联
     def refresh(): Unit = {
-      val files = listLeafFiles(paths)
+      val files = listLeafFiles(paths) //对文件路径进行处理
 
       leafFiles.clear()
       leafDirToChildrenFiles.clear()
@@ -460,16 +469,19 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
     }
   }
 
+  //缓存的文件内容
   private lazy val fileStatusCache = {
     val cache = new FileStatusCache
     cache.refresh()
     cache
   }
 
+  //返回叶子文件集合
   protected def cachedLeafStatuses(): Set[FileStatus] = {
     fileStatusCache.leafFiles.values.toSet
   }
 
+  //分区字段
   final private[sql] def partitionSpec: PartitionSpec = {
     if (_partitionSpec == null) {
       _partitionSpec = maybePartitionSpec
@@ -511,14 +523,14 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
   /**
    * Base paths of this relation.  For partitioned relations, it should be either root directories
    * of all partition directories.
-   *
+   * 文件路径集合
    * @since 1.4.0
    */
   def paths: Array[String]
 
-  override def inputFiles: Array[String] = cachedLeafStatuses().map(_.getPath.toString).toArray
+  override def inputFiles: Array[String] = cachedLeafStatuses().map(_.getPath.toString).toArray //输入文件的path集合
 
-  override def sizeInBytes: Long = cachedLeafStatuses().map(_.getLen).sum
+  override def sizeInBytes: Long = cachedLeafStatuses().map(_.getLen).sum //输入文件的总字节大小
 
   /**
    * Partition columns.  Can be either defined by [[userDefinedPartitionColumns]] or automatically
@@ -543,10 +555,11 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
     }
   }
 
+  //发现默认的分区
   private def discoverPartitions(): PartitionSpec = {
-    val typeInference = sqlContext.conf.partitionColumnTypeInferenceEnabled()
+    val typeInference = sqlContext.conf.partitionColumnTypeInferenceEnabled() //是否启动
     // We use leaf dirs containing data files to discover the schema.
-    val leafDirs = fileStatusCache.leafDirToChildrenFiles.keys.toSeq
+    val leafDirs = fileStatusCache.leafDirToChildrenFiles.keys.toSeq //叶子节点的父目录集合
     PartitioningUtils.parsePartitions(leafDirs, PartitioningUtils.DEFAULT_PARTITION_NAME,
       typeInference)
   }
@@ -604,6 +617,7 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
    *        selected partition.
    *
    * @since 1.4.0
+   * 如何扫描一些输入文件
    */
   def buildScan(inputFiles: Array[FileStatus]): RDD[Row] = {
     throw new UnsupportedOperationException(
@@ -629,24 +643,25 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
   // introduce another row value conversion for data sources whose `needConversion` is true.
   def buildScan(requiredColumns: Array[String], inputFiles: Array[FileStatus]): RDD[Row] = {
     // Yeah, to workaround serialization...
-    val dataSchema = this.dataSchema
+    val dataSchema = this.dataSchema //原始数据结构
     val codegenEnabled = this.codegenEnabled
-    val needConversion = this.needConversion
+    val needConversion = this.needConversion //true表示需要将将Row对象转换成representation对象
 
+    //要求的数据属性转换成BoundReference集合
     val requiredOutput = requiredColumns.map { col =>
-      val field = dataSchema(col)
-      BoundReference(dataSchema.fieldIndex(col), field.dataType, field.nullable)
+      val field = dataSchema(col) //通过name找到对应的Field对象
+      BoundReference(dataSchema.fieldIndex(col), field.dataType, field.nullable) //包含该属性是第几个,什么类型,是否可以是null
     }.toSeq
 
-    val rdd: RDD[Row] = buildScan(inputFiles)
+    val rdd: RDD[Row] = buildScan(inputFiles) //扫描路径
     val converted: RDD[InternalRow] =
-      if (needConversion) {
+      if (needConversion) {//true表示需要将将Row对象转换成representation对象
         RDDConversions.rowToRowRdd(rdd, dataSchema.fields.map(_.dataType))
       } else {
         rdd.asInstanceOf[RDD[InternalRow]]
       }
 
-    converted.mapPartitions { rows =>
+    converted.mapPartitions { rows => //表示InternalRow对象
       val buildProjection = if (codegenEnabled) {
         GenerateMutableProjection.generate(requiredOutput, dataSchema.toAttributes)
       } else {
@@ -685,9 +700,10 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
    * @since 1.4.0
    */
   def buildScan(
-      requiredColumns: Array[String],
-      filters: Array[Filter],
-      inputFiles: Array[FileStatus]): RDD[Row] = {
+      requiredColumns: Array[String],//要求返回RDD[Row]中Row只需要包含这几个字段即可
+      filters: Array[Filter],//添加过滤条件
+      inputFiles: Array[FileStatus]) //扫描的文件
+    : RDD[Row] = {
     buildScan(requiredColumns, inputFiles)
   }
 
@@ -729,6 +745,7 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
    * may cause unexpected behaviors.
    *
    * @since 1.4.0
+   * 创建输出工厂
    */
   def prepareJobForWrite(job: Job): OutputWriterFactory
 }
@@ -739,14 +756,15 @@ private[sql] object HadoopFsRelation extends Logging {
   // _common_metadata files). "_temporary" directories are explicitly ignored since failed
   // tasks/jobs may leave partial/corrupted data files there.  Files and directories whose name
   // start with "." are also ignored.
+  //返回属于status目录下所有子子孙孙的叶子节点找到,返回叶子节点集合 Array[FileStatus]
   def listLeafFiles(fs: FileSystem, status: FileStatus): Array[FileStatus] = {
     logInfo(s"Listing ${status.getPath}")
     val name = status.getPath.getName.toLowerCase
     if (name == "_temporary" || name.startsWith(".")) {
       Array.empty
     } else {
-      val (dirs, files) = fs.listStatus(status.getPath).partition(_.isDir)
-      files ++ dirs.flatMap(dir => listLeafFiles(fs, dir))
+      val (dirs, files) = fs.listStatus(status.getPath).partition(_.isDir)//将status目录的子文件集合,按照是否是目录分组
+      files ++ dirs.flatMap(dir => listLeafFiles(fs, dir)) //目录继续递归
     }
   }
 
@@ -754,7 +772,7 @@ private[sql] object HadoopFsRelation extends Logging {
   // well with `SerializableWritable`.  So there seems to be no way to serialize a `FileStatus`.
   // Here we use `FakeFileStatus` to extract key components of a `FileStatus` to serialize it from
   // executor side and reconstruct it on driver side.
-  case class FakeFileStatus(
+  case class FakeFileStatus(//表示一个文件对象,因为FileStatus是Writable接口,不是serializable接口,因此要重新定义一个该对象
       path: String,
       length: Long,
       isDir: Boolean,
@@ -763,18 +781,19 @@ private[sql] object HadoopFsRelation extends Logging {
       modificationTime: Long,
       accessTime: Long)
 
+  //并行处理
   def listLeafFilesInParallel(
-      paths: Array[String],
+      paths: Array[String],//因为路径集合超过了默认的32个,因此要并行查找子子孙孙的叶子节点集合
       hadoopConf: Configuration,
       sparkContext: SparkContext): Set[FileStatus] = {
     logInfo(s"Listing leaf files and directories in parallel under: ${paths.mkString(", ")}")
 
     val serializableConfiguration = new SerializableConfiguration(hadoopConf)
-    val fakeStatuses = sparkContext.parallelize(paths).flatMap { path =>
+    val fakeStatuses = sparkContext.parallelize(paths).flatMap { path => //并行节点的每一个Path
       val hdfsPath = new Path(path)
       val fs = hdfsPath.getFileSystem(serializableConfiguration.value)
       val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
-      Try(listLeafFiles(fs, fs.getFileStatus(qualified))).getOrElse(Array.empty)
+      Try(listLeafFiles(fs, fs.getFileStatus(qualified))).getOrElse(Array.empty) //返回属于status目录下所有子子孙孙的叶子节点找到,返回叶子节点集合 Array[FileStatus]
     }.map { status =>
       FakeFileStatus(
         status.getPath.toString,

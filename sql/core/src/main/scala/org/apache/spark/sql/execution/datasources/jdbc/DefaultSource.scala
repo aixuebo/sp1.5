@@ -33,12 +33,13 @@ class DefaultSource extends RelationProvider with DataSourceRegister {
     val url = parameters.getOrElse("url", sys.error("Option 'url' not specified"))
     val driver = parameters.getOrElse("driver", null)
     val table = parameters.getOrElse("dbtable", sys.error("Option 'dbtable' not specified"))
-    val partitionColumn = parameters.getOrElse("partitionColumn", null)
-    val lowerBound = parameters.getOrElse("lowerBound", null)
-    val upperBound = parameters.getOrElse("upperBound", null)
-    val numPartitions = parameters.getOrElse("numPartitions", null)
 
-    if (driver != null) DriverRegistry.register(driver)
+    val partitionColumn = parameters.getOrElse("partitionColumn", null) //拆分partition的字段
+    val lowerBound = parameters.getOrElse("lowerBound", null) //从什么地方开始拆分
+    val upperBound = parameters.getOrElse("upperBound", null) //到什么地方拆分为止
+    val numPartitions = parameters.getOrElse("numPartitions", null) //拆分成多少个partition
+
+    if (driver != null) DriverRegistry.register(driver) //注册一个driver
 
     if (partitionColumn != null
       && (lowerBound == null || upperBound == null || numPartitions == null)) {
@@ -54,9 +55,10 @@ class DefaultSource extends RelationProvider with DataSourceRegister {
         upperBound.toLong,
         numPartitions.toInt)
     }
-    val parts = JDBCRelation.columnPartition(partitionInfo)
+    val parts = JDBCRelation.columnPartition(partitionInfo) //分区
     val properties = new Properties() // Additional properties that we will pass to getConnection
-    parameters.foreach(kv => properties.setProperty(kv._1, kv._2))
+    parameters.foreach(kv => properties.setProperty(kv._1, kv._2)) //创建Properties对象
+
     JDBCRelation(url, table, parts, properties)(sqlContext)
   }
 }

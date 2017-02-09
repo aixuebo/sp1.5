@@ -18,6 +18,8 @@
 package org.apache.spark.sql.catalyst.plans
 
 object JoinType {
+
+  //通过字符串转换成JoinType对象
   def apply(typ: String): JoinType = typ.toLowerCase.replace("_", "") match {
     case "inner" => Inner
     case "outer" | "full" | "fullouter" => FullOuter

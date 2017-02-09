@@ -24,7 +24,7 @@ private object JacksonUtils {
    * Advance the parser until a null or a specific token is found
    */
   def nextUntil(parser: JsonParser, stopOn: JsonToken): Boolean = {
-    parser.nextToken() match {
+    parser.nextToken() match {//不断的迭代json,找到下一个json的拆分点
       case null => false
       case x => x != stopOn
     }
