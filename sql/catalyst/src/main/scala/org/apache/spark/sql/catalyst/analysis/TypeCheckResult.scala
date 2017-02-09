@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 /**
  * Represents the result of `Expression.checkInputDataTypes`.
  * We will throw `AnalysisException` in `CheckAnalysis` if `isFailure` is true.
+ * 校验结果
  */
 trait TypeCheckResult {
   def isFailure: Boolean = !isSuccess

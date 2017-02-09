@@ -37,14 +37,14 @@ trait ExpectsInputTypes extends Expression {
    * the type requirement for the i-th child.
    * 期望的数据类型
    * The possible values at each position are:
-   * 1. a specific data type, e.g. LongType, StringType.
-   * 2. a non-leaf abstract data type, e.g. NumericType, IntegralType, FractionalType.
+   * 1. a specific data type, e.g. LongType, StringType.要么是具体的类型
+   * 2. a non-leaf abstract data type, e.g. NumericType, IntegralType, FractionalType. 也可以是抽象的类型
    */
   def inputTypes: Seq[AbstractDataType]
 
   override def checkInputDataTypes(): TypeCheckResult = {
     val mismatches = children.zip(inputTypes).zipWithIndex.collect {
-      case ((child, expected), idx) if !expected.acceptsType(child.dataType) =>
+      case ((child, expected), idx) if !expected.acceptsType(child.dataType) => //child真实类型,expected期望类型 idx第几个类型
         s"argument ${idx + 1} requires ${expected.simpleString} type, " +
           s"however, '${child.prettyString}' is of ${child.dataType.simpleString} type."
     }
@@ -52,7 +52,7 @@ trait ExpectsInputTypes extends Expression {
     if (mismatches.isEmpty) {
       TypeCheckResult.TypeCheckSuccess
     } else {
-      TypeCheckResult.TypeCheckFailure(mismatches.mkString(" "))
+      TypeCheckResult.TypeCheckFailure(mismatches.mkString(" ")) //打印错误信息
     }
   }
 }
