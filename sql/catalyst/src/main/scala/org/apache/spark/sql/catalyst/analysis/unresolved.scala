@@ -69,6 +69,7 @@ case class UnresolvedAttribute(nameParts: Seq[String]) extends Attribute with Un
   override def toString: String = s"'$name"
 }
 
+//表示属性名字  name或者name.name.name的方式确定一个属性
 object UnresolvedAttribute {
   /**
    * Creates an [[UnresolvedAttribute]], parsing segments separated by dots ('.').
@@ -130,10 +131,11 @@ object UnresolvedAttribute {
   }
 }
 
+//表示一个函数名字 + 一组表达式集合
 case class UnresolvedFunction(
-    name: String,
-    children: Seq[Expression],
-    isDistinct: Boolean)
+    name: String,//函数名字
+    children: Seq[Expression],//函数需要的表达式集合
+    isDistinct: Boolean) //true表示需要distinct操作
   extends Expression with Unevaluable {
 
   override def dataType: DataType = throw new UnresolvedException(this, "dataType")
@@ -168,6 +170,7 @@ abstract class Star extends LeafExpression with NamedExpression {
  *
  * @param table an optional table that should be the target of the expansion.  If omitted all
  *              tables' columns are produced.
+ * 表达tableName.* 或者* ,后者时候参数table为null
  */
 case class UnresolvedStar(table: Option[String]) extends Star with Unevaluable {
 
@@ -236,6 +239,8 @@ case class ResolvedStar(expressions: Seq[NamedExpression]) extends Star with Une
  *              can be Map, Array, Struct or array of Structs.
  * @param extraction The expression to describe the extraction,
  *                   can be key of Map, index of Array, field name of Struct.
+ * 表达式child [表达式extraction] 语法  或者 表达式.fieldName语法 语法
+ * 表示抽取信息表达式
  */
 case class UnresolvedExtractValue(child: Expression, extraction: Expression)
   extends UnaryExpression with Unevaluable {

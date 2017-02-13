@@ -48,7 +48,7 @@ public enum SaveMode {
    * Ignore mode means that when saving a DataFrame to a data source, if data already exists,
    * the save operation is expected to not save the contents of the DataFrame and to not
    * change the existing data.
-   *
+   * 此时表示如果保存一个DataFrame到data source,如果数据已经存在了,则被忽略掉,还用以前的数据
    * @since 1.3.0
    */
   Ignore

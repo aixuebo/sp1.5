@@ -119,6 +119,7 @@ trait CaseWhenLike extends Expression {
  * https://cwiki.apache.org/confluence/display/Hive/LanguageManual+UDF#LanguageManualUDF-ConditionalFunctions
  */
 // scalastyle:on
+//case when 表达式 then 表达式 else 表达式 end 操作
 case class CaseWhen(branches: Seq[Expression]) extends CaseWhenLike {
 
   // Use private[this] Array to speed up evaluation.
@@ -213,6 +214,7 @@ case class CaseWhen(branches: Seq[Expression]) extends CaseWhenLike {
  * https://cwiki.apache.org/confluence/display/Hive/LanguageManual+UDF#LanguageManualUDF-ConditionalFunctions
  */
 // scalastyle:on
+//case 表达式 when 表达式 then 表达式 else 表达式 end 操作
 case class CaseKeyWhen(key: Expression, branches: Seq[Expression]) extends CaseWhenLike {
 
   // Use private[this] Array to speed up evaluation.

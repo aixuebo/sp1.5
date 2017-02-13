@@ -24,6 +24,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.util.collection.unsafe.sort.PrefixComparators.BinaryPrefixComparator
 import org.apache.spark.util.collection.unsafe.sort.PrefixComparators.DoublePrefixComparator
 
+//排序方式
 abstract sealed class SortDirection
 case object Ascending extends SortDirection
 case object Descending extends SortDirection

@@ -153,6 +153,7 @@ case class MaxFunction(expr: Expression, base: AggregateExpression1) extends Agg
   override def eval(input: InternalRow): Any = currentMax.value
 }
 
+//对表达式进行count操作
 case class Count(child: Expression) extends UnaryExpression with PartialAggregate1 {
 
   override def nullable: Boolean = false
@@ -181,6 +182,7 @@ case class CountFunction(expr: Expression, base: AggregateExpression1) extends A
   override def eval(input: InternalRow): Any = count
 }
 
+//count(distinct(表达式集合))
 case class CountDistinct(expressions: Seq[Expression]) extends PartialAggregate1 {
   def this() = this(null)
 
@@ -363,6 +365,8 @@ case class ApproxCountDistinctMergeFunction(
   override def eval(input: InternalRow): Any = hyperLogLog.cardinality()
 }
 
+//APPROXIMATE count(DISTINCT(表达式)) 预估count计算
+//APPROXIMATE (float) count (distinct 表达式) 也支持这种语法
 case class ApproxCountDistinct(child: Expression, relativeSD: Double = 0.05)
   extends UnaryExpression with PartialAggregate1 {
 
@@ -537,6 +541,7 @@ case class SumFunction(expr: Expression, base: AggregateExpression1) extends Agg
   }
 }
 
+//sum(distinct(表达式))操作
 case class SumDistinct(child: Expression) extends UnaryExpression with PartialAggregate1 {
 
   def this() = this(null)

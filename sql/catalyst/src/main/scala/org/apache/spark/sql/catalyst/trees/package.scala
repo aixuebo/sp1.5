@@ -22,6 +22,7 @@ import org.apache.spark.Logging
 /**
  * A library for easily manipulating trees of operators.  Operators that extend TreeNode are
  * granted the following interface:
+ * 一个容易操作数结构的类库,操作的树要扩展TreeNode,授予一下接口
  * <ul>
  *   <li>Scala collection like methods (foreach, map, flatMap, collect, etc)</li>
  *   <li>

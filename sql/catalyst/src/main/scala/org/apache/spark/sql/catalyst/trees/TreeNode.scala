@@ -79,15 +79,18 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   /**
    * Find the first [[TreeNode]] that satisfies the condition specified by `f`.
    * The condition is recursively applied to this node and all of its children (pre-order).
+   * 找第一个符合条件函数的对象,先对比自己,然后对比子类,子类对比也是一个子类递归到底的方式进行对比的
+   * f的参数就是本类自己
    */
   def find(f: BaseType => Boolean): Option[BaseType] = f(this) match {
     case true => Some(this)
-    case false => children.foldLeft(None: Option[BaseType]) { (l, r) => l.orElse(r.find(f)) }
+    case false => children.foldLeft(None: Option[BaseType]) { (l, r) => l.orElse(r.find(f)) } //从子类第一个开始找,默认值是Option[BaseType]类型的None,调用下一个r也进行find查找f函数,一旦返回true,则在下一个校验的时候,l就是true,而不是none,因此就返回找到的l了
   }
 
   /**
    * Runs the given function on this node and then recursively on [[children]].
    * @param f the function to be applied to each node in the tree.
+   * 自己本类和子类都调用函数f,f的参数就是本类自己
    */
   def foreach(f: BaseType => Unit): Unit = {
     f(this)
@@ -97,6 +100,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   /**
    * Runs the given function recursively on [[children]] then on this node.
    * @param f the function to be applied to each node in the tree.
+   * 与foreach顺序相反,先深度递归调用子类
    */
   def foreachUp(f: BaseType => Unit): Unit = {
     children.foreach(_.foreachUp(f))
@@ -107,6 +111,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
    * Returns a Seq containing the result of applying the given function to each
    * node in this tree in a preorder traversal.
    * @param f the function to be applied.
+   * 自己和子类都调用f函数.每一次调用的返回值汇总返回
    */
   def map[A](f: BaseType => A): Seq[A] = {
     val ret = new collection.mutable.ArrayBuffer[A]()

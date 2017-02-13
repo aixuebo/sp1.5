@@ -30,7 +30,7 @@ import org.apache.spark.sql.types.StringType
  * The top level Spark SQL parser. This parser recognizes syntaxes that are available for all SQL
  * dialects supported by Spark SQL, and delegates all the other syntaxes to the `fallback` parser.
  *
- * @param fallback A function that parses an input string to a logical plan
+ * @param fallback A function that parses an input string to a logical plan  参数是传入一个sql,返回该sql的逻辑执行计划
  */
 private[sql] class SparkSQLParser(fallback: String => LogicalPlan) extends AbstractSparkSQLParser {
 
@@ -54,6 +54,7 @@ private[sql] class SparkSQLParser(fallback: String => LogicalPlan) extends Abstr
     }
   }
 
+  //定义关键词
   protected val AS = Keyword("AS")
   protected val CACHE = Keyword("CACHE")
   protected val CLEAR = Keyword("CLEAR")

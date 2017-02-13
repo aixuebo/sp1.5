@@ -31,16 +31,16 @@ private[sql] abstract class AbstractSparkSQLParser
   def parse(input: String): LogicalPlan = {
     // Initialize the Keywords.
     initLexical
-    phrase(start)(new lexical.Scanner(input)) match {
-      case Success(plan, _) => plan
+    phrase(start)(new lexical.Scanner(input)) match {//使用sql语法解析器去扫描input输入内容
+      case Success(plan, _) => plan //成功,则返回的就是逻辑执行计划
       case failureOrError => sys.error(failureOrError.toString)
     }
   }
   /* One time initialization of lexical.This avoid reinitialization of  lexical in parse method */
-  protected lazy val initLexical: Unit = lexical.initialize(reservedWords)
+  protected lazy val initLexical: Unit = lexical.initialize(reservedWords) //通过反射,获取到Keyword关键案子的name集合,然后初始化给sql语法解析器,让其知道这个是关键词
 
   protected case class Keyword(str: String) {
-    def normalize: String = lexical.normalizeKeyword(str)
+    def normalize: String = lexical.normalizeKeyword(str) //对关键字进行格式化
     def parser: Parser[String] = normalize
   }
 
@@ -50,6 +50,7 @@ private[sql] abstract class AbstractSparkSQLParser
   // NOTICE, Since the Keyword properties defined by sub class, we couldn't call this
   // method during the parent class instantiation, because the sub class instance
   // isn't created yet.
+  //通过反射,获取到Keyword关键案子的name集合
   protected lazy val reservedWords: Seq[String] =
     this
       .getClass
@@ -77,27 +78,33 @@ private[sql] abstract class AbstractSparkSQLParser
   }
 }
 
+//sql语法解析器
 class SqlLexical extends StdLexical {
   case class FloatLit(chars: String) extends Token {
     override def toString: String = chars
   }
 
-  /* This is a work around to support the lazy setting */
+  /* This is a work around to support the lazy setting
+  * 初始化关键字集合
+  **/
   def initialize(keywords: Seq[String]): Unit = {
     reserved.clear()
     reserved ++= keywords
   }
 
-  /* Normal the keyword string */
+  /* Normal the keyword string
+  * 格式化字符串,都变成小写字符
+  **/
   def normalizeKeyword(str: String): String = str.toLowerCase
 
-  delimiters += (
+  delimiters += ( //分隔符
     "@", "*", "+", "-", "<", "=", "<>", "!=", "<=", ">=", ">", "/", "(", ")",
     ",", ";", "%", "{", "}", ":", "[", "]", ".", "&", "|", "^", "~", "<=>"
   )
 
+  //返回Token,要么是关键字,要么就是Identifier
   protected override def processIdent(name: String) = {
-    val token = normalizeKeyword(name)
+    val token = normalizeKeyword(name) // 格式化字符串,都变成小写字符
     if (reserved contains token) Keyword(token) else Identifier(name)
   }
 
@@ -123,8 +130,10 @@ class SqlLexical extends StdLexical {
     | failure("illegal character")
     )
 
+  //是字符
   override def identChar: Parser[Elem] = letter | elem('_')
 
+  //是空格
   override def whitespace: Parser[Any] =
     ( whitespaceChar
     | '/' ~ '*' ~ comment

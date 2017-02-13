@@ -175,6 +175,7 @@ case class NaNvl(left: Expression, right: Expression)
 
 /**
  * An expression that is evaluated to true if the input is null.
+ * 表达式 IS null
  */
 case class IsNull(child: Expression) extends UnaryExpression with Predicate {
   override def nullable: Boolean = false
@@ -194,6 +195,7 @@ case class IsNull(child: Expression) extends UnaryExpression with Predicate {
 
 /**
  * An expression that is evaluated to true if the input is not null.
+ * 表达式 IS not null
  */
 case class IsNotNull(child: Expression) extends UnaryExpression with Predicate {
   override def nullable: Boolean = false

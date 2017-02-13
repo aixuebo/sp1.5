@@ -51,12 +51,13 @@ private[spark] object SQLConf {
    * @param isPublic if this configuration is public to the user. If it's `false`, this
    *                 configuration is only used internally and we should not expose it to the user.
    * @tparam T the value type
+   * 表示key存储的是一个对象
    */
   private[sql] class SQLConfEntry[T] private(
-      val key: String,
-      val defaultValue: Option[T],
-      val valueConverter: String => T,
-      val stringConverter: T => String,
+      val key: String,//key的name
+      val defaultValue: Option[T],//默认值
+      val valueConverter: String => T,//如何将字符串转换成T
+      val stringConverter: T => String,//如何T转换成字符串
       val doc: String,
       val isPublic: Boolean) {
 

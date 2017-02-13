@@ -28,6 +28,7 @@ import org.apache.spark.annotation.DeveloperApi
  * Note that calendar intervals are not comparable.
  *
  * Please use the singleton [[DataTypes.CalendarIntervalType]].
+ * 时间类型
  */
 @DeveloperApi
 class CalendarIntervalType private() extends DataType {
@@ -37,4 +38,5 @@ class CalendarIntervalType private() extends DataType {
   private[spark] override def asNullable: CalendarIntervalType = this
 }
 
+//使用多少个月  + 多少微妙表示一个具体的时间
 case object CalendarIntervalType extends CalendarIntervalType

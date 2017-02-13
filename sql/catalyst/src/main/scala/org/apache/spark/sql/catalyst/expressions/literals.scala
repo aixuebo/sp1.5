@@ -26,9 +26,11 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types._
 
+//文字对象由值和类型组成
 object Literal {
+  //参数v就是具体的值
   def apply(v: Any): Literal = v match {
-    case i: Int => Literal(i, IntegerType)
+    case i: Int => Literal(i, IntegerType) //如果v是int类型的,则创建IntegerType类型,值是v的Literal对象
     case l: Long => Literal(l, LongType)
     case d: Double => Literal(d, DoubleType)
     case f: Float => Literal(f, FloatType)
@@ -75,6 +77,7 @@ object IntegerLiteral {
 
 /**
  * In order to do type checking, use Literal.create() instead of constructor
+ * 文字对象由值和类型组成
  */
 case class Literal protected (value: Any, dataType: DataType)
   extends LeafExpression with CodegenFallback {

@@ -31,12 +31,12 @@ import org.apache.spark.sql.types._
 /**
  * A parser for foreign DDL commands.
  */
-class DDLParser(parseQuery: String => LogicalPlan)
+class DDLParser(parseQuery: String => LogicalPlan) //该sql解析的是正常的sql
   extends AbstractSparkSQLParser with DataTypeParser with Logging {
 
   def parse(input: String, exceptionOnError: Boolean): LogicalPlan = {
     try {
-      parse(input)
+      parse(input) //此时解析的是DDL的sql
     } catch {
       case ddlException: DDLException => throw ddlException
       case _ if !exceptionOnError => parseQuery(input)

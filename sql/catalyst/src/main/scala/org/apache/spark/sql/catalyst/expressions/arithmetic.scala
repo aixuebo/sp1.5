@@ -24,6 +24,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 
 
+//- 表达式
 case class UnaryMinus(child: Expression) extends UnaryExpression with ExpectsInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection.NumericAndInterval)
@@ -177,6 +178,7 @@ case class Subtract(left: Expression, right: Expression) extends BinaryArithmeti
   }
 }
 
+//表达式乘法
 case class Multiply(left: Expression, right: Expression) extends BinaryArithmetic {
 
   override def inputType: AbstractDataType = NumericType
@@ -189,6 +191,7 @@ case class Multiply(left: Expression, right: Expression) extends BinaryArithmeti
   protected override def nullSafeEval(input1: Any, input2: Any): Any = numeric.times(input1, input2)
 }
 
+//表达式除法
 case class Divide(left: Expression, right: Expression) extends BinaryArithmetic {
 
   override def inputType: AbstractDataType = NumericType
@@ -251,6 +254,7 @@ case class Divide(left: Expression, right: Expression) extends BinaryArithmetic 
   }
 }
 
+//%运算
 case class Remainder(left: Expression, right: Expression) extends BinaryArithmetic {
 
   override def inputType: AbstractDataType = NumericType

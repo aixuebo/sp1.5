@@ -115,7 +115,7 @@ case class Like(left: Expression, right: Expression)
   }
 }
 
-
+//表达式RLIKE 表达式  或者 表达式REGEXP  表达式
 case class RLike(left: Expression, right: Expression)
   extends BinaryExpression with StringRegexExpression with CodegenFallback {
 

@@ -80,6 +80,7 @@ trait PredicateHelper {
 }
 
 
+//非运算,即not 一个表达式,注意 也可能接入一个in运算,即就变成not in运算了
 case class Not(child: Expression)
   extends UnaryExpression with Predicate with ImplicitCastInputTypes {
 
@@ -97,6 +98,7 @@ case class Not(child: Expression)
 
 /**
  * Evaluates to `true` if `list` contains `value`.
+ * 表达式in运算
  */
 case class In(value: Expression, list: Seq[Expression]) extends Predicate
     with ImplicitCastInputTypes {
@@ -219,6 +221,7 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
   }
 }
 
+//两个表达式 and操作
 case class And(left: Expression, right: Expression) extends BinaryOperator with Predicate {
 
   override def inputType: AbstractDataType = BooleanType

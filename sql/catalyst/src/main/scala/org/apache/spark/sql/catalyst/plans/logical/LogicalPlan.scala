@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, TreeNode}
 
 
+//解析一个sql,返回该sql的逻辑执行计划
 abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
 
   private var _analyzed: Boolean = false
@@ -283,6 +284,7 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
 
 /**
  * A logical plan node with no children.
+ * 叶子节点不能有子节点
  */
 abstract class LeafNode extends LogicalPlan {
   override def children: Seq[LogicalPlan] = Nil
@@ -290,6 +292,7 @@ abstract class LeafNode extends LogicalPlan {
 
 /**
  * A logical plan node with single child.
+ * 逻辑子节点只能有一个
  */
 abstract class UnaryNode extends LogicalPlan {
   def child: LogicalPlan
@@ -299,6 +302,7 @@ abstract class UnaryNode extends LogicalPlan {
 
 /**
  * A logical plan node with a left and right child.
+ * 逻辑运算需要两个子节点
  */
 abstract class BinaryNode extends LogicalPlan {
   def left: LogicalPlan

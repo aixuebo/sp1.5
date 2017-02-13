@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
  * Root class of SQL Parser Dialect, and we don't guarantee the binary
  * compatibility for the future release, let's keep it as the internal
  * interface for advanced user.
- *
+ * 解析sql的方言,是hivesql还是默认的sql等等
  */
 @DeveloperApi
 abstract class ParserDialect {

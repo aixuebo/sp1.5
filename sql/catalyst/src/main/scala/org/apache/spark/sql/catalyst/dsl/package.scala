@@ -29,7 +29,7 @@ import org.apache.spark.sql.types._
 
 /**
  * A collection of implicit conversions that create a DSL for constructing catalyst data structures.
- *
+ * 隐式转换的一个集合,创建DSL 用于构建catalyst的数据结构
  * {{{
  *  scala> import org.apache.spark.sql.catalyst.dsl.expressions._
  *

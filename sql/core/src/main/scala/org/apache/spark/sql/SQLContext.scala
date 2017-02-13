@@ -80,14 +80,14 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
   /**
    * Set Spark SQL configuration properties.
-   *
+   * 参数props的信息是追加和覆盖掉原有的属性,而不是原有的属性都抛弃掉,只用props
    * @group config
    * @since 1.0.0
    */
   def setConf(props: Properties): Unit = conf.setConf(props)
 
   /** Set the given Spark SQL configuration property. */
-  private[sql] def setConf[T](entry: SQLConfEntry[T], value: T): Unit = conf.setConf(entry, value)
+  private[sql] def setConf[T](entry: SQLConfEntry[T], value: T): Unit = conf.setConf(entry, value) //表示key存储的是一个对象
 
   /**
    * Set the given Spark SQL configuration property.
@@ -108,6 +108,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
   /**
    * Return the value of Spark SQL configuration property for the given key. If the key is not set
    * yet, return `defaultValue` in [[SQLConfEntry]].
+   * 获取key对应的对象内容
    */
   private[sql] def getConf[T](entry: SQLConfEntry[T]): T = conf.getConf(entry)
 
@@ -163,14 +164,14 @@ class SQLContext(@transient val sparkContext: SparkContext)
   protected[sql] lazy val optimizer: Optimizer = DefaultOptimizer
 
   @transient
-  protected[sql] val ddlParser = new DDLParser(sqlParser.parse(_))
+  protected[sql] val ddlParser = new DDLParser(sqlParser.parse(_)) //DDL的sql解析器 包含一个正常sql的逻辑解析器
 
   @transient
-  protected[sql] val sqlParser = new SparkSQLParser(getSQLDialect().parse(_))
+  protected[sql] val sqlParser = new SparkSQLParser(getSQLDialect().parse(_)) //正常sql的逻辑解析器
 
   protected[sql] def getSQLDialect(): ParserDialect = {
     try {
-      val clazz = Utils.classForName(dialectClassName)
+      val clazz = Utils.classForName(dialectClassName)//创建解析sql的方言实例
       clazz.newInstance().asInstanceOf[ParserDialect]
     } catch {
       case NonFatal(e) =>
@@ -186,11 +187,11 @@ class SQLContext(@transient val sparkContext: SparkContext)
     }
   }
 
-  protected[sql] def parseSql(sql: String): LogicalPlan = ddlParser.parse(sql, false)
+  protected[sql] def parseSql(sql: String): LogicalPlan = ddlParser.parse(sql, false) //解析DDL sql,如果出现异常,在解析正常的sql
 
-  protected[sql] def executeSql(sql: String): this.QueryExecution = executePlan(parseSql(sql))
+  protected[sql] def executeSql(sql: String): this.QueryExecution = executePlan(parseSql(sql)) //解析sql后,执行该sql
 
-  protected[sql] def executePlan(plan: LogicalPlan) = new this.QueryExecution(plan)
+  protected[sql] def executePlan(plan: LogicalPlan) = new this.QueryExecution(plan) //执行一个sql逻辑计划
 
   @transient
   protected[sql] val tlSession = new ThreadLocal[SQLSession]() {
@@ -200,6 +201,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
   @transient
   protected[sql] val defaultSession = createSession()
 
+  //找到解析sql的实现类
   protected[sql] def dialectClassName = if (conf.dialect == "sql") {
     classOf[DefaultParserDialect].getCanonicalName
   } else {
@@ -213,6 +215,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
     // those settings in their construction can get the correct settings.
     // For example, metadataHive in HiveContext may need both spark.sql.hive.metastore.version
     // and spark.sql.hive.metastore.jars to get correctly constructed.
+    //收集配置文件中spark.sql开头的配置文件,覆盖session中的conf属性
     val properties = new Properties
     sparkContext.getConf.getAll.foreach {
       case (key, value) if key.startsWith("spark.sql") => properties.setProperty(key, value)
@@ -893,6 +896,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
     tlSession.set(session)
   }
 
+  //每一个session保持一个自己的conf对象
   protected[sql] class SQLSession {
     // Note that this is a lazy val so we can override the default value in subclasses.
     protected[sql] lazy val conf: SQLConf = new SQLConf
