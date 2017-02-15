@@ -657,6 +657,32 @@ abstract class DStream[T: ClassTag] ( //T可以是元组(KEY,VALUE)   简单的�
   /**
    * Apply a function to each RDD in this DStream. This is an output operator, so
    * 'this' DStream will be registered as an output stream and therefore materialized.
+   *
+这个代码有问题
+dstream.foreachRDD { rdd =>
+  val connection = createNewConnection()  // executed at the driver ,此时代码在driver端运行,而连接是不能被序列化的,因此这么写法是不对的
+  rdd.foreach { record => //执行RDD的foreach时候才会启动spark的job,才会导致每一个work节点上执行 connection.send(record) // executed at the worker这段代码
+    connection.send(record) // executed at the worker
+  }
+}
+优化
+dstream.foreachRDD { rdd =>
+  rdd.foreach { record =>
+    val connection = createNewConnection()
+    connection.send(record)
+    connection.close()
+  }
+}
+   此时也不够好,因为他会导致每一行都获取一个连接
+
+ 进一步优化
+dstream.foreachRDD { rdd =>
+  rdd.foreachPartition { partitionOfRecords =>
+    val connection = createNewConnection()
+    partitionOfRecords.foreach(record => connection.send(record))
+    connection.close()
+  }
+}
    */
   def foreachRDD(foreachFunc: RDD[T] => Unit): Unit = ssc.withScope {
     val cleanedF = context.sparkContext.clean(foreachFunc, false)

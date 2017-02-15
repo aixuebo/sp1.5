@@ -908,7 +908,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * access to the intermediate phases of query execution for developers.
    */
   @DeveloperApi
-  protected[sql] class QueryExecution(val logical: LogicalPlan) {
+  protected[sql] class QueryExecution(val logical: LogicalPlan) {//参数对应的是逻辑执行计划
     def assertAnalyzed(): Unit = analyzer.checkAnalysis(analyzed)
 
     lazy val analyzed: LogicalPlan = analyzer.execute(logical)

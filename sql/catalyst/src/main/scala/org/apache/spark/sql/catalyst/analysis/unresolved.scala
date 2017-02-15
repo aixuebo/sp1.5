@@ -49,11 +49,12 @@ case class UnresolvedRelation(
 
 /**
  * Holds the name of an attribute that has yet to be resolved.
+ * 拆分 name.name.`name`.'a'形式字符串属性,参数是属性集合
  */
 case class UnresolvedAttribute(nameParts: Seq[String]) extends Attribute with Unevaluable {
 
   def name: String =
-    nameParts.map(n => if (n.contains(".")) s"`$n`" else n).mkString(".")
+    nameParts.map(n => if (n.contains(".")) s"`$n`" else n).mkString(".") //组成属性字符串集合
 
   override def exprId: ExprId = throw new UnresolvedException(this, "exprId")
   override def dataType: DataType = throw new UnresolvedException(this, "dataType")
@@ -95,19 +96,20 @@ object UnresolvedAttribute {
    * Backticks must appear in pairs, and the quoted string must be a complete name part,
    * which means `ab..c`e.f is not allowed.
    * Escape character is not supported now, so we can't use backtick inside name part.
+   * 拆分 name.name.`name`.'a'形式字符串属性
    */
   def parseAttributeName(name: String): Seq[String] = {
     def e = new AnalysisException(s"syntax error in attribute name: $name")
     val nameParts = scala.collection.mutable.ArrayBuffer.empty[String]
     val tmp = scala.collection.mutable.ArrayBuffer.empty[Char]
-    var inBacktick = false
+    var inBacktick = false //遇见`的时候设置为true
     var i = 0
     while (i < name.length) {
       val char = name(i)
       if (inBacktick) {
         if (char == '`') {
           inBacktick = false
-          if (i + 1 < name.length && name(i + 1) != '.') throw e
+          if (i + 1 < name.length && name(i + 1) != '.') throw e //即'后面一定跟的是.,否则抛异常
         } else {
           tmp += char
         }
@@ -188,7 +190,7 @@ case class UnresolvedStar(table: Option[String]) extends Star with Unevaluable {
     }
   }
 
-  override def toString: String = table.map(_ + ".").getOrElse("") + "*"
+  override def toString: String = table.map(_ + ".").getOrElse("") + "*" //table.* 或者 *
 }
 
 /**

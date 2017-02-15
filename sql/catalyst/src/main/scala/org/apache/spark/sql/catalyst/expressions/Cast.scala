@@ -32,13 +32,14 @@ object Cast {
   /**
    * Returns true iff we can cast `from` type to `to` type.
    * cast (表达式 as dataType) 语法,强制转换成一个类型
+   * true表示类型可以转换
    */
   def canCast(from: DataType, to: DataType): Boolean = (from, to) match {
     case (fromType, toType) if fromType == toType => true
 
-    case (NullType, _) => true
+    case (NullType, _) => true //NUll类型可以转换到任意类型
 
-    case (_, StringType) => true
+    case (_, StringType) => true //任意类型都可以转换成String
 
     case (StringType, BinaryType) => true
 

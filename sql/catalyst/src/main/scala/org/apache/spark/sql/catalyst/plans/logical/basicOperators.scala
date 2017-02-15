@@ -375,6 +375,7 @@ case class Rollup(
     this.copy(aggregations = aggs)
 }
 
+//limit操作
 case class Limit(limitExpr: Expression, child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
 

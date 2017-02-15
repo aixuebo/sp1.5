@@ -114,7 +114,8 @@ private[sql] object DataFrame {
 @Experimental
 class DataFrame private[sql](
     @transient val sqlContext: SQLContext,
-    @DeveloperApi @transient val queryExecution: SQLContext#QueryExecution) extends Serializable {
+    @DeveloperApi @transient val queryExecution: SQLContext#QueryExecution) //执行计划的class
+  extends Serializable {
 
   // Note for Spark contributors: if adding or updating any action in `DataFrame`, please make sure
   // you wrap it with `withNewExecutionId` if this actions doesn't call other action.
@@ -1516,6 +1517,7 @@ class DataFrame private[sql](
    *
    * @group basic
    * @since 1.3.0
+   * 为本类对应的sql设置一个表名字
    */
   def registerTempTable(tableName: String): Unit = {
     sqlContext.registerDataFrameAsTable(this, tableName)

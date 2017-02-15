@@ -32,7 +32,7 @@ import org.apache.spark.sql.types.DataType
 
 /**
  * Functions for registering user-defined functions. Use [[SQLContext.udf]] to access this.
- *
+ * 用户自定义函数注册器
  * @since 1.3.0
  */
 class UDFRegistration private[sql] (sqlContext: SQLContext) extends Logging {
