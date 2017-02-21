@@ -49,7 +49,7 @@ object LabeledPoint {
   /**
    * Parses a string resulted from `LabeledPoint#toString` into
    * an [[org.apache.spark.mllib.regression.LabeledPoint]].
-   *
+   * 一个lable 标签以及对应很多属性值,表示一行记录
    */
   @Since("1.1.0")
   def parse(s: String): LabeledPoint = {
@@ -60,7 +60,7 @@ object LabeledPoint {
         case other =>
           throw new SparkException(s"Cannot parse $other.")
       }
-    } else { // dense format used before v1.0
+    } else { // dense format used before v1.0  eg:label,value1 value2 value3
       val parts = s.split(',')
       val label = java.lang.Double.parseDouble(parts(0))
       val features = Vectors.dense(parts(1).trim().split(' ').map(java.lang.Double.parseDouble))

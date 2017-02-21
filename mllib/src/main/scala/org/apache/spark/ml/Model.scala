@@ -23,7 +23,7 @@ import org.apache.spark.ml.param.ParamMap
 /**
  * :: DeveloperApi ::
  * A fitted model, i.e., a [[Transformer]] produced by an [[Estimator]].
- *
+ * 一个具体的模型
  * @tparam M model type
  */
 @DeveloperApi
@@ -31,6 +31,7 @@ abstract class Model[M <: Model[M]] extends Transformer {
   /**
    * The parent estimator that produced this model.
    * Note: For ensembles' component Models, this value can be null.
+   * 该模型是哪个评估模型器调用fit方法生成的
    */
   @transient var parent: Estimator[M] = _
 

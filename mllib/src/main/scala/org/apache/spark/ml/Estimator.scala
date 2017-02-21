@@ -26,6 +26,7 @@ import org.apache.spark.sql.DataFrame
 /**
  * :: DeveloperApi ::
  * Abstract class for estimators that fit models to data.
+ * 根据参数集合产生一个该评估模型具体类Estimator,然后调用fit方法将数据集合DataFrame产生合适的model模型
  */
 @DeveloperApi
 abstract class Estimator[M <: Model[M]] extends PipelineStage {
@@ -48,21 +49,23 @@ abstract class Estimator[M <: Model[M]] extends PipelineStage {
   }
 
   /**
+   * Fits a model to the input data.
+   * 针对该评估模型,处理该参数对应的数据集合
+   */
+  def fit(dataset: DataFrame): M
+
+  /**
    * Fits a single model to the input data with provided parameter map.
    *
    * @param dataset input dataset
    * @param paramMap Parameter map.
    *                 These values override any specified in this Estimator's embedded ParamMap.
    * @return fitted model
+   * 根据参数集合,返回适合的评估模型,然后处理数据集合dataset
    */
   def fit(dataset: DataFrame, paramMap: ParamMap): M = {
     copy(paramMap).fit(dataset)
   }
-
-  /**
-   * Fits a model to the input data.
-   */
-  def fit(dataset: DataFrame): M
 
   /**
    * Fits multiple models to the input data with multiple sets of parameters.
@@ -73,10 +76,12 @@ abstract class Estimator[M <: Model[M]] extends PipelineStage {
    * @param paramMaps An array of parameter maps.
    *                  These values override any specified in this Estimator's embedded ParamMap.
    * @return fitted models, matching the input parameter maps
-   */
+   * 每一个paramMaps元素,都是一个参数集合,都可以产生一个评估模型去评估数据集合
+   **/
   def fit(dataset: DataFrame, paramMaps: Array[ParamMap]): Seq[M] = {
     paramMaps.map(fit(dataset, _))
   }
 
+  //通过参数集合,返回一个评估模型
   override def copy(extra: ParamMap): Estimator[M]
 }

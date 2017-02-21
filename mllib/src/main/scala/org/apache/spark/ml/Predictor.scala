@@ -30,6 +30,7 @@ import org.apache.spark.sql.{DataFrame, Row}
 
 /**
  * (private[ml])  Trait for parameters for prediction (regression and classification).
+ * 预测器 参数
  */
 private[ml] trait PredictorParams extends Params
   with HasLabelCol with HasFeaturesCol with HasPredictionCol {

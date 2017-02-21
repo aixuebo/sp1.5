@@ -29,12 +29,14 @@ import org.apache.spark.annotation.DeveloperApi
  *
  * WARNING: There have not yet been final discussions on this API, so it may be broken in future
  *          releases.
+ * 产生全局唯一码
  */
 @DeveloperApi
 trait Identifiable {
 
   /**
    * An immutable unique ID for the object and its derivatives.
+   * 一个对象的唯一识别ID
    */
   val uid: String
 
