@@ -33,6 +33,8 @@ import org.apache.spark.mllib.linalg.{Vectors, Vector}
  * Reference: [[http://en.wikipedia.org/wiki/Algorithms_for_calculating_variance variance-wiki]]
  * Zero elements (including explicit zero values) are skipped when calling add(),
  * to have time complexity O(nnz) instead of O(n) for each column.
+  *
+  * 专门处理特征向量
  */
 @Since("1.1.0")
 @DeveloperApi

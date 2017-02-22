@@ -97,6 +97,7 @@ private[ml] trait HasPredictionCol extends Params {
 
   /**
    * Param for prediction column name.
+    * 预言列
    * @group param
    */
   final val predictionCol: Param[String] = new Param[String](this, "predictionCol", "prediction column name") //字符串属性
@@ -308,6 +309,7 @@ private[ml] trait HasTol extends Params {
 
   /**
    * Param for the convergence tolerance for iterative algorithms.
+    * 该参数是迭代收敛的值
    * @group param
    */
   final val tol: DoubleParam = new DoubleParam(this, "tol", "the convergence tolerance for iterative algorithms")

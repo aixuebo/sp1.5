@@ -120,6 +120,7 @@ abstract class Predictor[
   /**
    * Extract [[labelCol]] and [[featuresCol]] from the given dataset,
    * and put it in an RDD with strong types.
+    * 从数据集合中将每条数据转换成lable标签和特征向量组成的对象集合
    */
   protected def extractLabeledPoints(dataset: DataFrame): RDD[LabeledPoint] = {
     dataset.select($(labelCol), $(featuresCol))

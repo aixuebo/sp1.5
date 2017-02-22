@@ -125,12 +125,14 @@ class LinearRegression(override val uid: String)
 
   override protected def train(dataset: DataFrame): LinearRegressionModel = {
     // Extract columns from data.  If dataset is persisted, do not persist instances.
+    //从数据集合中将每条数据转换成lable标签和特征向量组成的对象集合
     val instances = extractLabeledPoints(dataset).map {
       case LabeledPoint(label: Double, features: Vector) => (label, features)
     }
     val handlePersistence = dataset.rdd.getStorageLevel == StorageLevel.NONE
     if (handlePersistence) instances.persist(StorageLevel.MEMORY_AND_DISK)
 
+    //MultivariateOnlineSummarizer处理特征向量,StatCounter处理标签的均值等信息
     val (summarizer, statCounter) = instances.treeAggregate(
       (new MultivariateOnlineSummarizer, new StatCounter))(
         seqOp = (c, v) => (c, v) match {
