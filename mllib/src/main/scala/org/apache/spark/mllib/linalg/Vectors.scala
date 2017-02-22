@@ -119,36 +119,43 @@ sealed trait Vector extends Serializable {
    * @param f the function takes two parameters where the first parameter is the index of
    *          the vector with type `Int`, and the second parameter is the corresponding value
    *          with type `Double`.
+    * 循环向量的每一个元素.参数是元素位置和元素内容
    */
   private[spark] def foreachActive(f: (Int, Double) => Unit)
 
   /**
    * Number of active entries.  An "active entry" is an element which is explicitly stored,
    * regardless of its value.  Note that inactive entries have value 0.
+    * value的个数
    */
   @Since("1.4.0")
   def numActives: Int
 
   /**
    * Number of nonzero elements. This scans all active values and count nonzeros.
+    * 非0的value的个数
    */
   @Since("1.4.0")
   def numNonzeros: Int
 
   /**
    * Converts this vector to a sparse vector with all explicit zeros removed.
+    * 移除所有0的元素,转换成稀松向量
    */
   @Since("1.4.0")
   def toSparse: SparseVector
 
   /**
    * Converts this vector to a dense vector.
+    * 转换成密集向量
    */
   @Since("1.4.0")
   def toDense: DenseVector = new DenseVector(this.toArray)
 
   /**
    * Returns a vector in either dense or sparse format, whichever uses less storage.
+    * 对向量进行压缩
+    * 如果非0向量很少,那还是做密集向量,如果非0向量很多,则做稀松向量
    */
   @Since("1.4.0")
   def compressed: Vector = {
@@ -164,6 +171,7 @@ sealed trait Vector extends Serializable {
   /**
    * Find the index of a maximal element.  Returns the first maximal element in case of a tie.
    * Returns -1 if vector has length 0.
+    * 最大元素值对应的向量索引位置
    */
   @Since("1.5.0")
   def argmax: Int
@@ -257,6 +265,7 @@ object Vectors {
 
   /**
    * Creates a dense vector from its values.
+    * 密集向量
    */
   @Since("1.0.0")
   @varargs
@@ -276,6 +285,7 @@ object Vectors {
    * @param size vector size.
    * @param indices index array, must be strictly increasing.
    * @param values value array, must have the same length as indices.
+    * 稀疏向量
    */
   @Since("1.0.0")
   def sparse(size: Int, indices: Array[Int], values: Array[Double]): Vector =
@@ -540,6 +550,7 @@ object Vectors {
 
 /**
  * A dense vector represented by a value array.
+  * 密集向量
  */
 @Since("1.0.0")
 @SQLUserDefinedType(udt = classOf[VectorUDT])
@@ -622,6 +633,7 @@ class DenseVector @Since("1.0.0") (
     new SparseVector(size, ii, vv)
   }
 
+  //最大元素值对应的向量索引位置
   @Since("1.5.0")
   override def argmax: Int = {
     if (size == 0) {
@@ -645,7 +657,9 @@ class DenseVector @Since("1.0.0") (
 @Since("1.3.0")
 object DenseVector {
 
-  /** Extracts the value array from a dense vector. */
+  /** Extracts the value array from a dense vector.
+    * 返回稀松向量中的元素数组集合
+    **/
   @Since("1.3.0")
   def unapply(dv: DenseVector): Option[Array[Double]] = Some(dv.values)
 }
@@ -656,13 +670,15 @@ object DenseVector {
  * @param size size of the vector.
  * @param indices index array, assume to be strictly increasing.
  * @param values value array, must have the same length as the index array.
+  * 稀疏向量
  */
 @Since("1.0.0")
 @SQLUserDefinedType(udt = classOf[VectorUDT])
 class SparseVector @Since("1.0.0") (
-    @Since("1.0.0") override val size: Int,
-    @Since("1.0.0") val indices: Array[Int],
-    @Since("1.0.0") val values: Array[Double]) extends Vector {
+    @Since("1.0.0") override val size: Int,//向量包含多少个元素,包含0的元素
+    @Since("1.0.0") val indices: Array[Int], //非0元素所在的索引位置
+    @Since("1.0.0") val values: Array[Double]) //真正非0的元素值
+   extends Vector {
 
   require(indices.length == values.length, "Sparse vectors require that the dimension of the" +
     s" indices match the dimension of the values. You provided ${indices.length} indices and " +
@@ -673,6 +689,7 @@ class SparseVector @Since("1.0.0") (
   override def toString: String =
     s"($size,${indices.mkString("[", ",", "]")},${values.mkString("[", ",", "]")})"
 
+  //返回全部向量内容,包括0的元素
   @Since("1.0.0")
   override def toArray: Array[Double] = {
     val data = new Array[Double](size)
@@ -692,6 +709,7 @@ class SparseVector @Since("1.0.0") (
 
   private[spark] override def toBreeze: BV[Double] = new BSV[Double](indices, values, size)
 
+  //真对有value的内容进行f函数处理
   private[spark] override def foreachActive(f: (Int, Double) => Unit) = {
     var i = 0
     val localValuesSize = values.length
@@ -726,9 +744,11 @@ class SparseVector @Since("1.0.0") (
     result
   }
 
+  //有value的数据长度
   @Since("1.4.0")
   override def numActives: Int = values.length
 
+  //非0的元素个数
   @Since("1.4.0")
   override def numNonzeros: Int = {
     var nnz = 0
@@ -742,8 +762,8 @@ class SparseVector @Since("1.0.0") (
 
   @Since("1.4.0")
   override def toSparse: SparseVector = {
-    val nnz = numNonzeros
-    if (nnz == numActives) {
+    val nnz = numNonzeros //非0的元素数量
+    if (nnz == numActives) {//说明所有有效的元素都是非0的
       this
     } else {
       val ii = new Array[Int](nnz)
@@ -766,24 +786,26 @@ class SparseVector @Since("1.0.0") (
       -1
     } else {
       // Find the max active entry.
+      //初始化最大的元素就是第一个元素
       var maxIdx = indices(0)
       var maxValue = values(0)
-      var maxJ = 0
-      var j = 1
-      val na = numActives
+      var maxJ = 0 //最大值在value集合中的索引位置
+
+      var j = 1//从1开始循环,循环所有有效的value
+      val na = numActives //所有活跃的value元素
       while (j < na) {
-        val v = values(j)
-        if (v > maxValue) {
-          maxValue = v
-          maxIdx = indices(j)
-          maxJ = j
+        val v = values(j)//获取该有效值
+        if (v > maxValue) {//说明该有效值此时最大
+          maxValue = v //设置最大值
+          maxIdx = indices(j) //设置最大值下标
+          maxJ = j //设置最大值在value集合中的索引位置
         }
         j += 1
       }
 
       // If the max active entry is nonpositive and there exists inactive ones, find the first zero.
-      if (maxValue <= 0.0 && na < size) {
-        if (maxValue == 0.0) {
+      if (maxValue <= 0.0 && na < size) {//说明最大的value是负数或者0,但是还有0的元素
+        if (maxValue == 0.0) {//说明最大值是0
           // If there exists an inactive entry before maxIdx, find it and return its index.
           if (maxJ < maxIdx) {
             var k = 0
@@ -831,6 +853,7 @@ class SparseVector @Since("1.0.0") (
   }
 }
 
+//返回元素个数、有值得元素位置索引,有值得元素数组
 @Since("1.3.0")
 object SparseVector {
   @Since("1.3.0")

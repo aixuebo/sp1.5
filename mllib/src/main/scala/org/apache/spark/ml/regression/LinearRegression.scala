@@ -146,13 +146,13 @@ class LinearRegression(override val uid: String)
             (summarizer1.merge(summarizer2), statCounter1.merge(statCounter2))
       })
 
-    val numFeatures = summarizer.mean.size
-    val yMean = statCounter.mean
-    val yStd = math.sqrt(statCounter.variance)
+    val numFeatures = summarizer.mean.size //特征数量
+    val yMean = statCounter.mean //标签的均值
+    val yStd = math.sqrt(statCounter.variance) //方差的开方,即标签的标准差
 
     // If the yStd is zero, then the intercept is yMean with zero weights;
     // as a result, training is not needed.
-    if (yStd == 0.0) {
+    if (yStd == 0.0) {//说明标准差是0,即没有说明太大变化,这个情况下比较少见,因此暂时先不看了
       logWarning(s"The standard deviation of the label is zero, so the weights will be zeros " +
         s"and the intercept will be the mean of the label; as a result, training is not needed.")
       if (handlePersistence) instances.unpersist()
@@ -169,8 +169,8 @@ class LinearRegression(override val uid: String)
       return copyValues(model.setSummary(trainingSummary))
     }
 
-    val featuresMean = summarizer.mean.toArray
-    val featuresStd = summarizer.variance.toArray.map(math.sqrt)
+    val featuresMean = summarizer.mean.toArray //特征的平均值
+    val featuresStd = summarizer.variance.toArray.map(math.sqrt) //特征的标准差
 
     // Since we implicitly do the feature scaling when we compute the cost function
     // to improve the convergence, the effective regParam will be changed.
@@ -178,6 +178,7 @@ class LinearRegression(override val uid: String)
     val effectiveL1RegParam = $(elasticNetParam) * effectiveRegParam
     val effectiveL2RegParam = (1.0 - $(elasticNetParam)) * effectiveRegParam
 
+    //计算价值函数
     val costFun = new LeastSquaresCostFun(instances, yStd, yMean, $(fitIntercept),
       $(standardization), featuresStd, featuresMean, effectiveL2RegParam)
 
@@ -307,6 +308,7 @@ class LinearRegressionModel private[ml] (
     new LinearRegressionSummary(predictionAndObservations, $(predictionCol), $(labelCol))
   }
 
+  //计算特征和权重向量的点积,然后与intercept相加,我猜测intercept应该是一个偏差估计值
   override protected def predict(features: Vector): Double = {
     dot(features, weights) + intercept
   }

@@ -94,6 +94,7 @@ private[spark] object BLAS extends Serializable with Logging {
 
   /**
    * dot(x, y)
+    * 计算两个向量的点积,即每一个相同下标位置的元素相乘 然后求和
    */
   def dot(x: Vector, y: Vector): Double = {
     require(x.size == y.size,

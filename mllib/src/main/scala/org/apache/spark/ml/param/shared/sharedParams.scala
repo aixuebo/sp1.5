@@ -30,6 +30,7 @@ private[ml] trait HasRegParam extends Params {
 
   /**
    * Param for regularization parameter (>= 0).
+    * 回归的属性列
    * @group param
    */
   final val regParam: DoubleParam = new DoubleParam(this, "regParam", "regularization parameter (>= 0)", ParamValidators.gtEq(0)) //校验条件是double的属性值,并且属性值>=0

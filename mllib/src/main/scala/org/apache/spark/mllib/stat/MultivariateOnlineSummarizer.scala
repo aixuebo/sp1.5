@@ -40,27 +40,30 @@ import org.apache.spark.mllib.linalg.{Vectors, Vector}
 @DeveloperApi
 class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with Serializable {
 
-  private var n = 0
-  private var currMean: Array[Double] = _
-  private var currM2n: Array[Double] = _
-  private var currM2: Array[Double] = _
-  private var currL1: Array[Double] = _
-  private var totalCnt: Long = 0
-  private var nnz: Array[Double] = _
-  private var currMax: Array[Double] = _
-  private var currMin: Array[Double] = _
+  private var n = 0 //每一个向量必须要有n个元素
 
+  //每一个向量元素的位置进行统计,即以下数组都是n个,每一个位置都表示一个元素的统计
+  private var currMean: Array[Double] = _ //该位置上每一个元素的平均值,只是计算非0元素的平均值
+  private var currM2n: Array[Double] = _ //该位置上每一个非0的元素进行运算,求和,(求当前值-未添加该值前的均值)*(求当前值-添加该值后的均值)之和
+  private var currM2: Array[Double] = _   //计算每一个位置上非0元素的平方和,比如一个元素是3,则此时该值就是9
+  private var currL1: Array[Double] = _ //计算每一个位置上非0元素的绝对值之和
+  private var nnz: Array[Double] = _ //该位置上非0元素的数量
+  private var currMax: Array[Double] = _ //该位置上最大的元素
+  private var currMin: Array[Double] = _ //该位置上最小的元素
+
+  private var totalCnt: Long = 0 //一共计算了多少个向量vector
   /**
    * Add a new sample to this summarizer, and update the statistical summary.
    *
    * @param sample The sample in dense/sparse vector format to be added into this summarizer.
    * @return This MultivariateOnlineSummarizer object.
+    * 添加一个新的向量进行统计
    */
   @Since("1.1.0")
   def add(sample: Vector): this.type = {
     if (n == 0) {
       require(sample.size > 0, s"Vector should have dimension larger than zero.")
-      n = sample.size
+      n = sample.size //向量元素数量
 
       currMean = Array.ofDim[Double](n)
       currM2n = Array.ofDim[Double](n)
@@ -71,6 +74,7 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
       currMin = Array.fill[Double](n)(Double.MaxValue)
     }
 
+    //要求所有的向量都有相同的元素数量
     require(n == sample.size, s"Dimensions mismatch when adding new sample." +
       s" Expecting $n but got ${sample.size}.")
 
@@ -82,7 +86,7 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
     val localCurrMax = currMax
     val localCurrMin = currMin
     sample.foreachActive { (index, value) =>
-      if (value != 0.0) {
+      if (value != 0.0) {//找到非0的元素
         if (localCurrMax(index) < value) {
           localCurrMax(index) = value
         }
@@ -90,9 +94,9 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
           localCurrMin(index) = value
         }
 
-        val prevMean = localCurrMean(index)
-        val diff = value - prevMean
-        localCurrMean(index) = prevMean + diff / (localNnz(index) + 1.0)
+        val prevMean = localCurrMean(index) //获取此时的均值
+        val diff = value - prevMean //此时值与均值的diff差
+        localCurrMean(index) = prevMean + diff / (localNnz(index) + 1.0) //计算平均值
         localCurrM2n(index) += (value - localCurrMean(index)) * diff
         localCurrM2(index) += value * value
         localCurrL1(index) += math.abs(value)
@@ -101,7 +105,7 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
       }
     }
 
-    totalCnt += 1
+    totalCnt += 1 //总向量数+1
     this
   }
 
@@ -111,10 +115,11 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
    *
    * @param other The other MultivariateOnlineSummarizer to be merged.
    * @return This MultivariateOnlineSummarizer object.
+    * 合并结果集
    */
   @Since("1.1.0")
   def merge(other: MultivariateOnlineSummarizer): this.type = {
-    if (this.totalCnt != 0 && other.totalCnt != 0) {
+    if (this.totalCnt != 0 && other.totalCnt != 0) {//两个元素都不是空的,进行真正的merge合并操作
       require(n == other.n, s"Dimensions mismatch when merging with another summarizer. " +
         s"Expecting $n but got ${other.n}.")
       totalCnt += other.totalCnt
@@ -140,7 +145,7 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
         nnz(i) = totalNnz
         i += 1
       }
-    } else if (totalCnt == 0 && other.totalCnt != 0) {
+    } else if (totalCnt == 0 && other.totalCnt != 0) {//返回other
       this.n = other.n
       this.currMean = other.currMean.clone()
       this.currM2n = other.currM2n.clone()
@@ -151,19 +156,19 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
       this.currMax = other.currMax.clone()
       this.currMin = other.currMin.clone()
     }
-    this
+    this //返回本身
   }
 
   /**
    * Sample mean of each dimension.
-   *
+   * 计算全部元素值,包含0的,此时的均值
    */
   @Since("1.1.0")
   override def mean: Vector = {
     require(totalCnt > 0, s"Nothing has been added to this summarizer.")
 
     val realMean = Array.ofDim[Double](n)
-    var i = 0
+    var i = 0 //计算到哪一列属性了
     while (i < n) {
       realMean(i) = currMean(i) * (nnz(i) / totalCnt)
       i += 1
@@ -173,7 +178,7 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
 
   /**
    * Sample variance of each dimension.
-   *
+   * 计算方差
    */
   @Since("1.1.0")
   override def variance: Vector = {
@@ -185,9 +190,9 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
 
     // Sample variance is computed, if the denominator is less than 0, the variance is just 0.
     if (denominator > 0.0) {
-      val deltaMean = currMean
+      val deltaMean = currMean //该位置上每一个元素的平均值,只是计算非0元素的平均值
       var i = 0
-      val len = currM2n.length
+      val len = currM2n.length //该位置上每一个非0的元素进行运算,求和,(求当前值-未添加该值前的均值)*(求当前值-添加该值后的均值)之和
       while (i < len) {
         realVariance(i) =
           currM2n(i) + deltaMean(i) * deltaMean(i) * nnz(i) * (totalCnt - nnz(i)) / totalCnt
@@ -200,13 +205,14 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
 
   /**
    * Sample size.
-   *
+    * 计算的向量样本数量
    */
   @Since("1.1.0")
   override def count: Long = totalCnt
 
   /**
    * Number of nonzero elements in each dimension.
+    * 该向量表示每一个位置上非0元素的数量
    *
    */
   @Since("1.1.0")
@@ -218,12 +224,13 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
 
   /**
    * Maximum value of each dimension.
-   *
+   * 返回最大值组成的向量
    */
   @Since("1.1.0")
   override def max: Vector = {
     require(totalCnt > 0, s"Nothing has been added to this summarizer.")
 
+    //对最大值进行初始化,让其最大值至少也是0,即最大值不是负数
     var i = 0
     while (i < n) {
       if ((nnz(i) < totalCnt) && (currMax(i) < 0.0)) currMax(i) = 0.0
@@ -234,12 +241,14 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
 
   /**
    * Minimum value of each dimension.
+    * 返回最小值组成的向量
    *
    */
   @Since("1.1.0")
   override def min: Vector = {
     require(totalCnt > 0, s"Nothing has been added to this summarizer.")
 
+    //最小的值进行初始化,最小值也是0
     var i = 0
     while (i < n) {
       if ((nnz(i) < totalCnt) && (currMin(i) > 0.0)) currMin(i) = 0.0
@@ -250,7 +259,8 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
 
   /**
    * L2 (Euclidian) norm of each dimension.
-   *
+    * 第二种度量标准
+   * 每一个元素的平方和 然后开方
    */
   @Since("1.2.0")
   override def normL2: Vector = {
@@ -259,9 +269,9 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
     val realMagnitude = Array.ofDim[Double](n)
 
     var i = 0
-    val len = currM2.length
+    val len = currM2.length //计算每一个位置上非0元素的平方和,比如一个元素是3,则此时该值就是9
     while (i < len) {
-      realMagnitude(i) = math.sqrt(currM2(i))
+      realMagnitude(i) = math.sqrt(currM2(i)) //对数据进行开方
       i += 1
     }
     Vectors.dense(realMagnitude)
@@ -269,6 +279,8 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
 
   /**
    * L1 norm of each dimension.
+    * 第一种标准
+    * 计算每一个位置上非0元素的绝对值之和 组成的向量
    *
    */
   @Since("1.2.0")

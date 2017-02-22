@@ -22,18 +22,21 @@ import org.apache.spark.mllib.linalg.Vector
 
 /**
  * Trait for multivariate statistical summary of a data matrix.
+  * 参见MultivariateOnlineSummarizer实现类
  */
 @Since("1.0.0")
 trait MultivariateStatisticalSummary {
 
   /**
    * Sample mean vector.
+    * 计算向量每一个元素的平均值,以列为单位
    */
   @Since("1.0.0")
   def mean: Vector
 
   /**
    * Sample variance vector. Should return a zero vector if the sample size is 1.
+    * 计算向量的标准差
    */
   @Since("1.0.0")
   def variance: Vector
