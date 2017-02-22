@@ -295,7 +295,7 @@ object Vectors {
    * Creates a sparse vector using unordered (index, value) pairs.
    *
    * @param size vector size.
-   * @param elements vector elements in (index, value) pairs.
+   * @param elements vector elements in (index, value) pairs. 向量的第几个元素是非0,添加此集合
    */
   @Since("1.0.0")
   def sparse(size: Int, elements: Seq[(Int, Double)]): Vector = {
@@ -358,16 +358,17 @@ object Vectors {
 
   /**
    * Creates a vector instance from a breeze vector.
+   * 转换成向量
    */
   private[spark] def fromBreeze(breezeVector: BV[Double]): Vector = {
     breezeVector match {
-      case v: BDV[Double] =>
+      case v: BDV[Double] => //D说明是密集向量
         if (v.offset == 0 && v.stride == 1 && v.length == v.data.length) {
           new DenseVector(v.data)
         } else {
           new DenseVector(v.toArray)  // Can't use underlying array directly, so make a new one
         }
-      case v: BSV[Double] =>
+      case v: BSV[Double] => //S说明是稀松向量
         if (v.index.length == v.used) {
           new SparseVector(v.length, v.index, v.data)
         } else {

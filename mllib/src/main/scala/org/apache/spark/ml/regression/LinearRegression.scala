@@ -149,7 +149,6 @@ class LinearRegression(override val uid: String)
     val numFeatures = summarizer.mean.size //特征数量
     val yMean = statCounter.mean //标签的均值
     val yStd = math.sqrt(statCounter.variance) //方差的开方,即标签的标准差
-
     // If the yStd is zero, then the intercept is yMean with zero weights;
     // as a result, training is not needed.
     if (yStd == 0.0) {//说明标准差是0,即没有说明太大变化,这个情况下比较少见,因此暂时先不看了
@@ -264,15 +263,18 @@ class LinearRegression(override val uid: String)
 /**
  * :: Experimental ::
  * Model produced by [[LinearRegression]].
+ * 模型,即已经产生了一个模型,带入特征数据就可以得到结果
+ * 因此主要的方法是transform(dataset),对数据集进行转换
  */
 @Experimental
 class LinearRegressionModel private[ml] (
     override val uid: String,
-    val weights: Vector,
+    val weights: Vector,//特征向量对应的权重
     val intercept: Double)
   extends RegressionModel[Vector, LinearRegressionModel]
   with LinearRegressionParams {
 
+  //预测结果
   private var trainingSummary: Option[LinearRegressionTrainingSummary] = None
 
   /**
@@ -297,6 +299,7 @@ class LinearRegressionModel private[ml] (
 
   /**
    * Evaluates the model on a testset.
+   * 在测试集合上评估模型
    * @param dataset Test dataset to evaluate model on.
    */
   // TODO: decide on a good name before exposing to public API
@@ -325,13 +328,14 @@ class LinearRegressionModel private[ml] (
  * Linear regression training results.
  * @param predictions predictions outputted by the model's `transform` method.
  * @param objectiveHistory objective function (scaled loss + regularization) at each iteration.
+ * 对现有数据 根据存在的模型运算预估值,并且可以知道残差
  */
 @Experimental
 class LinearRegressionTrainingSummary private[regression] (
-    predictions: DataFrame,
-    predictionCol: String,
-    labelCol: String,
-    val featuresCol: String,
+    predictions: DataFrame,//预测后的数据,里面已经存在预测值了
+    predictionCol: String,//预测的值输出在哪一列上
+    labelCol: String,//真正的标签列
+    val featuresCol: String,//特征列
     val objectiveHistory: Array[Double])
   extends LinearRegressionSummary(predictions, predictionCol, labelCol) {
 
@@ -347,9 +351,10 @@ class LinearRegressionTrainingSummary private[regression] (
  */
 @Experimental
 class LinearRegressionSummary private[regression] (
-    @transient val predictions: DataFrame,
-    val predictionCol: String,
-    val labelCol: String) extends Serializable {
+    @transient val predictions: DataFrame,//预测后的结果集,里面已经存在预测值了
+    val predictionCol: String,//预测的列
+    val labelCol: String) // 真正的标签列
+    extends Serializable {
 
   @transient private val metrics = new RegressionMetrics(
     predictions
@@ -387,7 +392,9 @@ class LinearRegressionSummary private[regression] (
    */
   val r2: Double = metrics.r2
 
-  /** Residuals (label - predicted value) */
+  /** Residuals (label - predicted value)
+    * 计算残差,就是label与预测的值的差
+    **/
   @transient lazy val residuals: DataFrame = {
     val t = udf { (pred: Double, label: Double) => label - pred }
     predictions.select(t(col(predictionCol), col(labelCol)).as("residuals"))
@@ -489,18 +496,22 @@ class LinearRegressionSummary private[regression] (
  * @param featuresMean The mean values of the features.
  */
 private class LeastSquaresAggregator(
-    weights: Vector,
-    labelStd: Double,
-    labelMean: Double,
-    fitIntercept: Boolean,
-    featuresStd: Array[Double],
-    featuresMean: Array[Double]) extends Serializable {
+    weights: Vector,//权重向量
+    labelStd: Double,//标签的标准差
+    labelMean: Double,//标签的均值
+    fitIntercept: Boolean,//设置的属性值
+    featuresStd: Array[Double],//特征的标准差
+    featuresMean: Array[Double]) //特征的均值
+    extends Serializable {
 
-  private var totalCnt: Long = 0L
+  private var totalCnt: Long = 0L //总条数
   private var lossSum = 0.0
 
-  private val (effectiveWeightsArray: Array[Double], offset: Double, dim: Int) = {
-    val weightsArray = weights.toArray.clone()
+  //定义三个属性,并且赋值
+  private val (effectiveWeightsArray: Array[Double],//最终的权重数组
+    offset: Double,
+    dim: Int) = { //权重有多少维
+    val weightsArray = weights.toArray.clone() //权重数组
     var sum = 0.0
     var i = 0
     val len = weightsArray.length
@@ -528,6 +539,7 @@ private class LeastSquaresAggregator(
    * @param data The features for one data point in dense/sparse vector format to be added
    *             into this aggregator.
    * @return This LeastSquaresAggregator object.
+   * 添加一个标签以及特征向量
    */
   def add(label: Double, data: Vector): this.type = {
     require(dim == data.size, s"Dimensions mismatch when adding new sample." +
@@ -576,7 +588,7 @@ private class LeastSquaresAggregator(
     this
   }
 
-  def count: Long = totalCnt
+  def count: Long = totalCnt //总条数
 
   def loss: Double = lossSum / totalCnt
 
@@ -593,18 +605,20 @@ private class LeastSquaresAggregator(
  * It's used in Breeze's convex optimization routines.
  */
 private class LeastSquaresCostFun(
-    data: RDD[(Double, Vector)],
-    labelStd: Double,
-    labelMean: Double,
-    fitIntercept: Boolean,
-    standardization: Boolean,
-    featuresStd: Array[Double],
-    featuresMean: Array[Double],
-    effectiveL2regParam: Double) extends DiffFunction[BDV[Double]] {
+    data: RDD[(Double, Vector)],//标签和特征向量组成的集合
+    labelStd: Double,//标签的标准差
+    labelMean: Double,//标签的均值
+    fitIntercept: Boolean,//设置的参数值
+    standardization: Boolean,//设置的参数值
+    featuresStd: Array[Double],//特征的标准差
+    featuresMean: Array[Double],//特征的均值
+    effectiveL2regParam: Double) //设置的参数值
+    extends DiffFunction[BDV[Double]] {
 
   override def calculate(weights: BDV[Double]): (Double, BDV[Double]) = {
-    val w = Vectors.fromBreeze(weights)
+    val w = Vectors.fromBreeze(weights) //将权重转换成向量
 
+    //对数据集合进行处理
     val leastSquaresAggregator = data.treeAggregate(new LeastSquaresAggregator(w, labelStd,
       labelMean, fitIntercept, featuresStd, featuresMean))(
         seqOp = (c, v) => (c, v) match {

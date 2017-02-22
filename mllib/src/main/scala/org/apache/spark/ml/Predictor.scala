@@ -167,6 +167,7 @@ abstract class PredictionModel[FeaturesType, M <: PredictionModel[FeaturesType, 
    *
    * @param dataset input dataset
    * @return transformed dataset with [[predictionCol]] of type [[Double]]
+   * 对数据集进行转换
    */
   override def transform(dataset: DataFrame): DataFrame = {
     transformSchema(dataset.schema, logging = true)
@@ -179,10 +180,14 @@ abstract class PredictionModel[FeaturesType, M <: PredictionModel[FeaturesType, 
     }
   }
 
+  //对数据集进行转换
   protected def transformImpl(dataset: DataFrame): DataFrame = {
+    //通过特征向量进行预测
     val predictUDF = udf { (features: Any) =>
       predict(features.asInstanceOf[FeaturesType])
     }
+
+    //col($(featuresCol) 增加一个预测列,该类的值是预测值
     dataset.withColumn($(predictionCol), predictUDF(col($(featuresCol))))
   }
 

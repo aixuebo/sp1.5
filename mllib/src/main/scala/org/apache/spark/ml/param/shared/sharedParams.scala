@@ -63,6 +63,7 @@ private[ml] trait HasFeaturesCol extends Params {
 
   /**
    * Param for features column name.
+   * 特征列
    * @group param
    */
   final val featuresCol: Param[String] = new Param[String](this, "featuresCol", "features column name") //字符串属性
@@ -98,7 +99,7 @@ private[ml] trait HasPredictionCol extends Params {
 
   /**
    * Param for prediction column name.
-    * 预言列
+    * 预言列--即模型预测后输出在哪一列中
    * @group param
    */
   final val predictionCol: Param[String] = new Param[String](this, "predictionCol", "prediction column name") //字符串属性
