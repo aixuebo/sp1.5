@@ -67,7 +67,7 @@ case class UnresolvedAttribute(nameParts: Seq[String]) extends Attribute with Un
   override def withQualifiers(newQualifiers: Seq[String]): UnresolvedAttribute = this
   override def withName(newName: String): UnresolvedAttribute = UnresolvedAttribute.quoted(newName)
 
-  override def toString: String = s"'$name"
+  override def toString: String = s"'$name" //属性全名
 }
 
 //表示属性名字  name或者name.name.name的方式确定一个属性

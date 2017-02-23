@@ -111,6 +111,7 @@ case class Cast(child: Expression, dataType: DataType)
 
   override def toString: String = s"cast($child as ${dataType.simpleString})"
 
+  //检查数据类型是否可以转换
   override def checkInputDataTypes(): TypeCheckResult = {
     if (Cast.canCast(child.dataType, dataType)) {
       TypeCheckResult.TypeCheckSuccess

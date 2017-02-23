@@ -82,7 +82,9 @@ abstract class Expression extends TreeNode[Expression] {
 
   def references: AttributeSet = AttributeSet(children.flatMap(_.references.iterator))
 
-  /** Returns the result of evaluating this expression on a given input Row */
+  /** Returns the result of evaluating this expression on a given input Row
+    * 给定一行内容,计算该表达式,返回一个结果,即执行表达式
+    **/
   def eval(input: InternalRow = null): Any
 
   /**
