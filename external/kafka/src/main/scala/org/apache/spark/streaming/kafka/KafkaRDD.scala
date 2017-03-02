@@ -41,6 +41,13 @@ import kafka.utils.VerifiableProperties
  * with Kafka broker(s) specified in host1:port1,host2:port2 form.
  * @param offsetRanges offset ranges that define the Kafka data belonging to this RDD
  * @param messageHandler function for translating each message into the desired type
+ *
+ * kafka上的信息已经全部都有了,只是做简单的RDD的partition切分即可
+ * 即已经知道了每一个topic-partition对应的leader节点在哪里,即leaders
+ * 也知道了要分多少个partition,每一个partition获取的offset区间,即offsetRanges
+ *
+ *
+ * 该类用于DirectKafkaInputDStream方式直接读取kafka数据
  */
 private[kafka]
 class KafkaRDD[

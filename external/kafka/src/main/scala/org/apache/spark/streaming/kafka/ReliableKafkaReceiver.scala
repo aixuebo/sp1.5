@@ -52,6 +52,8 @@ import org.apache.spark.util.ThreadUtils
  * will not take effect.
  * 表示一个可靠的kafka接收器
  *
+ * DirectKafkaInputDStream类是读取kafka的数据,每一个RDD去kafka指定offset位置读取数据内容,定期执行上一次offset位置和最新位置之间的差就是每一个RDD的partition去读取数据的内容,因此该类需要操作kafka的好多底层API,因此该类使用KafkaRDD处理数据
+ * 而ReliableKafkaReceiver 这种是创建一个流,时刻接收kafaka的数据,然后存储到HDFS上,定期从HDFS上给spark streaming数据,不使用KafkaRDD处理数据
  */
 private[streaming]
 class ReliableKafkaReceiver[
@@ -284,7 +286,6 @@ class ReliableKafkaReceiver[
 
   /** Class to handle received Kafka message.
     * 处理一个线程对应的kafka partition的数据流
-    *
     **/
   private final class MessageHandler(stream: KafkaStream[K, V]) extends Runnable {
     override def run(): Unit = {

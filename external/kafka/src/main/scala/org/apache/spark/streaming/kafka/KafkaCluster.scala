@@ -42,7 +42,7 @@ class KafkaCluster(val kafkaParams: Map[String, String]) //参数是kafka的参�
   extends Serializable {
   import KafkaCluster.{Err, LeaderOffset, SimpleConsumerConfig}
 
-  // ConsumerConfig isn't serializable
+  // ConsumerConfig isn't serializable 该对象不需要进行序列化
   @transient private var _config: SimpleConsumerConfig = null //对kafka的ConsumerConfig对象进行简单封装
 
   def config: SimpleConsumerConfig = this.synchronized {
@@ -52,9 +52,12 @@ class KafkaCluster(val kafkaParams: Map[String, String]) //参数是kafka的参�
     _config
   }
 
+  //连接一个broker,broker的地址是host:port,连接的客户端id是config.clientId,默认是group组名字
   def connect(host: String, port: Int): SimpleConsumer =
-    new SimpleConsumer(host, port, config.socketTimeoutMs,
-      config.socketReceiveBufferBytes, config.clientId)
+    new SimpleConsumer(host, port,
+      config.socketTimeoutMs,//设置超时时间
+      config.socketReceiveBufferBytes,//设置buffer
+      config.clientId)
 
   //连接topic-partition的leader节点
   def connectLeader(topic: String, partition: Int): Either[Err, SimpleConsumer] =
@@ -157,6 +160,7 @@ class KafkaCluster(val kafkaParams: Map[String, String]) //参数是kafka的参�
     ): Either[Err, Map[TopicAndPartition, LeaderOffset]] =
     getLeaderOffsets(topicAndPartitions, OffsetRequest.LatestTime)
 
+  //获取leader节点最老的offset序号
   def getEarliestLeaderOffsets(
       topicAndPartitions: Set[TopicAndPartition]
     ): Either[Err, Map[TopicAndPartition, LeaderOffset]] =
@@ -390,8 +394,8 @@ object KafkaCluster {
     **/
   def checkErrors[T](result: Either[Err, T]): T = {
     result.fold(
-      errs => throw new SparkException(errs.mkString("\n")),
-      ok => ok
+      errs => throw new SparkException(errs.mkString("\n")),//输出异常集合
+      ok => ok //返回右边的对象T
     )
   }
 
@@ -438,6 +442,7 @@ object KafkaCluster {
         }
       }
 
+      //如果没有设置以下两个属性,则设置空为默认值
       Seq("zookeeper.connect", "group.id").foreach { s =>
         if (!props.containsKey(s)) {
           props.setProperty(s, "")

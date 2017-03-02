@@ -42,6 +42,7 @@ public enum SaveMode {
    * an exception is expected to be thrown.
    *
    * @since 1.3.0
+   * 如果table存在,则不能保存到该table内,则抛异常
    */
   ErrorIfExists,
   /**

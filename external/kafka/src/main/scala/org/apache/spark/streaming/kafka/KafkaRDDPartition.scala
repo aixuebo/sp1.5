@@ -28,8 +28,8 @@ import org.apache.spark.Partition
   */
 private[kafka]
 class KafkaRDDPartition(
-  val index: Int,
-  val topic: String,
+  val index: Int,//该rdd的数据对应的partition序号
+  val topic: String,//该rdd的数据出自哪个topic-partition以及从什么序号开始读取到什么序号是属于该partition的范畴
   val partition: Int,
   val fromOffset: Long,
   val untilOffset: Long,

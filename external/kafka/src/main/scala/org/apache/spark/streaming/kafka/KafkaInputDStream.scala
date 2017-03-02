@@ -42,6 +42,13 @@ import org.apache.spark.util.ThreadUtils
  * in its own thread.
  * @param storageLevel RDD storage level.
  * 是实现了一个receiver
+ *
+ *
+ * 泛型初始化 demo :createStream[String, String, StringDecoder, StringDecoder](参数集合),这样就初始化泛型类型了
+ *
+ *
+ * DirectKafkaInputDStream类是读取kafka的数据,每一个RDD去kafka指定offset位置读取数据内容,定期执行上一次offset位置和最新位置之间的差就是每一个RDD的partition去读取数据的内容,因此该类需要操作kafka的好多底层API,因此该类使用KafkaRDD处理数据
+ * 而ReliableKafkaReceiver 这种是创建一个流,时刻接收kafaka的数据,然后存储到HDFS上,定期从HDFS上给spark streaming数据,不使用KafkaRDD处理数据
  */
 private[streaming]
 class KafkaInputDStream[

@@ -32,14 +32,14 @@ class DStreamCheckpointData[T: ClassTag] (dstream: DStream[T])
   protected val data = new HashMap[Time, AnyRef]()
 
   // Mapping of the batch time to the checkpointed RDD file of that time
-  //¼ÇÂ¼ËùÓĞµÄÃ¿¸öÊ±¼äµãRDD¶ÔÓ¦µÄCheckpointFileÎÄ¼şÓ³Éä,ÊÇcurrentCheckpointFilesµÄ½á¹û¼¯
+  //è®°å½•æ‰€æœ‰çš„æ¯ä¸ªæ—¶é—´ç‚¹RDDå¯¹åº”çš„CheckpointFileæ–‡ä»¶æ˜ å°„,æ˜¯currentCheckpointFilesçš„ç»“æœé›†
   @transient private var timeToCheckpointFile = new HashMap[Time, String]
   // Mapping of the batch time to the time of the oldest checkpointed RDD
   // in that batch's checkpoint data
-  @transient private var timeToOldestCheckpointFileTime = new HashMap[Time, Time] //¼ÇÂ¼keyÊÇupdateµÄÊ±¼ä,valueÊÇ´ËÊ±ËùÓĞµÄRDDÖĞ×îĞ¡µÄÊ±¼äµãÊÇÄÄ¸öÊ±¼ä
+  @transient private var timeToOldestCheckpointFileTime = new HashMap[Time, Time] //è®°å½•keyæ˜¯updateçš„æ—¶é—´,valueæ˜¯æ­¤æ—¶æ‰€æœ‰çš„RDDä¸­æœ€å°çš„æ—¶é—´ç‚¹æ˜¯å“ªä¸ªæ—¶é—´
 
   @transient private var fileSystem : FileSystem = null
-  protected[streaming] def currentCheckpointFiles = data.asInstanceOf[HashMap[Time, String]] //Ã¿¸öÊ±¼äµãRDD¶ÔÓ¦µÄCheckpointFileÎÄ¼şÓ³Éä
+  protected[streaming] def currentCheckpointFiles = data.asInstanceOf[HashMap[Time, String]] //æ¯ä¸ªæ—¶é—´ç‚¹RDDå¯¹åº”çš„CheckpointFileæ–‡ä»¶æ˜ å°„
 
   /**
    * Updates the checkpoint data of the DStream. This gets called every time
@@ -49,19 +49,19 @@ class DStreamCheckpointData[T: ClassTag] (dstream: DStream[T])
   def update(time: Time) {
 
     // Get the checkpointed RDDs from the generated RDDs
-    val checkpointFiles = dstream.generatedRDDs.filter(_._2.getCheckpointFile.isDefined) //¹ıÂË±£´æµÄRDDÖĞÓĞCheckpointFileÎÄ¼şµÄRDD
-                                       .map(x => (x._1, x._2.getCheckpointFile.get))//»ñÈ¡¶ÔÓ¦µÄÊ±¼äµãÒÔ¼°CheckpointFileÎÄ¼ş
+    val checkpointFiles = dstream.generatedRDDs.filter(_._2.getCheckpointFile.isDefined) //è¿‡æ»¤ä¿å­˜çš„RDDä¸­æœ‰CheckpointFileæ–‡ä»¶çš„RDD
+      .map(x => (x._1, x._2.getCheckpointFile.get))//è·å–å¯¹åº”çš„æ—¶é—´ç‚¹ä»¥åŠCheckpointFileæ–‡ä»¶
     logDebug("Current checkpoint files:\n" + checkpointFiles.toSeq.mkString("\n"))
 
     // Add the checkpoint files to the data to be serialized
-    if (!checkpointFiles.isEmpty) {//ËµÃ÷ÓĞÄÚÈİ
+    if (!checkpointFiles.isEmpty) {//è¯´æ˜æœ‰å†…å®¹
       currentCheckpointFiles.clear()
       currentCheckpointFiles ++= checkpointFiles
       // Add the current checkpoint files to the map of all checkpoint files
       // This will be used to delete old checkpoint files
       timeToCheckpointFile ++= currentCheckpointFiles
       // Remember the time of the oldest checkpoint RDD in current state
-      timeToOldestCheckpointFileTime(time) = currentCheckpointFiles.keys.min(Time.ordering) //currentCheckpointFiles.keys.min(Time.ordering) »ñÈ¡×îĞ¡µÄRDD¶ÔÓ¦µÄÊ±¼äµã
+      timeToOldestCheckpointFileTime(time) = currentCheckpointFiles.keys.min(Time.ordering) //currentCheckpointFiles.keys.min(Time.ordering) è·å–æœ€å°çš„RDDå¯¹åº”çš„æ—¶é—´ç‚¹
     }
   }
 
@@ -72,18 +72,18 @@ class DStreamCheckpointData[T: ClassTag] (dstream: DStream[T])
   def cleanup(time: Time) {
     // Get the time of the oldest checkpointed RDD that was written as part of the
     // checkpoint of `time`
-    timeToOldestCheckpointFileTime.remove(time) match {//»ñÈ¡¸ÃÊ±¼äµãÖĞ×îĞ¡µÄRDD¶ÔÓ¦µÄÊ±¼äµã
+    timeToOldestCheckpointFileTime.remove(time) match {//è·å–è¯¥æ—¶é—´ç‚¹ä¸­æœ€å°çš„RDDå¯¹åº”çš„æ—¶é—´ç‚¹
       case Some(lastCheckpointFileTime) =>
         // Find all the checkpointed RDDs (i.e. files) that are older than `lastCheckpointFileTime`
         // This is because checkpointed RDDs older than this are not going to be needed
         // even after master fails, as the checkpoint data of `time` does not refer to those files
-        val filesToDelete = timeToCheckpointFile.filter(_._1 < lastCheckpointFileTime) //ÒªÉ¾³ıµÄÎÄ¼ş
+        val filesToDelete = timeToCheckpointFile.filter(_._1 < lastCheckpointFileTime) //è¦åˆ é™¤çš„æ–‡ä»¶
         logDebug("Files to delete:\n" + filesToDelete.mkString(","))
         filesToDelete.foreach {
           case (time, file) =>
             try {
               val path = new Path(file)
-              if (fileSystem == null) {//ÕæÕıÈ¥É¾³ıÕâĞ©ÎÄ¼ş,ÕâĞ©ÎÄ¼ş¶¼ÊÇRDDÎÄ¼ş
+              if (fileSystem == null) {//çœŸæ­£å»åˆ é™¤è¿™äº›æ–‡ä»¶,è¿™äº›æ–‡ä»¶éƒ½æ˜¯RDDæ–‡ä»¶
                 fileSystem = path.getFileSystem(dstream.ssc.sparkContext.hadoopConfiguration)
               }
               fileSystem.delete(path, true)
@@ -104,7 +104,7 @@ class DStreamCheckpointData[T: ClassTag] (dstream: DStream[T])
    * Restore the checkpoint data. This gets called once when the DStream graph
    * (along with its DStreams) are being restored from a graph checkpoint file.
    * Default implementation restores the RDDs from their checkpoint files.
-   * ÖØĞÂ»Ö¸´´ËÊ±generatedRDDsµÄÄÚÈİ
+   * é‡æ–°æ¢å¤æ­¤æ—¶generatedRDDsçš„å†…å®¹
    */
   def restore() {
     // Create RDDs from the checkpoint data

@@ -37,7 +37,7 @@ trait HasOffsetRanges {
 /**
  * Represents a range of offsets from a single Kafka TopicAndPartition. Instances of this class
  * can be created with `OffsetRange.create()`.
- * 代表一个topic-partition的范围[fromOffset,untilOffset)
+ * 代表一个topic-partition的范围[fromOffset,untilOffset),这个范围内的数据集合
  * @param topic Kafka topic name
  * @param partition Kafka partition id
  * @param fromOffset Inclusive starting offset

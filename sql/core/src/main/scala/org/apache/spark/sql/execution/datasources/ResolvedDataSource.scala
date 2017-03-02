@@ -85,8 +85,8 @@ object ResolvedDataSource extends Logging {
   def apply(
       sqlContext: SQLContext,
       userSpecifiedSchema: Option[StructType],
-      partitionColumns: Array[String],
-      provider: String,//source
+      partitionColumns: Array[String],//partition的列的数组集合
+      provider: String,//source   json还是parquet还是orc等
       options: Map[String, String]) //额外配置中包含path路径属性
     : ResolvedDataSource = {
     val clazz: Class[_] = lookupDataSource(provider)//解析类
@@ -162,12 +162,13 @@ object ResolvedDataSource extends Logging {
   /** Create a [[ResolvedDataSource]] for saving the content of the given DataFrame. */
   def apply(
       sqlContext: SQLContext,
-      provider: String,
-      partitionColumns: Array[String],
+      provider: String,//json还是parquet还是orc等
+      partitionColumns: Array[String],//partition的列的数组集合
       mode: SaveMode,
-      options: Map[String, String],
-      data: DataFrame): ResolvedDataSource = {
-    if (data.schema.map(_.dataType).exists(_.isInstanceOf[CalendarIntervalType])) {
+      options: Map[String, String],//额外的配置信息集合
+      data: DataFrame) //数据集合
+      : ResolvedDataSource = {
+    if (data.schema.map(_.dataType).exists(_.isInstanceOf[CalendarIntervalType])) {//不支持保存时间类型,因为时间类型是spark sql自己支持的类型,外界不支持
       throw new AnalysisException("Cannot save interval data type into external storage.")
     }
     val clazz: Class[_] = lookupDataSource(provider)

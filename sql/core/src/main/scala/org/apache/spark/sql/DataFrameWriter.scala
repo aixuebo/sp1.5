@@ -85,7 +85,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
 
   /**
    * Adds an output option for the underlying data source.
-   *
+   * 额外的属性信息集合
    * @since 1.4.0
    */
   def option(key: String, value: String): DataFrameWriter = {
@@ -118,7 +118,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    * laid out on the file system similar to Hive's partitioning scheme.
    *
    * This is only applicable for Parquet at the moment.
-   *
+   * 通过哪些列集合进行partition分组
    * @since 1.4.0
    */
   @scala.annotation.varargs
@@ -146,7 +146,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
     ResolvedDataSource(
       df.sqlContext,
       source,
-      partitioningColumns.map(_.toArray).getOrElse(Array.empty[String]),
+      partitioningColumns.map(_.toArray).getOrElse(Array.empty[String]),//将partition的列的Seq集合转换成数组,如果没有列的话,则返回空数组.即此时就是partition的列的数组集合
       mode,
       extraOptions.toMap,
       df)
@@ -165,7 +165,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
   }
 
   private def insertInto(tableIdent: TableIdentifier): Unit = {
-    val partitions = partitioningColumns.map(_.map(col => col -> (None: Option[String])).toMap)
+    val partitions = partitioningColumns.map(_.map(col => col -> (None: Option[String])).toMap)//因为partitioningColumns是Seq对象,因此对该对象进行map,每一个列创建一个Map集合,即属性=value
     val overwrite = mode == SaveMode.Overwrite
     df.sqlContext.executePlan(
       InsertIntoTable(
@@ -242,6 +242,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    * @param connectionProperties JDBC database connection arguments, a list of arbitrary string
    *                             tag/value. Normally at least a "user" and "password" property
    *                             should be included.
+   * 保存df的数据到jdbc数据库中
    */
   def jdbc(url: String, table: String, connectionProperties: Properties): Unit = {
     val props = new Properties()
@@ -249,11 +250,11 @@ final class DataFrameWriter private[sql](df: DataFrame) {
       props.put(key, value)
     }
     // connectionProperties should override settings in extraOptions
-    props.putAll(connectionProperties)
+    props.putAll(connectionProperties) //connectionProperties 可以覆盖存在的属性
     val conn = JdbcUtils.createConnection(url, props)
 
     try {
-      var tableExists = JdbcUtils.tableExists(conn, table)
+      var tableExists = JdbcUtils.tableExists(conn, table) //判断table是否存在
 
       if (mode == SaveMode.Ignore && tableExists) {
         return
@@ -269,6 +270,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
       }
 
       // Create the table if the table didn't exist.
+      //说明table不存在,则创建该table
       if (!tableExists) {
         val schema = JdbcUtils.schemaString(df, url)
         val sql = s"CREATE TABLE $table ($schema)"
@@ -278,6 +280,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
       conn.close()
     }
 
+    //保存df的数据到table中
     JdbcUtils.saveTable(df, url, table, props)
   }
 
@@ -323,8 +326,8 @@ final class DataFrameWriter private[sql](df: DataFrame) {
 
   private var mode: SaveMode = SaveMode.ErrorIfExists
 
-  private var extraOptions = new scala.collection.mutable.HashMap[String, String]
+  private var extraOptions = new scala.collection.mutable.HashMap[String, String] //额外的键值对集合
 
-  private var partitioningColumns: Option[Seq[String]] = None
+  private var partitioningColumns: Option[Seq[String]] = None //通过哪些列集合进行partition分组
 
 }

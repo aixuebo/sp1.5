@@ -430,16 +430,16 @@ object KafkaUtils {
       kafkaParams: Map[String, String],//kafka参数
       topics: Set[String] //要获取哪些topic集合
   ): InputDStream[(K, V)] = {//K和V表示提供的返回值类型
-    val messageHandler = (mmd: MessageAndMetadata[K, V]) => (mmd.key, mmd.message)
+    val messageHandler = (mmd: MessageAndMetadata[K, V]) => (mmd.key, mmd.message) //如何处理接收到的kafka信息,他将其转换成key,value的元组
     val kc = new KafkaCluster(kafkaParams)
     val reset = kafkaParams.get("auto.offset.reset").map(_.toLowerCase)
 
     val result = for {
-      topicPartitions <- kc.getPartitions(topics).right
-      leaderOffsets <- (if (reset == Some("smallest")) {
+      topicPartitions <- kc.getPartitions(topics).right //获取topic集合对应的partition集合
+      leaderOffsets <- (if (reset == Some("smallest")) {//获取leader节点最老的offset序号
         kc.getEarliestLeaderOffsets(topicPartitions)
       } else {
-        kc.getLatestLeaderOffsets(topicPartitions)
+        kc.getLatestLeaderOffsets(topicPartitions)//获取leader节点最新的offset序号
       }).right
     } yield {
       val fromOffsets = leaderOffsets.map { case (tp, lo) =>

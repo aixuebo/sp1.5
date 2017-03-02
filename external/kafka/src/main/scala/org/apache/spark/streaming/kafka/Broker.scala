@@ -22,6 +22,7 @@ import org.apache.spark.annotation.Experimental
 /**
  * Represents the host and port info for a Kafka broker.
  * Differs from the Kafka project's internal kafka.cluster.Broker, which contains a server ID.
+ * 一个host和port代表一个broker
  */
 final class Broker private(
     /** Broker's hostname */
