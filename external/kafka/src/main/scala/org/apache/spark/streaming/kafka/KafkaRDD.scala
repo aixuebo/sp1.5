@@ -138,14 +138,15 @@ class KafkaRDD[
     s"for topic ${part.topic} partition ${part.partition} start ${part.fromOffset}." +
     " This should not happen, and indicates a message may have been skipped"
 
+  //真正去kafka上读取属于该partition的offset数据内容
   override def compute(thePart: Partition, context: TaskContext): Iterator[R] = {
     val part = thePart.asInstanceOf[KafkaRDDPartition]
     assert(part.fromOffset <= part.untilOffset, errBeginAfterEnd(part))
-    if (part.fromOffset == part.untilOffset) {
+    if (part.fromOffset == part.untilOffset) {//开始位置和结束位置相同,说明不需要抓取该topic-partition数据
       log.info(s"Beginning offset ${part.fromOffset} is the same as ending offset " +
         s"skipping ${part.topic} ${part.partition}")
       Iterator.empty
-    } else {
+    } else {//返回数据
       new KafkaRDDIterator(part, context)
     }
   }
@@ -188,6 +189,7 @@ class KafkaRDD[
       }
     }
 
+    //处理抓取kafka数据时候的异常
     private def handleFetchErr(resp: FetchResponse) {
       if (resp.hasError) {//说明抓去的结果有异常
         val err = resp.errorCode(part.topic, part.partition)
@@ -223,11 +225,11 @@ class KafkaRDD[
     }
 
     override def getNext(): R = {
-      if (iter == null || !iter.hasNext) {
+      if (iter == null || !iter.hasNext) {//说明要进行kafka的抓取数据操作
         iter = fetchBatch
       }
-      if (!iter.hasNext) {
-        assert(requestOffset == part.untilOffset, errRanOutBeforeEnd(part))
+      if (!iter.hasNext) {//说明抓取后依然没有数据,则停止抓取,完成操作
+        assert(requestOffset == part.untilOffset, errRanOutBeforeEnd(part)) //校验是否处理完成,即处理的数据是否是应该处理的partition的范围截止为止
         finished = true
         null.asInstanceOf[R]
       } else {
