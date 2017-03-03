@@ -319,7 +319,7 @@ class KafkaCluster(val kafkaParams: Map[String, String]) //参数是kafka的参�
 
   def setConsumerOffsets(
       groupId: String,
-      offsets: Map[TopicAndPartition, Long],
+      offsets: Map[TopicAndPartition, Long],//要修改的每一个topic-partition 消费到哪一个offset了
       consumerApiVersion: Short
     ): Either[Err, Map[TopicAndPartition, Short]] = {
     val meta = offsets.map { kv =>
@@ -340,17 +340,17 @@ class KafkaCluster(val kafkaParams: Map[String, String]) //参数是kafka的参�
       metadata: Map[TopicAndPartition, OffsetAndMetadata],
       consumerApiVersion: Short
     ): Either[Err, Map[TopicAndPartition, Short]] = {
-    var result = Map[TopicAndPartition, Short]()
+    var result = Map[TopicAndPartition, Short]()//返回正常的结果集合
     val req = OffsetCommitRequest(groupId, metadata, consumerApiVersion)
-    val errs = new Err
+    val errs = new Err //错误的信息集合
     val topicAndPartitions = metadata.keySet
-    withBrokers(Random.shuffle(config.seedBrokers), errs) { consumer =>
-      val resp = consumer.commitOffsets(req)
-      val respMap = resp.commitStatus
+    withBrokers(Random.shuffle(config.seedBrokers), errs) { consumer => //连接一个broker节点
+      val resp = consumer.commitOffsets(req) //提交修改offset的请求
+      val respMap = resp.commitStatus //返回值
       val needed = topicAndPartitions.diff(result.keySet)
       needed.foreach { tp: TopicAndPartition =>
-        respMap.get(tp).foreach { err: Short =>
-          if (err == ErrorMapping.NoError) {
+        respMap.get(tp).foreach { err: Short => //获取该topic-partition的返回信息
+          if (err == ErrorMapping.NoError) {//返回错误码,0说明没有错误
             result += tp -> err
           } else {
             errs.append(ErrorMapping.exceptionFor(err))
@@ -363,7 +363,7 @@ class KafkaCluster(val kafkaParams: Map[String, String]) //参数是kafka的参�
     }
     val missing = topicAndPartitions.diff(result.keySet)
     errs.append(new SparkException(s"Couldn't set offsets for ${missing}"))
-    Left(errs)
+    Left(errs) //返回错误信息
   }
 
   // Try a call against potentially multiple brokers, accumulating errors
