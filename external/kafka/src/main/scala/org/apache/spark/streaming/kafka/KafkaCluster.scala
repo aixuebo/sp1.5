@@ -251,7 +251,9 @@ class KafkaCluster(val kafkaParams: Map[String, String]) //参数是kafka的参�
   // this 0 here indicates api version, in this case the original ZK backed api.
   private def defaultConsumerApiVersion: Short = 0
 
-  /** Requires Kafka >= 0.8.1.1 */
+  /** Requires Kafka >= 0.8.1.1
+    * 获取一个group下每一个topic-partition消费到哪个offset位置了
+    **/
   def getConsumerOffsets(
       groupId: String,
       topicAndPartitions: Set[TopicAndPartition]
@@ -270,7 +272,8 @@ class KafkaCluster(val kafkaParams: Map[String, String]) //参数是kafka的参�
     }
   }
 
-  /** Requires Kafka >= 0.8.1.1 */
+  /** Requires Kafka >= 0.8.1.1
+    **/
   def getConsumerOffsetMetadata(
       groupId: String,
       topicAndPartitions: Set[TopicAndPartition]
