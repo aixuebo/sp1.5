@@ -19,9 +19,10 @@ package org.apache.spark.sql.catalyst.util
 
 import org.apache.spark.unsafe.types.UTF8String
 
+//数字转换类,可以对不同进制之间进行数字转换
 object NumberConverter {
 
-  private val value = new Array[Byte](64)
+  private val value = new Array[Byte](64) //long类型的64位二进制数组
 
   /**
    * Divide x by m as if x is an unsigned 64-bit integer. Examples:
@@ -45,14 +46,14 @@ object NumberConverter {
 
   /**
    * Decode v into value[].
-   *
+   * 编码
    * @param v is treated as an unsigned 64-bit integer
    * @param radix must be between MIN_RADIX and MAX_RADIX
    */
   private def decode(v: Long, radix: Int): Unit = {
     var tmpV = v
-    java.util.Arrays.fill(value, 0.asInstanceOf[Byte])
-    var i = value.length - 1
+    java.util.Arrays.fill(value, 0.asInstanceOf[Byte]) //默认填充64个0
+    var i = value.length - 1 //一开始有64个位置可以填充值
     while (tmpV != 0) {
       val q = unsignedLongDiv(tmpV, radix)
       value(i) = (tmpV - q * radix).asInstanceOf[Byte]
@@ -64,7 +65,7 @@ object NumberConverter {
   /**
    * Convert value[] into a long. On overflow, return -1 (as mySQL does). If a
    * negative digit is found, ignore the suffix starting there.
-   *
+   * 解码
    * @param radix  must be between MIN_RADIX and MAX_RADIX
    * @param fromPos is the first element that should be conisdered
    * @return the result should be treated as an unsigned 64-bit integer.
@@ -121,6 +122,7 @@ object NumberConverter {
    * Convert numbers between different number bases. If toBase>0 the result is
    * unsigned, otherwise it is signed.
    * NB: This logic is borrowed from org.apache.hadoop.hive.ql.ud.UDFConv
+   * 不同的进制之间数字转换
    */
   def convert(n: Array[Byte] , fromBase: Int, toBase: Int ): UTF8String = {
     if (fromBase < Character.MIN_RADIX || fromBase > Character.MAX_RADIX
@@ -133,11 +135,12 @@ object NumberConverter {
       return null
     }
 
+    //判断第一个位置是否是正负号,第一个参数negative true表示是负号,first 表示第一个位置,如果是负数,因此该位置是1
     var (negative, first) = if (n(0) == '-') (true, 1) else (false, 0)
 
     // Copy the digits in the right side of the array
-    var i = 1
-    while (i <= n.length - first) {
+    var i = 1 //表示从第2个位置开始循环
+    while (i <= n.length - first) { //循环到最后一个位置
       value(value.length - i) = n(n.length - i)
       i += 1
     }

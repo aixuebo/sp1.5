@@ -137,6 +137,7 @@ protected[sql] object AnyDataType extends AbstractDataType {
 
 /**
  * An internal type used to represent everything that is not null, UDTs, arrays, structs, and maps.
+ * 原子类型,即非null,非自定义类型,非数组和map和structs类型就是原子类型
  */
 protected[sql] abstract class AtomicType extends DataType {
   private[sql] type InternalType

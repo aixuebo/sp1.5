@@ -29,24 +29,26 @@ import org.apache.spark.unsafe.types.UTF8String
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // This file defines expressions for string operations.
+//操作字符串的表达式集合
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 
 /**
  * An expression that concatenates multiple input strings into a single string.
  * If any input is null, concat returns null.
+ * 连接所有表达式的结果
  */
 case class Concat(children: Seq[Expression]) extends Expression with ImplicitCastInputTypes {
 
-  override def inputTypes: Seq[AbstractDataType] = Seq.fill(children.size)(StringType)
-  override def dataType: DataType = StringType
+  override def inputTypes: Seq[AbstractDataType] = Seq.fill(children.size)(StringType) //所有的参数表达式都是要返回String类型
+  override def dataType: DataType = StringType //输出是string类型
 
-  override def nullable: Boolean = children.exists(_.nullable)
-  override def foldable: Boolean = children.forall(_.foldable)
+  override def nullable: Boolean = children.exists(_.nullable) //存在一个null就返回true
+  override def foldable: Boolean = children.forall(_.foldable) //全部都是静态的,才返回true
 
   override def eval(input: InternalRow): Any = {
-    val inputs = children.map(_.eval(input).asInstanceOf[UTF8String])
-    UTF8String.concat(inputs : _*)
+    val inputs = children.map(_.eval(input).asInstanceOf[UTF8String]) //每一个表达式处理成一个字符串
+    UTF8String.concat(inputs : _*)//对字符串进行连接
   }
 
   override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
@@ -70,6 +72,7 @@ case class Concat(children: Seq[Expression]) extends Expression with ImplicitCas
  * using a given separator (the first child).
  *
  * Returns null if the separator is null. Otherwise, concat_ws skips all null values.
+ * 第一个表达式是分隔符,剩下的表达式是字符串,最终用分隔符拼接字符串
  */
 case class ConcatWs(children: Seq[Expression])
   extends Expression with ImplicitCastInputTypes with CodegenFallback {
@@ -80,24 +83,25 @@ case class ConcatWs(children: Seq[Expression])
 
   /** The 1st child (separator) is str, and rest are either str or array of str. */
   override def inputTypes: Seq[AbstractDataType] = {
-    val arrayOrStr = TypeCollection(ArrayType(StringType), StringType)
+    val arrayOrStr = TypeCollection(ArrayType(StringType), StringType)//参数是字符串或者字符串数组
     StringType +: Seq.fill(children.size - 1)(arrayOrStr)
   }
 
-  override def dataType: DataType = StringType
+  override def dataType: DataType = StringType //输出是String
 
   override def nullable: Boolean = children.head.nullable
   override def foldable: Boolean = children.forall(_.foldable)
 
+
   override def eval(input: InternalRow): Any = {
     val flatInputs = children.flatMap { child =>
-      child.eval(input) match {
+      child.eval(input) match { //每一个表达式进行结果输出,无论输出是String还是String数组,都是返回一个迭代器
         case s: UTF8String => Iterator(s)
         case arr: ArrayData => arr.toArray[UTF8String](StringType)
         case null => Iterator(null.asInstanceOf[UTF8String])
       }
     }
-    UTF8String.concatWs(flatInputs.head, flatInputs.tail : _*)
+    UTF8String.concatWs(flatInputs.head, flatInputs.tail : _*)//head是分隔符
   }
 
   override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
@@ -120,10 +124,11 @@ case class ConcatWs(children: Seq[Expression])
   }
 }
 
+//对字符串进行转换
 trait String2StringExpression extends ImplicitCastInputTypes {
-  self: UnaryExpression =>
+  self: UnaryExpression => //一元函数
 
-  def convert(v: UTF8String): UTF8String
+  def convert(v: UTF8String): UTF8String //字符串参数转换成字符串结果,子类实现该方法即可
 
   override def dataType: DataType = StringType
   override def inputTypes: Seq[DataType] = Seq(StringType)
@@ -163,11 +168,14 @@ case class Lower(child: Expression) extends UnaryExpression with String2StringEx
   }
 }
 
-/** A base trait for functions that compare two strings, returning a boolean. */
-trait StringPredicate extends Predicate with ImplicitCastInputTypes {
-  self: BinaryExpression =>
+/** A base trait for functions that compare two strings, returning a boolean.
+  * 比较两个参数,返回boolean类型
+  **/
+trait StringPredicate extends Predicate //返回boolean类型
+  with ImplicitCastInputTypes {
+  self: BinaryExpression => //二元函数
 
-  def compare(l: UTF8String, r: UTF8String): Boolean
+  def compare(l: UTF8String, r: UTF8String): Boolean //比较两个表达式,子类实现该函数即可
 
   override def inputTypes: Seq[DataType] = Seq(StringType, StringType)
 

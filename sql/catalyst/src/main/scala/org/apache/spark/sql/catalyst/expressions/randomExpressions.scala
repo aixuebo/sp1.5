@@ -31,6 +31,7 @@ import org.apache.spark.util.random.XORShiftRandom
  * StructType.
  *
  * Since this expression is stateful, it cannot be a case object.
+ * 表达式的不确定性--比如randomExpressions表达式专门产生随机数,因此肯定是不确定的表达式,每一次执行的结果都是不一样的,即就是不确定性
  */
 abstract class RDG extends LeafExpression with Nondeterministic {
 
@@ -42,23 +43,25 @@ abstract class RDG extends LeafExpression with Nondeterministic {
    */
   @transient protected var rng: XORShiftRandom = _
 
+  //初始化产生随机种子
   override protected def initInternal(): Unit = {
     rng = new XORShiftRandom(seed + TaskContext.getPartitionId)
   }
 
-  override def nullable: Boolean = false
+  override def nullable: Boolean = false //随机生成器不会产生null
 
-  override def dataType: DataType = DoubleType
+  override def dataType: DataType = DoubleType //返回类型是double
 }
 
 /** Generate a random column with i.i.d. uniformly distributed values in [0, 1). */
 case class Rand(seed: Long) extends RDG {
-  override protected def evalInternal(input: InternalRow): Double = rng.nextDouble()
+  override protected def evalInternal(input: InternalRow): Double = rng.nextDouble() //每次产生一个随机树
 
   def this() = this(Utils.random.nextLong())
 
+  //参数是种子表达式,即该表达式返回一个int类型的种子
   def this(seed: Expression) = this(seed match {
-    case IntegerLiteral(s) => s
+    case IntegerLiteral(s) => s //说明该表达式可以返回一个int类型的种子
     case _ => throw new AnalysisException("Input argument to rand must be an integer literal.")
   })
 

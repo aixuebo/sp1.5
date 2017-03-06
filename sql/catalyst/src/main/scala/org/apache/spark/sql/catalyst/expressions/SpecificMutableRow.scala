@@ -60,13 +60,16 @@ import org.apache.spark.unsafe.types.UTF8String
  * }.foreach(println)
  * }}}
  */
+
+//可以改变的值
 abstract class MutableValue extends Serializable {
-  var isNull: Boolean = true
-  def boxed: Any
-  def update(v: Any)
+  var isNull: Boolean = true //此时是否是null
+  def boxed: Any //返回对应的属性值
+  def update(v: Any) //更新该值
   def copy(): MutableValue
 }
 
+//整数int对象
 final class MutableInt extends MutableValue {
   var value: Int = 0
   override def boxed: Any = if (isNull) null else value
@@ -191,10 +194,12 @@ final class MutableAny extends MutableValue {
  * A row type that holds an array specialized container objects, of type [[MutableValue]], chosen
  * based on the dataTypes of each column.  The intent is to decrease garbage when modifying the
  * values of primitive columns.
+ * 该对象持有的一行数据都是可以更改变化的
  */
-final class SpecificMutableRow(val values: Array[MutableValue])
+final class SpecificMutableRow(val values: Array[MutableValue]) //参数是数据类型集合,该集合是可变化的数据类型
   extends MutableRow with BaseGenericInternalRow {
 
+  //根据数据类型 转换成可以修改变化的数据类型
   def this(dataTypes: Seq[DataType]) =
     this(
       dataTypes.map {
@@ -212,12 +217,15 @@ final class SpecificMutableRow(val values: Array[MutableValue])
 
   def this() = this(Seq.empty)
 
+  //列数量
   override def numFields: Int = values.length
 
+  //设置某列为null
   override def setNullAt(i: Int): Unit = {
     values(i).isNull = true
   }
 
+  //判断该列是否为null
   override def isNullAt(i: Int): Boolean = values(i).isNull
 
   override def copy(): InternalRow = {
@@ -231,11 +239,13 @@ final class SpecificMutableRow(val values: Array[MutableValue])
     new GenericInternalRow(newValues)
   }
 
+  //获取第index列指定的属性值
   override protected def genericGet(i: Int): Any = values(i).boxed
 
+  //更新
   override def update(ordinal: Int, value: Any) {
     if (value == null) {
-      setNullAt(ordinal)
+      setNullAt(ordinal) //设置值为null
     } else {
       values(ordinal).update(value)
     }

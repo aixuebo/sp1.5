@@ -27,7 +27,7 @@ import org.apache.spark.unsafe.types.UTF8String;
 //从数组中获取一个元素,并且返回的是该元素对应的类型
 public interface SpecializedGetters {
 
-  boolean isNullAt(int ordinal);
+  boolean isNullAt(int ordinal); //true表示该位置是否是null
 
   boolean getBoolean(int ordinal);
 
@@ -51,7 +51,7 @@ public interface SpecializedGetters {
 
   CalendarInterval getInterval(int ordinal);
 
-  InternalRow getStruct(int ordinal, int numFields);
+  InternalRow getStruct(int ordinal, int numFields);//从哪行开始,接下来多少个属性都是属于一个struct对象的
 
   ArrayData getArray(int ordinal);
 

@@ -58,6 +58,7 @@ object Literal {
 
 /**
  * An extractor that matches non-null literal values
+ * 抽取非null的属性和属性值
  */
 object NonNullLiteral {
   def unapply(literal: Literal): Option[(Any, DataType)] = {
@@ -69,6 +70,7 @@ object NonNullLiteral {
  * Extractor for retrieving Int literals.
  */
 object IntegerLiteral {
+  //从Literal对象中抽取int值
   def unapply(a: Any): Option[Int] = a match {
     case Literal(a: Int, IntegerType) => Some(a)
     case _ => None
@@ -77,13 +79,14 @@ object IntegerLiteral {
 
 /**
  * In order to do type checking, use Literal.create() instead of constructor
- * 文字对象由值和类型组成
+ * 由属性值和属性类型组成的对象
+ * 表示该叶子节点就是一个具体的值
  */
 case class Literal protected (value: Any, dataType: DataType)
   extends LeafExpression with CodegenFallback {
 
-  override def foldable: Boolean = true
-  override def nullable: Boolean = value == null
+  override def foldable: Boolean = true //该值肯定是静态的,因此返回true
+  override def nullable: Boolean = value == null //判断value是否是null
 
   override def toString: String = if (value != null) value.toString else "null"
 
@@ -146,12 +149,15 @@ case class Literal protected (value: Any, dataType: DataType)
 }
 
 // TODO: Specialize
+//可以变化的属性值
 case class MutableLiteral(var value: Any, dataType: DataType, nullable: Boolean = true)
   extends LeafExpression with CodegenFallback {
 
+  //表达式expression处理数据行内容InternalRow,返回一个value值
   def update(expression: Expression, input: InternalRow): Unit = {
     value = expression.eval(input)
   }
 
+  //对一个数据行进行处理,返回一个value值
   override def eval(input: InternalRow): Any = value
 }

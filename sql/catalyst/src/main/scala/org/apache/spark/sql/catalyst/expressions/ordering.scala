@@ -29,11 +29,12 @@ class InterpretedOrdering(ordering: Seq[SortOrder]) extends Ordering[InternalRow
   def this(ordering: Seq[SortOrder], inputSchema: Seq[Attribute]) =
     this(ordering.map(BindReferences.bindReference(_, inputSchema)))
 
+  //比较两行数据,每一行数据对应的列就是BoundReference对象
   def compare(a: InternalRow, b: InternalRow): Int = {
     var i = 0
     while (i < ordering.size) {
-      val order = ordering(i)
-      val left = order.child.eval(a)
+      val order = ordering(i) //循环每一个排序对象
+      val left = order.child.eval(a) //获取对应的值
       val right = order.child.eval(b)
 
       if (left == null && right == null) {
@@ -69,6 +70,7 @@ object InterpretedOrdering {
 
   /**
    * Creates a [[InterpretedOrdering]] for the given schema, in natural ascending order.
+   * 将一组返回值类型对应起来
    */
   def forSchema(dataTypes: Seq[DataType]): InterpretedOrdering = {
     new InterpretedOrdering(dataTypes.zipWithIndex.map {
@@ -81,16 +83,18 @@ object RowOrdering {
 
   /**
    * Returns true iff the data type can be ordered (i.e. can be sorted).
+   * true 表示参数的数据类型是支持排序的
    */
   def isOrderable(dataType: DataType): Boolean = dataType match {
     case NullType => true
-    case dt: AtomicType => true
-    case struct: StructType => struct.fields.forall(f => isOrderable(f.dataType))
+    case dt: AtomicType => true //原子类型是支持排序的
+    case struct: StructType => struct.fields.forall(f => isOrderable(f.dataType)) //复合对象的所有属性都支持排序,则结果就支持排序
     case _ => false
   }
 
   /**
    * Returns true iff outputs from the expressions can be ordered.
+   * 所有的表达式对应的返回值都是可以排序的.则返回true,说明表达式集合是可以排序的
    */
   def isOrderable(exprs: Seq[Expression]): Boolean = exprs.forall(e => isOrderable(e.dataType))
 }

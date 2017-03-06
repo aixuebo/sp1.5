@@ -26,23 +26,29 @@ import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
  * A [[Projection]] that is calculated by calling the `eval` of each of the specified expressions.
  * @param expressions a sequence of expressions that determine the value of each column of the
  *                    output row.
+ * 参数是一组表达式,返回值是每一个表达式对当前行的处理结果,因此又组成了一行新的数据,即用表达式结果组成的新记录
+ *
+ * 表达式是BoundReference
  */
 class InterpretedProjection(expressions: Seq[Expression]) extends Projection {
-  def this(expressions: Seq[Expression], inputSchema: Seq[Attribute]) =
-    this(expressions.map(BindReferences.bindReference(_, inputSchema)))
 
+  def this(expressions: Seq[Expression], inputSchema: Seq[Attribute]) = this(expressions.map(BindReferences.bindReference(_, inputSchema)))
+
+
+  //循环所有的表达式,对不确定性的表达式 进行初始化,其他的保持(因为其他的不需要初始化)
   expressions.foreach(_.foreach {
-    case n: Nondeterministic => n.setInitialValues()
+    case n: Nondeterministic => n.setInitialValues() //对不确定性的表达式 进行初始化
     case _ =>
   })
 
   // null check is required for when Kryo invokes the no-arg constructor.
+  //返回表达式数组
   protected val exprArray = if (expressions != null) expressions.toArray else null
 
   def apply(input: InternalRow): InternalRow = {
-    val outputArray = new Array[Any](exprArray.length)
+    val outputArray = new Array[Any](exprArray.length) //每一个表达式的返回值
     var i = 0
-    while (i < exprArray.length) {
+    while (i < exprArray.length) {//循环每一个表达式,每一个表达式都对当前行数据进行处理
       outputArray(i) = exprArray(i).eval(input)
       i += 1
     }
@@ -59,16 +65,18 @@ class InterpretedProjection(expressions: Seq[Expression]) extends Projection {
  *                    output row.
  */
 case class InterpretedMutableProjection(expressions: Seq[Expression]) extends MutableProjection {
-  def this(expressions: Seq[Expression], inputSchema: Seq[Attribute]) =
-    this(expressions.map(BindReferences.bindReference(_, inputSchema)))
 
+  def this(expressions: Seq[Expression], inputSchema: Seq[Attribute]) = this(expressions.map(BindReferences.bindReference(_, inputSchema)))
+
+  //循环所有的表达式,对不确定性的表达式 进行初始化,其他的保持(因为其他的不需要初始化)
   expressions.foreach(_.foreach {
     case n: Nondeterministic => n.setInitialValues()
     case _ =>
   })
 
-  private[this] val exprArray = expressions.toArray
-  private[this] var mutableRow: MutableRow = new GenericMutableRow(exprArray.length)
+  private[this] val exprArray = expressions.toArray //表达式数组
+  private[this] var mutableRow: MutableRow = new GenericMutableRow(exprArray.length) //可变的row行.该行的内容是每一个表达式的输出结果
+
   def currentValue: InternalRow = mutableRow
 
   override def target(row: MutableRow): MutableProjection = {
@@ -79,7 +87,7 @@ case class InterpretedMutableProjection(expressions: Seq[Expression]) extends Mu
   override def apply(input: InternalRow): InternalRow = {
     var i = 0
     while (i < exprArray.length) {
-      mutableRow(i) = exprArray(i).eval(input)
+      mutableRow(i) = exprArray(i).eval(input) //对每一个表达式运算,输出结果
       i += 1
     }
     mutableRow
@@ -101,6 +109,8 @@ object UnsafeProjection {
    */
   def canSupport(schema: StructType): Boolean = canSupport(schema.fields.map(_.dataType))
   def canSupport(exprs: Seq[Expression]): Boolean = canSupport(exprs.map(_.dataType).toArray)
+
+  //字段类型集合
   private def canSupport(types: Array[DataType]): Boolean = {
     types.forall(GenerateUnsafeProjection.canSupport)
   }

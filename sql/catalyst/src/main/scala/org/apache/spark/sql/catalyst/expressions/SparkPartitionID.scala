@@ -25,6 +25,7 @@ import org.apache.spark.sql.types.{IntegerType, DataType}
 
 /**
  * Expression that returns the current partition id of the Spark task.
+ * 叶子表达式,返回当前partition的id
  */
 private[sql] case class SparkPartitionID() extends LeafExpression with Nondeterministic {
 

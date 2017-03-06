@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-
+//表示一个属性如何相同
 protected class AttributeEquals(val a: Attribute) {
   override def hashCode(): Int = a match {
     case ar: AttributeReference => ar.exprId.hashCode()
@@ -25,7 +25,7 @@ protected class AttributeEquals(val a: Attribute) {
   }
 
   override def equals(other: Any): Boolean = (a, other.asInstanceOf[AttributeEquals].a) match {
-    case (a1: AttributeReference, a2: AttributeReference) => a1.exprId == a2.exprId
+    case (a1: AttributeReference, a2: AttributeReference) => a1.exprId == a2.exprId //引用相同
     case (a1, a2) => a1 == a2
   }
 }
@@ -52,6 +52,7 @@ object AttributeSet {
  * `AttributeReference("a"...) == AttrributeReference("b", ...)`. This tactic leads to broken tests,
  * and also makes doing transformations hard (we always try keep older trees instead of new ones
  * when the transformation was a no-op).
+ * 表示一个属性集合
  */
 class AttributeSet private (val baseSet: Set[AttributeEquals])
   extends Traversable[Attribute] with Serializable {
@@ -81,6 +82,7 @@ class AttributeSet private (val baseSet: Set[AttributeEquals])
   /**
    * Returns true if the [[Attribute Attributes]] in this set are a subset of the Attributes in
    * `other`.
+   * other集合是否是一个全子集
    */
   def subsetOf(other: AttributeSet): Boolean = baseSet.subsetOf(other.baseSet)
 
@@ -100,6 +102,7 @@ class AttributeSet private (val baseSet: Set[AttributeEquals])
   /**
    * Returns a new [[AttributeSet]] contain only the [[Attribute Attributes]] where `f` evaluates to
    * true.
+   * 返回true的属性集合
    */
   override def filter(f: Attribute => Boolean): AttributeSet =
     new AttributeSet(baseSet.filter(ae => f(ae.a)))
@@ -107,10 +110,12 @@ class AttributeSet private (val baseSet: Set[AttributeEquals])
   /**
    * Returns a new [[AttributeSet]] that only contains [[Attribute Attributes]] that are found in
    * `this` and `other`.
+   * 获取交集
    */
   def intersect(other: AttributeSet): AttributeSet =
     new AttributeSet(baseSet.intersect(other.baseSet))
 
+  //集合中每一个属性都调用f方法
   override def foreach[U](f: (Attribute) => U): Unit = baseSet.map(_.a).foreach(f)
 
   // We must force toSeq to not be strict otherwise we end up with a [[Stream]] that captures all

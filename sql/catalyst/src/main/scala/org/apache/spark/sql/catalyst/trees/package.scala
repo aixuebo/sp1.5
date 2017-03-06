@@ -40,13 +40,15 @@ package object trees extends Logging {
 
   /**
    * A [[TreeNode]] companion for reference equality for Hash based Collection.
+   * 比较两个TreeNode中的obj的eq是否相同
    */
   class TreeNodeRef(val obj: TreeNode[_]) {
-    override def equals(o: Any): Boolean = o match {
+    override def equals(o: Any): Boolean = o match { //返回boolean类型
       case that: TreeNodeRef => that.obj.eq(obj)
       case _ => false
     }
 
+    //对TreeNode的obj属性进行hashCode运算
     override def hashCode: Int = if (obj == null) 0 else obj.hashCode
   }
 }

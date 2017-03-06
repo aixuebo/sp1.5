@@ -25,12 +25,13 @@ import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * Expression that returns the name of the current file being read in using [[SqlNewHadoopRDD]]
+ * 叶子节点,返回处理的文件名字
  */
 case class InputFileName() extends LeafExpression with Nondeterministic {
 
   override def nullable: Boolean = true
 
-  override def dataType: DataType = StringType
+  override def dataType: DataType = StringType //返回值是字符串
 
   override val prettyName = "INPUT_FILE_NAME"
 

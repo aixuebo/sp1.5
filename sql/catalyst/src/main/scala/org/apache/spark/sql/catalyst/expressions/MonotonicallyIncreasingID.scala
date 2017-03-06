@@ -24,27 +24,32 @@ import org.apache.spark.sql.types.{LongType, DataType}
 
 /**
  * Returns monotonically increasing 64-bit integers.
+ * 返回单调增加的64为long整数
  *
  * The generated ID is guaranteed to be monotonically increasing and unique, but not consecutive.
+ * 保证产生单调 且增加的唯一序号,但是该序号不是连续的
  * The current implementation puts the partition ID in the upper 31 bits, and the lower 33 bits
- * represent the record number within each partition. The assumption is that the data frame has
- * less than 1 billion partitions, and each partition has less than 8 billion records.
+ * represent the record number within each partition.
+ * 当前的实现是partitionId用于设置前31位,后33位设置当前partition内的序号
+ * The assumption is that the data frame has less than 1 billion partitions, and each partition has less than 8 billion records.
+ * 这个假设数据是少于10亿个分区,每一个分区内数据少于80亿条才有保证
  *
  * Since this expression is stateful, it cannot be a case object.
+ * 该表达式会返回一个Long类型的数据
  */
-private[sql] case class MonotonicallyIncreasingID() extends LeafExpression with Nondeterministic {
+private[sql] case class MonotonicallyIncreasingID() extends LeafExpression with Nondeterministic {//该表达式不确定的表达式,并且是叶子表达式,即不需要子表达式参与运算
 
   /**
    * Record ID within each partition. By being transient, count's value is reset to 0 every time
    * we serialize and deserialize and initialize it.
    */
-  @transient private[this] var count: Long = _
+  @transient private[this] var count: Long = _ //记录一个partition的序号
 
-  @transient private[this] var partitionMask: Long = _
+  @transient private[this] var partitionMask: Long = _ //记录该partition的前缀
 
   override protected def initInternal(): Unit = {
     count = 0L
-    partitionMask = TaskContext.getPartitionId().toLong << 33
+    partitionMask = TaskContext.getPartitionId().toLong << 33 //设置partition为前31位
   }
 
   override def nullable: Boolean = false
@@ -53,8 +58,8 @@ private[sql] case class MonotonicallyIncreasingID() extends LeafExpression with 
 
   override protected def evalInternal(input: InternalRow): Long = {
     val currentCount = count
-    count += 1
-    partitionMask + currentCount
+    count += 1 //每次序号累加1
+    partitionMask + currentCount //更改最终的唯一序号
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {

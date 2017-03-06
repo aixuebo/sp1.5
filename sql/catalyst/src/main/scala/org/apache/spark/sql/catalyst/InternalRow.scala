@@ -23,6 +23,7 @@ import org.apache.spark.sql.types.{DataType, StructType}
 /**
  * An abstract class for row used internal in Spark SQL, which only contain the columns as
  * internal types.
+ * 该类主要用于spark sql的内部
  */
 abstract class InternalRow extends SpecializedGetters with Serializable {
 
@@ -47,6 +48,7 @@ abstract class InternalRow extends SpecializedGetters with Serializable {
   /**
    * Return a Scala Seq representing the row. Elements are placed in the same order in the Seq.
    * 返回每一个属性对应的属性值集合
+   * 因为每一个列对应的属性类型是不知道的.因此参数说明的就是每一列的属性类型
    */
   def toSeq(fieldTypes: Seq[DataType]): Seq[Any] = {
     val len = numFields
@@ -55,7 +57,7 @@ abstract class InternalRow extends SpecializedGetters with Serializable {
     val values = new Array[Any](len)
     var i = 0
     while (i < len) {
-      values(i) = get(i, fieldTypes(i))
+      values(i) = get(i, fieldTypes(i)) //获取每一个列的对应的类型的属性值
       i += 1
     }
     values

@@ -26,22 +26,23 @@ import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
-
+//第一个参数是字符串内容作为返回值的表达式,第二个参数就是需要匹配的正则表达式内容
 trait StringRegexExpression extends ImplicitCastInputTypes {
-  self: BinaryExpression =>
+  self: BinaryExpression => //二元表达式,即两个输入 一个输出
 
-  def escape(v: String): String
-  def matches(regex: Pattern, str: String): Boolean
+  def escape(v: String): String//格式化正则表达式
+  def matches(regex: Pattern, str: String): Boolean //返回字符传是否匹配正则表达式
 
   override def dataType: DataType = BooleanType
-  override def inputTypes: Seq[DataType] = Seq(StringType, StringType)
+  override def inputTypes: Seq[DataType] = Seq(StringType, StringType) //输入类型
 
   // try cache the pattern for Literal
   private lazy val cache: Pattern = right match {
-    case x @ Literal(value: String, StringType) => compile(value)
+    case x @ Literal(value: String, StringType) => compile(value) //对字符串类型的数据直接创建正则表达式
     case _ => null
   }
 
+  //创建正则表达式对象
   protected def compile(str: String): Pattern = if (str == null) {
     null
   } else {
@@ -49,14 +50,16 @@ trait StringRegexExpression extends ImplicitCastInputTypes {
     Pattern.compile(escape(str))
   }
 
+  //创建正则表达式
   protected def pattern(str: String) = if (cache == null) compile(str) else cache
 
+  //两个表达式对应的String结果作为参数
   protected override def nullSafeEval(input1: Any, input2: Any): Any = {
-    val regex = pattern(input2.asInstanceOf[UTF8String].toString)
+    val regex = pattern(input2.asInstanceOf[UTF8String].toString) //获取第二个正则表达式对象
     if(regex == null) {
       null
     } else {
-      matches(regex, input1.asInstanceOf[UTF8String].toString)
+      matches(regex, input1.asInstanceOf[UTF8String].toString) //第一个参数是否匹配正则表达式
     }
   }
 }
@@ -64,13 +67,14 @@ trait StringRegexExpression extends ImplicitCastInputTypes {
 
 /**
  * Simple RegEx pattern matching function
+ * 最终表达式为 left like right  即left是字符串内容作为返回值的表达式,right是正则表达式内容
  */
 case class Like(left: Expression, right: Expression)
   extends BinaryExpression with StringRegexExpression with CodegenFallback {
 
   override def escape(v: String): String = StringUtils.escapeLikeRegex(v)
 
-  override def matches(regex: Pattern, str: String): Boolean = regex.matcher(str).matches()
+  override def matches(regex: Pattern, str: String): Boolean = regex.matcher(str).matches() //该字符串是否匹配正则表达式
 
   override def toString: String = s"$left LIKE $right"
 
@@ -116,6 +120,7 @@ case class Like(left: Expression, right: Expression)
 }
 
 //表达式RLIKE 表达式  或者 表达式REGEXP  表达式
+//即left是字符串内容返回值的表达式,right是正则表达式内容
 case class RLike(left: Expression, right: Expression)
   extends BinaryExpression with StringRegexExpression with CodegenFallback {
 
@@ -166,18 +171,20 @@ case class RLike(left: Expression, right: Expression)
 
 /**
  * Splits str around pat (pattern is a regular expression).
+ * 即left是字符串内容返回值的表达式,right是正则表达式内容
+ * 最终语法:字符串.split(正则表达式),返回数组
  */
 case class StringSplit(str: Expression, pattern: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
 
   override def left: Expression = str
   override def right: Expression = pattern
-  override def dataType: DataType = ArrayType(StringType)
-  override def inputTypes: Seq[DataType] = Seq(StringType, StringType)
+  override def dataType: DataType = ArrayType(StringType) //返回值是字符串
+  override def inputTypes: Seq[DataType] = Seq(StringType, StringType) //输入类型是字符串
 
   override def nullSafeEval(string: Any, regex: Any): Any = {
-    val strings = string.asInstanceOf[UTF8String].split(regex.asInstanceOf[UTF8String], -1)
-    new GenericArrayData(strings.asInstanceOf[Array[Any]])
+    val strings = string.asInstanceOf[UTF8String].split(regex.asInstanceOf[UTF8String], -1) //最终语法:字符串.split(正则表达式)  返回值是数组
+    new GenericArrayData(strings.asInstanceOf[Array[Any]]) //返回数组
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
@@ -193,21 +200,29 @@ case class StringSplit(str: Expression, pattern: Expression)
 
 /**
  * Replace all substrings of str that match regexp with rep.
- *
+ * 对匹配的字符串进行替换
  * NOTE: this expression is not THREAD-SAFE, as it has some internal mutable status.
+ * 注意该表达式不是线程安全的,因为有一些内部状态
+ *
+ * 三元函数 顺序是 原始字符串、 正则表达式、  要替换的文字
  */
 case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expression)
   extends TernaryExpression with ImplicitCastInputTypes {
 
   // last regex in string, we will update the pattern iff regexp value changed.
-  @transient private var lastRegex: UTF8String = _
+  @transient private var lastRegex: UTF8String = _ //最后一组正则表达式字符串内容
   // last regex pattern, we cache it for performance concern
-  @transient private var pattern: Pattern = _
+  @transient private var pattern: Pattern = _ //最终表达式
   // last replacement string, we don't want to convert a UTF8String => java.langString every time.
-  @transient private var lastReplacement: String = _
+  @transient private var lastReplacement: String = _ //要替换的文字
   @transient private var lastReplacementInUTF8: UTF8String = _
   // result buffer write by Matcher
-  @transient private val result: StringBuffer = new StringBuffer
+  @transient private val result: StringBuffer = new StringBuffer //最终替换后的结果
+
+  override def dataType: DataType = StringType //输出类型
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType, StringType) //输入类型
+  override def children: Seq[Expression] = subject :: regexp :: rep :: Nil //三个表达式
+  override def prettyName: String = "regexp_replace" //简单名字
 
   override def nullSafeEval(s: Any, p: Any, r: Any): Any = {
     if (!p.equals(lastRegex)) {
@@ -220,7 +235,7 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
       lastReplacementInUTF8 = r.asInstanceOf[UTF8String].clone()
       lastReplacement = lastReplacementInUTF8.toString
     }
-    val m = pattern.matcher(s.toString())
+    val m = pattern.matcher(s.toString()) //正则表达式匹配字符串
     result.delete(0, result.length())
 
     while (m.find) {
@@ -230,11 +245,6 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
 
     UTF8String.fromString(result.toString)
   }
-
-  override def dataType: DataType = StringType
-  override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType, StringType)
-  override def children: Seq[Expression] = subject :: regexp :: rep :: Nil
-  override def prettyName: String = "regexp_replace"
 
   override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val termLastRegex = ctx.freshName("lastRegex")
@@ -284,17 +294,25 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
 
 /**
  * Extract a specific(idx) group identified by a Java regex.
- *
+ * 抽取一个指定的group匹配的内容
  * NOTE: this expression is not THREAD-SAFE, as it has some internal mutable status.
+ * 注意该表达式不是线程安全的,因为有一些内部状态
+ *
+ * 三元函数 顺序是 原始字符串、 正则表达式、要抽取哪个group
  */
 case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expression)
   extends TernaryExpression with ImplicitCastInputTypes {
-  def this(s: Expression, r: Expression) = this(s, r, Literal(1))
+  def this(s: Expression, r: Expression) = this(s, r, Literal(1))//默认抽取第1个group
 
   // last regex in string, we will update the pattern iff regexp value changed.
-  @transient private var lastRegex: UTF8String = _
+  @transient private var lastRegex: UTF8String = _ //最后的正则表达式内容
   // last regex pattern, we cache it for performance concern
-  @transient private var pattern: Pattern = _
+  @transient private var pattern: Pattern = _ //匹配的正则表达式对象
+
+  override def dataType: DataType = StringType
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType, IntegerType)
+  override def children: Seq[Expression] = subject :: regexp :: idx :: Nil
+  override def prettyName: String = "regexp_extract"
 
   override def nullSafeEval(s: Any, p: Any, r: Any): Any = {
     if (!p.equals(lastRegex)) {
@@ -305,16 +323,11 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
     val m = pattern.matcher(s.toString)
     if (m.find) {
       val mr: MatchResult = m.toMatchResult
-      UTF8String.fromString(mr.group(r.asInstanceOf[Int]))
+      UTF8String.fromString(mr.group(r.asInstanceOf[Int])) //获取指定group的内容
     } else {
       UTF8String.EMPTY_UTF8
     }
   }
-
-  override def dataType: DataType = StringType
-  override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType, IntegerType)
-  override def children: Seq[Expression] = subject :: regexp :: idx :: Nil
-  override def prettyName: String = "regexp_extract"
 
   override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val termLastRegex = ctx.freshName("lastRegex")

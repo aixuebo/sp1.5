@@ -41,9 +41,10 @@ object TypeUtils {
     }
   }
 
+  //校验参数type类型必须是一样的
   def checkForSameTypeInputExpr(types: Seq[DataType], caller: String): TypeCheckResult = {
-    if (types.distinct.size > 1) {
-      TypeCheckResult.TypeCheckFailure(
+    if (types.distinct.size > 1) {//说明超过1个,则说明参数类型不相同
+      TypeCheckResult.TypeCheckFailure(//抛异常
         s"input to $caller should all be the same type, but it's " +
           types.map(_.simpleString).mkString("[", ", ", "]"))
     } else {

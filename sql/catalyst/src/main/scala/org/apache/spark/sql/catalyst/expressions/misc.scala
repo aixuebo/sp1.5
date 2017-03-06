@@ -29,13 +29,15 @@ import org.apache.spark.unsafe.types.UTF8String
 /**
  * A function that calculates an MD5 128-bit checksum and returns it as a hex string
  * For input of type [[BinaryType]]
+ * 对表达式的结果是字节数组,对字节数组进行MD5操作
  */
 case class Md5(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
 
-  override def dataType: DataType = StringType
+  override def dataType: DataType = StringType //输出结果是字符串
 
-  override def inputTypes: Seq[DataType] = Seq(BinaryType)
+  override def inputTypes: Seq[DataType] = Seq(BinaryType) //传入参数是字节数组
 
+  //对字节数组进行MD5转换
   protected override def nullSafeEval(input: Any): Any =
     UTF8String.fromString(DigestUtils.md5Hex(input.asInstanceOf[Array[Byte]]))
 
@@ -136,6 +138,7 @@ case class Sha1(child: Expression) extends UnaryExpression with ImplicitCastInpu
 /**
  * A function that computes a cyclic redundancy check value and returns it as a bigint
  * For input of type [[BinaryType]]
+ * 对表达式的结果是一个字节数组,对字节数组进行CRC32运算,生成一个校验和数据
  */
 case class Crc32(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
 

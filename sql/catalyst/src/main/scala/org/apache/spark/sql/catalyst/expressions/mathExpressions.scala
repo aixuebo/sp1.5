@@ -34,13 +34,14 @@ import org.apache.spark.unsafe.types.UTF8String
  *
  * @param c The math constant.
  * @param name The short name of the function
+ * 表示该叶子节点是一个数学的表达式---即固定值,比如Math.pi 或者Math.E
  */
-abstract class LeafMathExpression(c: Double, name: String)
+abstract class LeafMathExpression(c: Double, name: String) //name表示表达式的名字
   extends LeafExpression with CodegenFallback {
 
   override def dataType: DataType = DoubleType
-  override def foldable: Boolean = true
-  override def nullable: Boolean = false
+  override def foldable: Boolean = true //该值肯定是一个静态的表达式
+  override def nullable: Boolean = false //该表达式肯定是不null
   override def toString: String = s"$name()"
 
   override def eval(input: InternalRow): Any = c
@@ -49,22 +50,23 @@ abstract class LeafMathExpression(c: Double, name: String)
 /**
  * A unary expression specifically for math functions. Math Functions expect a specific type of
  * input format, therefore these functions extend `ExpectsInputTypes`.
- * @param f The math function.
- * @param name The short name of the function
+ * @param f The math function. 表达式的函数,如何将一个double转换成double
+ * @param name The short name of the function 表达式的名字
+ * 一个一元的转换函数
  */
 abstract class UnaryMathExpression(f: Double => Double, name: String)
   extends UnaryExpression with Serializable with ImplicitCastInputTypes {
 
-  override def inputTypes: Seq[DataType] = Seq(DoubleType)
-  override def dataType: DataType = DoubleType
+  override def inputTypes: Seq[DataType] = Seq(DoubleType) //输入类型就是double类型
+  override def dataType: DataType = DoubleType //输出类型
   override def nullable: Boolean = true
   override def toString: String = s"$name($child)"
 
   protected override def nullSafeEval(input: Any): Any = {
-    f(input.asInstanceOf[Double])
+    f(input.asInstanceOf[Double]) //输入值必须是double类型
   }
 
-  // name of function in java.lang.Math
+  // name of function in java.lang.Math 函数名
   def funcName: String = name.toLowerCase
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
@@ -76,6 +78,7 @@ abstract class UnaryLogExpression(f: Double => Double, name: String)
     extends UnaryMathExpression(f, name) {
 
   // values less than or equal to yAsymptote eval to null in Hive, instead of NaN or -Infinity
+  //<= yAsymptote的值都不会进入f函数处理,直接返回null
   protected val yAsymptote: Double = 0.0
 
   protected override def nullSafeEval(input: Any): Any = {
@@ -99,17 +102,18 @@ abstract class UnaryLogExpression(f: Double => Double, name: String)
 /**
  * A binary expression specifically for math functions that take two `Double`s as input and returns
  * a `Double`.
- * @param f The math function.
- * @param name The short name of the function
+ * @param f The math function. 输入两个double类型
+ * @param name The short name of the function 函数名字
+ * 二元运算
  */
 abstract class BinaryMathExpression(f: (Double, Double) => Double, name: String)
   extends BinaryExpression with Serializable with ImplicitCastInputTypes {
 
-  override def inputTypes: Seq[DataType] = Seq(DoubleType, DoubleType)
+  override def inputTypes: Seq[DataType] = Seq(DoubleType, DoubleType) //输入是两个double类型
 
   override def toString: String = s"$name($left, $right)"
 
-  override def dataType: DataType = DoubleType
+  override def dataType: DataType = DoubleType //返回是double类型
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = {
     f(input1.asInstanceOf[Double], input2.asInstanceOf[Double])
@@ -123,6 +127,7 @@ abstract class BinaryMathExpression(f: (Double, Double) => Double, name: String)
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Leaf math functions
+//静态值表达式
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -141,9 +146,11 @@ case class Pi() extends LeafMathExpression(math.Pi, "PI")
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Unary math functions
+//一元表达式
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+//表示解析表达式,将表达式的结果,结果作为参数参与acos运算
 case class Acos(child: Expression) extends UnaryMathExpression(math.acos, "ACOS")
 
 case class Asin(child: Expression) extends UnaryMathExpression(math.asin, "ASIN")
@@ -160,16 +167,17 @@ case class Cosh(child: Expression) extends UnaryMathExpression(math.cosh, "COSH"
 
 /**
  * Convert a num from one base to another
- * @param numExpr the number to be converted
- * @param fromBaseExpr from which base
- * @param toBaseExpr to which base
+ * 数字类型转换,将一个数字进制转换
+ * @param numExpr the number to be converted 数字
+ * @param fromBaseExpr from which base 从什么进制开始转换
+ * @param toBaseExpr to which base  转换到什么进制
  */
 case class Conv(numExpr: Expression, fromBaseExpr: Expression, toBaseExpr: Expression)
-  extends TernaryExpression with ImplicitCastInputTypes {
+  extends TernaryExpression with ImplicitCastInputTypes { //实现一个三元表达式
 
-  override def children: Seq[Expression] = Seq(numExpr, fromBaseExpr, toBaseExpr)
-  override def inputTypes: Seq[AbstractDataType] = Seq(StringType, IntegerType, IntegerType)
-  override def dataType: DataType = StringType
+  override def children: Seq[Expression] = Seq(numExpr, fromBaseExpr, toBaseExpr) //三个子表达式
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringType, IntegerType, IntegerType) //三元参数的输入类型
+  override def dataType: DataType = StringType //返回值类型
 
   override def nullSafeEval(num: Any, fromBase: Any, toBase: Any): Any = {
     NumberConverter.convert(
@@ -197,17 +205,20 @@ case class Expm1(child: Expression) extends UnaryMathExpression(math.expm1, "EXP
 
 case class Floor(child: Expression) extends UnaryMathExpression(math.floor, "FLOOR")
 
+//表示阶乘
 object Factorial {
 
+  //获取n的阶乘对应的值
   def factorial(n: Int): Long = {
     if (n < factorials.length) factorials(n) else Long.MaxValue
   }
 
+  //预先存储前20个阶乘
   private val factorials: Array[Long] = Array[Long](
-    1,
-    1,
-    2,
-    6,
+    1,//0的阶乘
+    1,//1的阶乘
+    2,//2的阶乘
+    6,//3的阶乘
     24,
     120,
     720,
@@ -228,15 +239,17 @@ object Factorial {
   )
 }
 
+//阶乘表达式   解析表达式,表达式结果是int,表示阶乘
 case class Factorial(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
 
-  override def inputTypes: Seq[DataType] = Seq(IntegerType)
+  override def inputTypes: Seq[DataType] = Seq(IntegerType) //输入是int类型参数
 
-  override def dataType: DataType = LongType
+  override def dataType: DataType = LongType //阶乘的返回值
 
   // If the value not in the range of [0, 20], it still will be null, so set it to be true here.
-  override def nullable: Boolean = true
+  override def nullable: Boolean = true //可以是null,当阶乘超过20的时候,就超过了long的范围,因此返回null
 
+  //返回阶乘值
   protected override def nullSafeEval(input: Any): Any = {
     val value = input.asInstanceOf[jl.Integer]
     if (value > 20 || value < 0) {
@@ -307,12 +320,14 @@ case class ToRadians(child: Expression) extends UnaryMathExpression(math.toRadia
   override def funcName: String = "toRadians"
 }
 
+//将long类型数据转换成二进制
 case class Bin(child: Expression)
   extends UnaryExpression with Serializable with ImplicitCastInputTypes {
 
   override def inputTypes: Seq[DataType] = Seq(LongType)
   override def dataType: DataType = StringType
 
+  //将long类型数据转换成二进制
   protected override def nullSafeEval(input: Any): Any =
     UTF8String.fromString(jl.Long.toBinaryString(input.asInstanceOf[Long]))
 
@@ -329,7 +344,7 @@ object Hex {
 
   // lookup table to translate '0' -> 0 ... 'F'/'f' -> 15
   val unhexDigits = {
-    val array = Array.fill[Byte](128)(-1)
+    val array = Array.fill[Byte](128)(-1) //用-1填满
     (0 to 9).foreach(i => array('0' + i) = i.toByte)
     (0 to 5).foreach(i => array('A' + i) = (i + 10).toByte)
     (0 to 5).foreach(i => array('a' + i) = (i + 10).toByte)

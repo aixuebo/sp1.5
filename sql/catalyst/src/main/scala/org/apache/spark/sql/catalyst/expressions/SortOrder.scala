@@ -26,12 +26,13 @@ import org.apache.spark.util.collection.unsafe.sort.PrefixComparators.DoublePref
 
 //排序方式
 abstract sealed class SortDirection
-case object Ascending extends SortDirection
-case object Descending extends SortDirection
+case object Ascending extends SortDirection //正排序
+case object Descending extends SortDirection //倒排序
 
 /**
  * An expression that can be used to sort a tuple.  This class extends expression primarily so that
  * transformations over expression will descend into its child.
+ * 使用表达式进行排序,第二个参数表示排序顺序
  */
 case class SortOrder(child: Expression, direction: SortDirection)
   extends UnaryExpression with Unevaluable {
@@ -40,19 +41,19 @@ case class SortOrder(child: Expression, direction: SortDirection)
   override def foldable: Boolean = false
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    if (RowOrdering.isOrderable(dataType)) {
+    if (RowOrdering.isOrderable(dataType)) { //校验表达式返回值是支持排序的
       TypeCheckResult.TypeCheckSuccess
-    } else {
+    } else {//说明表达式的返回值不支持排序
       TypeCheckResult.TypeCheckFailure(s"cannot sort data type ${dataType.simpleString}")
     }
   }
 
-  override def dataType: DataType = child.dataType
+  override def dataType: DataType = child.dataType //表达式的返回值
   override def nullable: Boolean = child.nullable
 
-  override def toString: String = s"$child ${if (direction == Ascending) "ASC" else "DESC"}"
+  override def toString: String = s"$child ${if (direction == Ascending) "ASC" else "DESC"}" //打印一个表达式 要正序还是倒序排列
 
-  def isAscending: Boolean = direction == Ascending
+  def isAscending: Boolean = direction == Ascending //true表示正序
 }
 
 /**

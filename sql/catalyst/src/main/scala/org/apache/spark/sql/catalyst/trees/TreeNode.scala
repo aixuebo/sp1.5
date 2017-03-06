@@ -45,7 +45,7 @@ object CurrentOrigin {
     value.set(
       value.get.copy(line = Some(line), startPosition = Some(start)))
   }
-
+//先设置Origin,然后执行f函数,执行后还原新的Origin
   def withOrigin[A](o: Origin)(f: => A): A = {
     set(o)
     val ret = try f finally { reset() }
@@ -54,6 +54,7 @@ object CurrentOrigin {
   }
 }
 
+//组件语法树的一个节点,参数是表示必须是TreeNode的子类
 abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   self: BaseType =>
 
@@ -62,6 +63,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   /**
    * Returns a Seq of the children of this node.
    * Children should not change. Immutability required for containsChild optimization
+   * 该节点拥有的子节点集合
    */
   def children: Seq[BaseType]
 
@@ -132,33 +134,36 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   /**
    * Returns a Seq containing the result of applying a partial function to all elements in this
    * tree on which the function is defined.
+   * 偏函数接收BaseType类型参数,转换成B对象
    */
   def collect[B](pf: PartialFunction[BaseType, B]): Seq[B] = {
     val ret = new collection.mutable.ArrayBuffer[B]()
     val lifted = pf.lift
-    foreach(node => lifted(node).foreach(ret.+=))
+    foreach(node => lifted(node).foreach(ret.+=))//本类和子类都调用偏函数,转换成B.然后添加到ret集合里面
     ret
   }
 
   /**
    * Finds and returns the first [[TreeNode]] of the tree for which the given partial function
    * is defined (pre-order), and applies the partial function to it.
+   * 偏函数接收BaseType类型参数,转换成B对象
    */
   def collectFirst[B](pf: PartialFunction[BaseType, B]): Option[B] = {
-    val lifted = pf.lift
+    val lifted = pf.lift //将偏函数转换成正常函数
     lifted(this).orElse {
       children.foldLeft(None: Option[B]) { (l, r) => l.orElse(r.collectFirst(pf)) }
-    }
+    }//对本类进行转换成B类型,如果转换失败,转换子类,直到第一个转换B成功的为止,然后返回成功的B
   }
 
   /**
    * Returns a copy of this node where `f` has been applied to all the nodes children.
+   * f函数应用于所有的子对象,转换成新的对象
    */
   def mapChildren(f: BaseType => BaseType): BaseType = {
     var changed = false
     val newArgs = productIterator.map {
       case arg: TreeNode[_] if containsChild(arg) =>
-        val newChild = f(arg.asInstanceOf[BaseType])
+        val newChild = f(arg.asInstanceOf[BaseType]) //判断转换后是否有更改
         if (newChild fastEquals arg) {
           arg
         } else {

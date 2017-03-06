@@ -75,7 +75,7 @@ package object expressions  {
    * `InternalRow.copy()` and hold on to the returned [[InternalRow]] before calling `next()`.
    */
   abstract class MutableProjection extends Projection {
-    def currentValue: InternalRow
+    def currentValue: InternalRow //因为是可变的,因此有一个字段表示当前行的内容
 
     /** Uses the given row to store the output of the projection. */
     def target(row: MutableRow): MutableProjection

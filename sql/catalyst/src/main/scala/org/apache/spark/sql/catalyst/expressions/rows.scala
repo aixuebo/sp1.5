@@ -166,9 +166,9 @@ trait BaseGenericInternalRow extends InternalRow {
 abstract class MutableRow extends InternalRow {
   def setNullAt(i: Int): Unit //将第i列的值设置为null
 
-  def update(i: Int, value: Any)
+  def update(i: Int, value: Any) //更新第i个属性值
 
-  // default implementation (slow)
+  // default implementation (slow) 更新第i个属性值
   def setBoolean(i: Int, value: Boolean): Unit = { update(i, value) }
   def setByte(i: Int, value: Byte): Unit = { update(i, value) }
   def setShort(i: Int, value: Short): Unit = { update(i, value) }
@@ -190,6 +190,7 @@ abstract class MutableRow extends InternalRow {
  * A row implementation that uses an array of objects as the underlying storage.  Note that, while
  * the array is not copied, and thus could technically be mutated after creation, this is not
  * allowed.
+ * 将一个any的数组组装成一个Row行对象
  */
 class GenericRow(protected[sql] val values: Array[Any]) extends Row {
   /** No-arg constructor for serialization. */
@@ -197,9 +198,9 @@ class GenericRow(protected[sql] val values: Array[Any]) extends Row {
 
   def this(size: Int) = this(new Array[Any](size))
 
-  override def length: Int = values.length
+  override def length: Int = values.length //该行有多少列
 
-  override def get(i: Int): Any = values(i)
+  override def get(i: Int): Any = values(i) //每一个列的值
 
   override def toSeq: Seq[Any] = values.toSeq
 
@@ -208,12 +209,12 @@ class GenericRow(protected[sql] val values: Array[Any]) extends Row {
 
 //带有scheme的行
 class GenericRowWithSchema(values: Array[Any], override val schema: StructType)
-  extends GenericRow(values) {
+  extends GenericRow(values) {//先赋予行的所有值
 
   /** No-arg constructor for serialization. */
   protected def this() = this(null, null)
 
-  //通过scheme可以得到该数据是第几列,因此可以获取指定scheme列上的值
+  //通过scheme可以得到该数据是第几列,因此可以获取指定scheme列上的值-----知道第几列,就可以获取value数组的下标对应的值了
   override def fieldIndex(name: String): Int = schema.fieldIndex(name) //找到name是第几个列
 }
 
@@ -248,6 +249,7 @@ class GenericInternalRowWithSchema(values: Array[Any], val schema: StructType)
   /** No-arg constructor for serialization. */
   protected def this() = this(null, null)
 
+  //通过scheme可以得到该数据是第几列,因此可以获取指定scheme列上的值-----知道第几列,就可以获取value数组的下标对应的值了
   def fieldIndex(name: String): Int = schema.fieldIndex(name)
 }
 
@@ -262,11 +264,11 @@ class GenericMutableRow(values: Array[Any]) extends MutableRow with BaseGenericI
 
   override def toSeq(fieldTypes: Seq[DataType]): Seq[Any] = values
 
-  override def numFields: Int = values.length
+  override def numFields: Int = values.length //该行有多少个属性值
 
-  override def setNullAt(i: Int): Unit = { values(i) = null}
+  override def setNullAt(i: Int): Unit = { values(i) = null} //设置某一列的值为null
 
-  override def update(i: Int, value: Any): Unit = { values(i) = value }
+  override def update(i: Int, value: Any): Unit = { values(i) = value } //更新某一列的值
 
   override def copy(): InternalRow = new GenericInternalRow(values.clone())
 }

@@ -25,6 +25,7 @@ import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 /**
  * A mutable wrapper that makes two rows appear as a single concatenated row.  Designed to
  * be instantiated once per thread and reused.
+ * 用于表示两表进行join的时候,来自于每一个表的一行数据
  */
 class JoinedRow extends InternalRow {
   private[this] var row1: InternalRow = _
@@ -55,17 +56,22 @@ class JoinedRow extends InternalRow {
     this
   }
 
+  //分别获取每一行每一个属性对应的值的集合
+  //参数是每一个属性对应的类型
   override def toSeq(fieldTypes: Seq[DataType]): Seq[Any] = {
     assert(fieldTypes.length == row1.numFields + row2.numFields)
-    val (left, right) = fieldTypes.splitAt(row1.numFields)
-    row1.toSeq(left) ++ row2.toSeq(right)
+    val (left, right) = fieldTypes.splitAt(row1.numFields) //拆分成两个集合
+    row1.toSeq(left) ++ row2.toSeq(right) //分别获取每一行每一个属性对应的值的集合
   }
 
+  //两行的所有属性之和
   override def numFields: Int = row1.numFields + row2.numFields
 
+  //获取第i个属性对应的值,该属性是dt类型的---注意该位置是两行数据全部属性之和
   override def get(i: Int, dt: DataType): AnyRef =
     if (i < row1.numFields) row1.get(i, dt) else row2.get(i - row1.numFields, dt)
 
+  //判断是否是null
   override def isNullAt(i: Int): Boolean =
     if (i < row1.numFields) row1.isNullAt(i) else row2.isNullAt(i - row1.numFields)
 
@@ -121,7 +127,7 @@ class JoinedRow extends InternalRow {
     }
   }
 
-  override def anyNull: Boolean = row1.anyNull || row2.anyNull
+  override def anyNull: Boolean = row1.anyNull || row2.anyNull //任何有一个属性是null,则都返回true
 
   override def copy(): InternalRow = {
     val copy1 = row1.copy()

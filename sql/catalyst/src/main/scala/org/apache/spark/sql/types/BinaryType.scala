@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.util.TypeUtils
  * :: DeveloperApi ::
  * The data type representing `Array[Byte]` values.
  * Please use the singleton [[DataTypes.BinaryType]].
+ * 原子操作的字节数组
  */
 @DeveloperApi
 class BinaryType private() extends AtomicType {
@@ -36,10 +37,12 @@ class BinaryType private() extends AtomicType {
   // this type. Otherwise, the companion object would be of type "BinaryType$" in byte code.
   // Defined with a private constructor so the companion object is the only possible instantiation.
 
+  //字节数组
   private[sql] type InternalType = Array[Byte]
 
   @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[InternalType] }
 
+  //字节数组可以比较
   private[sql] val ordering = new Ordering[InternalType] {
     def compare(x: Array[Byte], y: Array[Byte]): Int = {
       TypeUtils.compareBinary(x, y)
@@ -53,6 +56,5 @@ class BinaryType private() extends AtomicType {
 
   private[spark] override def asNullable: BinaryType = this
 }
-
 
 case object BinaryType extends BinaryType

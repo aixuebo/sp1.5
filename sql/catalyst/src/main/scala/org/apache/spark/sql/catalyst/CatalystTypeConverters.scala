@@ -401,6 +401,9 @@ object CatalystTypeConverters {
    * Creates a converter function that will convert Catalyst types to Scala type.
    * Typical use case would be converting a collection of rows that have the same schema. You will
    * call this function once to get a converter, and apply it to every row.
+   * child0.eval(input) 表示对该表达式进行运算,返回一个any对象,然后转换成child0需要的数据类型,因此需要一个如何将any转换成指定类型的方案
+   *
+   * 参数DataType 就是要求的最终的数据类型
    */
   private[sql] def createToScalaConverter(dataType: DataType): Any => Any = {
     if (isPrimitive(dataType)) {

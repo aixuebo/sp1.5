@@ -42,6 +42,7 @@ object InterpretedPredicate {
 
 /**
  * An [[Expression]] that returns a boolean value.
+ * 返回类型必须是boolean类型
  */
 trait Predicate extends Expression {
   override def dataType: DataType = BooleanType

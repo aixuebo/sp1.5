@@ -24,7 +24,7 @@ import org.apache.spark.sql.types._
 
 object NamedExpression {
   private val curId = new java.util.concurrent.atomic.AtomicLong()
-  def newExprId: ExprId = ExprId(curId.getAndIncrement())
+  def newExprId: ExprId = ExprId(curId.getAndIncrement()) //JVM中唯一的全局ID
   def unapply(expr: NamedExpression): Option[(String, DataType)] = Some(expr.name, expr.dataType)
 }
 
@@ -32,6 +32,7 @@ object NamedExpression {
  * A globally unique (within this JVM) id for a given named expression.
  * Used to identify which attribute output by a relation is being
  * referenced in a subsequent computation.
+ * JVM中唯一的全局ID
  */
 case class ExprId(id: Long)
 
@@ -44,7 +45,7 @@ trait NamedExpression extends Expression {
   override def foldable: Boolean = false
 
   def name: String
-  def exprId: ExprId
+  def exprId: ExprId //全局唯一ID
 
   /**
    * Returns a dot separated fully qualified name for this attribute.  Given that there can be
@@ -102,10 +103,10 @@ abstract class Attribute extends LeafExpression with NamedExpression {
  * Note that exprId and qualifiers are in a separate parameter list because
  * we only pattern match on child and name.
  *
- * @param child the computation being performed
- * @param name the name to be associated with the result of computing [[child]].
+ * @param child the computation being performed 执行的表达式
+ * @param name the name to be associated with the result of computing [[child]]. 为表达式计算机后分配一个别名
  * @param exprId A globally unique id used to check if an [[AttributeReference]] refers to this
- *               alias. Auto-assigned if left blank.
+ *               alias. Auto-assigned if left blank.JVM内全局唯一ID
  * @param explicitMetadata Explicit metadata associated with this alias that overwrites child's.
  */
 case class Alias(child: Expression, name: String)(
@@ -118,13 +119,13 @@ case class Alias(child: Expression, name: String)(
   override lazy val resolved =
     childrenResolved && checkInputDataTypes().isSuccess && !child.isInstanceOf[Generator]
 
-  override def eval(input: InternalRow): Any = child.eval(input)
+  override def eval(input: InternalRow): Any = child.eval(input) //执行表达式
 
   /** Just a simple passthrough for code generation. */
   override def gen(ctx: CodeGenContext): GeneratedExpressionCode = child.gen(ctx)
   override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = ""
 
-  override def dataType: DataType = child.dataType
+  override def dataType: DataType = child.dataType //子表达式的返回类型
   override def nullable: Boolean = child.nullable
   override def metadata: Metadata = {
     explicitMetadata.getOrElse {
@@ -182,6 +183,7 @@ case class AttributeReference(
 
   /**
    * Returns true iff the expression id is the same for both attributes.
+   * 引用是否相同
    */
   def sameRef(other: AttributeReference): Boolean = this.exprId == other.exprId
 

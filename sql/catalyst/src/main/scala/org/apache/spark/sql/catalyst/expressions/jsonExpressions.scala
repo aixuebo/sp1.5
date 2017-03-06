@@ -27,6 +27,8 @@ import org.apache.spark.unsafe.types.UTF8String
 
 import scala.util.parsing.combinator.RegexParsers
 
+//用于处理json数据的表达式
+
 private[this] sealed trait PathInstruction
 private[this] object PathInstruction {
   private[expressions] case object Subscript extends PathInstruction

@@ -36,7 +36,7 @@ import org.apache.spark.sql.types._
  *
  * There are a few important traits:
  *
- * - [[Nondeterministic]]: an expression that is not deterministic.表达式的不确定性,如果一个表达式总是返回相同的结果,则说明是确定的
+ * - [[Nondeterministic]]: an expression that is not deterministic.表达式的不确定性,如果一个表达式总是返回相同的结果,则说明是确定的,例如表达式的不确定性--比如randomExpressions表达式专门产生随机数,因此肯定是不确定的表达式,每一次执行的结果都是不一样的,即就是不确定性
  * - [[Unevaluable]]: an expression that is not supposed to be evaluated. 不能求值的表达式,比如 *
  * - [[CodegenFallback]]: an expression that does not have code gen implemented and falls back to
  *                        interpreted mode.
@@ -78,12 +78,13 @@ abstract class Expression extends TreeNode[Expression] {
    */
   def deterministic: Boolean = children.forall(_.deterministic)
 
-  def nullable: Boolean
+  def nullable: Boolean //判断value是否是null  true表示此时是null
 
+  //表达式依赖的属性集合
   def references: AttributeSet = AttributeSet(children.flatMap(_.references.iterator))
 
   /** Returns the result of evaluating this expression on a given input Row
-    * 给定一行内容,计算该表达式,返回一个结果,即执行表达式
+    * 将一行数据进行处理,比如二元表达式,就是两个表达式同时对该行数据进行处理,返回的值作为参数进行二元运算,最终返回一个结果就是返回值
     **/
   def eval(input: InternalRow = null): Any
 
@@ -126,6 +127,7 @@ abstract class Expression extends TreeNode[Expression] {
   /**
    * Returns the [[DataType]] of the result of evaluating this expression.  It is
    * invalid to query the dataType of an unresolved expression (i.e., when `resolved` == false).
+   * 表达式的返回的结果类型
    */
   def dataType: DataType
 
@@ -169,6 +171,7 @@ abstract class Expression extends TreeNode[Expression] {
   /**
    * Returns a user-facing string representation of this expression, i.e. does not have developer
    * centric debugging information like the expression id.
+   * 一个简洁的面向用户的名字
    */
   def prettyString: String = {
     transform {
@@ -188,6 +191,7 @@ abstract class Expression extends TreeNode[Expression] {
  */
 trait Unevaluable extends Expression {
 
+  //不能参与运算求具体的值
   final override def eval(input: InternalRow = null): Any =
     throw new UnsupportedOperationException(s"Cannot evaluate expression: $this")
 
@@ -198,11 +202,11 @@ trait Unevaluable extends Expression {
 
 /**
  * An expression that is nondeterministic.
- * 表达式的不确定性
+ * 表达式的不确定性--比如randomExpressions表达式专门产生随机数,因此肯定是不确定的表达式,每一次执行的结果都是不一样的,即就是不确定性
  */
 trait Nondeterministic extends Expression {
   final override def deterministic: Boolean = false //不确定,因此是false
-  final override def foldable: Boolean = false
+  final override def foldable: Boolean = false //不确定的一定不是静态的,因此是false
 
   private[this] var initialized = false //已经初始化完成
 
@@ -213,13 +217,13 @@ trait Nondeterministic extends Expression {
 
   protected def initInternal(): Unit //初始化该表达式
 
-  //将一行数据转换成一个新的对象
+  //将一行数据进行处理,比如二元表达式,就是两个表达式同时对该行数据进行处理,返回的值作为参数进行二元运算,最终返回一个结果就是返回值
   final override def eval(input: InternalRow = null): Any = {
     require(initialized, "nondeterministic expression should be initialized before evaluate")
     evalInternal(input)
   }
 
-  //将一行数据转换成一个新的对象
+  //将一行数据进行处理,比如二元表达式,就是两个表达式同时对该行数据进行处理,返回的值作为参数进行二元运算,最终返回一个结果就是返回值
   protected def evalInternal(input: InternalRow): Any
 }
 
@@ -241,23 +245,23 @@ abstract class LeafExpression extends Expression {
  */
 abstract class UnaryExpression extends Expression {
 
-  def child: Expression
+  def child: Expression //只有一个子表达式
 
   override def children: Seq[Expression] = child :: Nil
 
-  override def foldable: Boolean = child.foldable
-  override def nullable: Boolean = child.nullable
+  override def foldable: Boolean = child.foldable //取决于子表达式是否是静态的
+  override def nullable: Boolean = child.nullable //取决于子表达式是否是null
 
   /**
    * Default behavior of evaluation according to the default nullability of UnaryExpression.
    * If subclass of UnaryExpression override nullable, probably should also override this.
    */
   override def eval(input: InternalRow): Any = {
-    val value = child.eval(input)
+    val value = child.eval(input) //表达式对数据进行处理,返回结果
     if (value == null) {
       null
     } else {
-      nullSafeEval(value)
+      nullSafeEval(value) //将结果进一步进行一元表达式处理
     }
   }
 
@@ -265,6 +269,7 @@ abstract class UnaryExpression extends Expression {
    * Called by default [[eval]] implementation.  If subclass of UnaryExpression keep the default
    * nullability, they can override this method to save null-check code.  If we need full control
    * of evaluation process, we should override [[eval]].
+   * 具体一元方式是子类实现
    */
   protected def nullSafeEval(input: Any): Any =
     sys.error(s"UnaryExpressions must override either eval or nullSafeEval")
@@ -320,18 +325,20 @@ abstract class UnaryExpression extends Expression {
  */
 abstract class BinaryExpression extends Expression {
 
+  //有两个子表达式
   def left: Expression
   def right: Expression
 
   override def children: Seq[Expression] = Seq(left, right)
 
-  override def foldable: Boolean = left.foldable && right.foldable
+  override def foldable: Boolean = left.foldable && right.foldable //两个都得是静态的
 
   override def nullable: Boolean = left.nullable || right.nullable
 
   /**
    * Default behavior of evaluation according to the default nullability of BinaryExpression.
    * If subclass of BinaryExpression override nullable, probably should also override this.
+   * 同一样数据InternalRow 分别参与两个表达式运算,得到的值后在进行综合运算
    */
   override def eval(input: InternalRow): Any = {
     val value1 = left.eval(input)
@@ -342,7 +349,7 @@ abstract class BinaryExpression extends Expression {
       if (value2 == null) {
         null
       } else {
-        nullSafeEval(value1, value2)
+        nullSafeEval(value1, value2) //两个值都不是null,则参与二元运算
       }
     }
   }
@@ -351,6 +358,7 @@ abstract class BinaryExpression extends Expression {
    * Called by default [[eval]] implementation.  If subclass of BinaryExpression keep the default
    * nullability, they can override this method to save null-check code.  If we need full control
    * of evaluation process, we should override [[eval]].
+   * 子类实现
    */
   protected def nullSafeEval(input1: Any, input2: Any): Any =
     sys.error(s"BinaryExpressions must override either eval or nullSafeEval")
@@ -425,12 +433,13 @@ abstract class BinaryOperator extends BinaryExpression with ExpectsInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(inputType, inputType)
 
+  //进行参数的有效性校验
   override def checkInputDataTypes(): TypeCheckResult = {
     // First check whether left and right have the same type, then check if the type is acceptable.
-    if (left.dataType != right.dataType) {
+    if (left.dataType != right.dataType) {//左右类型必须相同
       TypeCheckResult.TypeCheckFailure(s"differing types in '$prettyString' " +
         s"(${left.dataType.simpleString} and ${right.dataType.simpleString}).")
-    } else if (!inputType.acceptsType(left.dataType)) {
+    } else if (!inputType.acceptsType(left.dataType)) {//输入类型是可以转换成参数需要的类型的
       TypeCheckResult.TypeCheckFailure(s"'$prettyString' requires ${inputType.simpleString} type," +
         s" not ${left.dataType.simpleString}")
     } else {
@@ -439,7 +448,7 @@ abstract class BinaryOperator extends BinaryExpression with ExpectsInputTypes {
   }
 }
 
-
+//将二元操作的两个表达式提取出来
 private[sql] object BinaryOperator {
   def unapply(e: BinaryOperator): Option[(Expression, Expression)] = Some((e.left, e.right))
 }
@@ -447,16 +456,18 @@ private[sql] object BinaryOperator {
 /**
  * An expression with three inputs and one output. The output is by default evaluated to null
  * if any input is evaluated to null.
+ * 三个输入,一个输出
  */
 abstract class TernaryExpression extends Expression {
 
-  override def foldable: Boolean = children.forall(_.foldable)
+  override def foldable: Boolean = children.forall(_.foldable) //三个输入表达式所有的都得是静态的,才返回true
 
-  override def nullable: Boolean = children.exists(_.nullable)
+  override def nullable: Boolean = children.exists(_.nullable) //三个输入表达式有一个是null,则返回true
 
   /**
    * Default behavior of evaluation according to the default nullability of TernaryExpression.
    * If subclass of BinaryExpression override nullable, probably should also override this.
+   * 将三个表达式都对同一个输入数据进行解析,然后执行nullSafeEval方法,返回新的值
    */
   override def eval(input: InternalRow): Any = {
     val exprs = children
@@ -477,6 +488,7 @@ abstract class TernaryExpression extends Expression {
    * Called by default [[eval]] implementation.  If subclass of TernaryExpression keep the default
    * nullability, they can override this method to save null-check code.  If we need full control
    * of evaluation process, we should override [[eval]].
+   * 子类具体实现
    */
   protected def nullSafeEval(input1: Any, input2: Any, input3: Any): Any =
     sys.error(s"BinaryExpressions must override either eval or nullSafeEval")
