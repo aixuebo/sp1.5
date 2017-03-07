@@ -105,7 +105,9 @@ object Cast {
   }
 }
 
-/** Cast the child expression to the target data type. */
+/** Cast the child expression to the target data type.
+  * 将表达式child对应的值以及返回值  转换成第二个参数类型的值
+  **/
 case class Cast(child: Expression, dataType: DataType)
   extends UnaryExpression with CodegenFallback {
 
@@ -113,9 +115,9 @@ case class Cast(child: Expression, dataType: DataType)
 
   //检查数据类型是否可以转换
   override def checkInputDataTypes(): TypeCheckResult = {
-    if (Cast.canCast(child.dataType, dataType)) {
+    if (Cast.canCast(child.dataType, dataType)) {//首先要保证类型是可以转换的
       TypeCheckResult.TypeCheckSuccess
-    } else {
+    } else {//说明类型不能互相转换
       TypeCheckResult.TypeCheckFailure(
         s"cannot cast ${child.dataType} to $dataType")
     }
@@ -405,9 +407,10 @@ case class Cast(child: Expression, dataType: DataType)
     })
   }
 
-  private[this] def cast(from: DataType, to: DataType): Any => Any = to match {
-    case dt if dt == child.dataType => identity[Any]
-    case StringType => castToString(from)
+  //真正执行数据类型转换  从any类型转换成any类型
+  private[this] def cast(from: DataType, to: DataType): Any => Any = to match { //根据最终to的类型不同,使用不同的转换方式
+    case dt if dt == child.dataType => identity[Any] //说明互相转换的类型相同,则直接返回数据即可
+    case StringType => castToString(from)//说明最终要转换成String类型
     case BinaryType => castToBinary(from)
     case DateType => castToDate(from)
     case decimal: DecimalType => castToDecimal(from, decimal)
@@ -427,7 +430,7 @@ case class Cast(child: Expression, dataType: DataType)
 
   private[this] lazy val cast: Any => Any = cast(child.dataType, dataType)
 
-  protected override def nullSafeEval(input: Any): Any = cast(input)
+  protected override def nullSafeEval(input: Any): Any = cast(input) //将数据进行转换
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val eval = child.gen(ctx)

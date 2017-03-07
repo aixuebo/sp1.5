@@ -51,7 +51,7 @@ public interface SpecializedGetters {
 
   CalendarInterval getInterval(int ordinal);
 
-  InternalRow getStruct(int ordinal, int numFields);//从哪行开始,接下来多少个属性都是属于一个struct对象的
+  InternalRow getStruct(int ordinal, int numFields);//获取第ordinal列,该列是struct组成的行,有numFields个属性
 
   ArrayData getArray(int ordinal);
 

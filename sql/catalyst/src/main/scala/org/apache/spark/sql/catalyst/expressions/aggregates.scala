@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.util.collection.OpenHashSet
 
+//本类定义一组聚合函数
 
 trait AggregateExpression extends Expression with Unevaluable
 
@@ -58,6 +59,7 @@ case class SplitEvaluation(
 /**
  * An [[AggregateExpression1]] that can be partially computed without seeing all relevant tuples.
  * These partial evaluations can then be combined to compute the actual answer.
+ * 偏函数的聚合函数
  */
 trait PartialAggregate1 extends AggregateExpression1 {
 
@@ -70,6 +72,7 @@ trait PartialAggregate1 extends AggregateExpression1 {
 /**
  * A specific implementation of an aggregate function. Used to wrap a generic
  * [[AggregateExpression1]] with an algorithm that will be used to compute one specific result.
+ * 表示一个聚合函数的具体实现,内部使用AggregateExpression1用来包装计算特定结果的算法
  */
 abstract class AggregateFunction1 extends LeafExpression with Serializable {
 
@@ -79,7 +82,7 @@ abstract class AggregateFunction1 extends LeafExpression with Serializable {
   override def nullable: Boolean = base.nullable
   override def dataType: DataType = base.dataType
 
-  def update(input: InternalRow): Unit
+  def update(input: InternalRow): Unit //抽象类,用于每行数据都调用该方法
 
   override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     throw new UnsupportedOperationException(
@@ -99,25 +102,30 @@ case class Min(child: Expression) extends UnaryExpression with PartialAggregate1
 
   override def newInstance(): MinFunction = new MinFunction(child, this)
 
+  //校验dt类型是支持排序的类型,否则抛异常
   override def checkInputDataTypes(): TypeCheckResult =
     TypeUtils.checkForOrderingExpr(child.dataType, "function min")
 }
 
+//求最小值的聚合函数
+//expr是一个表达式,用于计算当前行,将当前行转换成一个值
+//
 case class MinFunction(expr: Expression, base: AggregateExpression1) extends AggregateFunction1 {
   def this() = this(null, null) // Required for serialization.
 
-  val currentMin: MutableLiteral = MutableLiteral(null, expr.dataType)
-  val cmp = GreaterThan(currentMin, expr)
+  val currentMin: MutableLiteral = MutableLiteral(null, expr.dataType) //可变的对象,初始化的时候值是null,类型是表达式的返回类型
+  val cmp = GreaterThan(currentMin, expr) //比较函数  每次那新的值都和当前最小值比较
 
+  //每条数据都调用该方法
   override def update(input: InternalRow): Unit = {
-    if (currentMin.value == null) {
+    if (currentMin.value == null) {//当前最小值为null,因此设置当前最小值为当前表达式
       currentMin.value = expr.eval(input)
-    } else if (cmp.eval(input) == true) {
+    } else if (cmp.eval(input) == true) {//说明是最小的,因此更换最小值
       currentMin.value = expr.eval(input)
     }
   }
 
-  override def eval(input: InternalRow): Any = currentMin.value
+  override def eval(input: InternalRow): Any = currentMin.value //直接返回该值即可
 }
 
 case class Max(child: Expression) extends UnaryExpression with PartialAggregate1 {
@@ -136,12 +144,14 @@ case class Max(child: Expression) extends UnaryExpression with PartialAggregate1
     TypeUtils.checkForOrderingExpr(child.dataType, "function max")
 }
 
+//求最大值的聚合函数
 case class MaxFunction(expr: Expression, base: AggregateExpression1) extends AggregateFunction1 {
   def this() = this(null, null) // Required for serialization.
 
-  val currentMax: MutableLiteral = MutableLiteral(null, expr.dataType)
-  val cmp = LessThan(currentMax, expr)
+  val currentMax: MutableLiteral = MutableLiteral(null, expr.dataType) //当前最大值,默认是null,类型就是表达式类型
+  val cmp = LessThan(currentMax, expr) //比较方法
 
+  //每行数据调用该方法,设置历史最大值
   override def update(input: InternalRow): Unit = {
     if (currentMax.value == null) {
       currentMax.value = expr.eval(input)
@@ -150,7 +160,7 @@ case class MaxFunction(expr: Expression, base: AggregateExpression1) extends Agg
     }
   }
 
-  override def eval(input: InternalRow): Any = currentMax.value
+  override def eval(input: InternalRow): Any = currentMax.value //直接返回该历史最大值
 }
 
 //对表达式进行count操作
@@ -167,14 +177,16 @@ case class Count(child: Expression) extends UnaryExpression with PartialAggregat
   override def newInstance(): CountFunction = new CountFunction(child, this)
 }
 
+//求count个数
 case class CountFunction(expr: Expression, base: AggregateExpression1) extends AggregateFunction1 {
   def this() = this(null, null) // Required for serialization.
 
-  var count: Long = _
+  var count: Long = _ //当前个数
 
+  //每行数据都更新该值
   override def update(input: InternalRow): Unit = {
-    val evaluatedExpr = expr.eval(input)
-    if (evaluatedExpr != null) {
+    val evaluatedExpr = expr.eval(input) //将当前数据内容使用表达式进行转换
+    if (evaluatedExpr != null) {//只要值不是null,就增加一个
       count += 1L
     }
   }

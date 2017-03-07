@@ -21,10 +21,12 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodeGenContext, GeneratedExpressionCode}
 import org.apache.spark.sql.types._
 
+//如何转换Decimal类型
 /**
  * Return the unscaled Long value of a Decimal, assuming it fits in a Long.
  * Note: this expression is internal and created only by the optimizer,
  * we don't need to do type check for it.
+ * 将Decimal类型的输入转换成long类型
  */
 case class UnscaledValue(child: Expression) extends UnaryExpression {
 
@@ -43,6 +45,12 @@ case class UnscaledValue(child: Expression) extends UnaryExpression {
  * Create a Decimal from an unscaled Long value.
  * Note: this expression is internal and created only by the optimizer,
  * we don't need to do type check for it.
+ * 返回一个Decimal类型数据
+ * 输入表达式返回的是long类型
+ *
+ * precision 表示 字段长度
+ * scale 表示 小数位数
+ * 例如：-4.75, precision=3，scale=2，
  */
 case class MakeDecimal(child: Expression, precision: Int, scale: Int) extends UnaryExpression {
 
@@ -65,9 +73,10 @@ case class MakeDecimal(child: Expression, precision: Int, scale: Int) extends Un
 /**
  * An expression used to wrap the children when promote the precision of DecimalType to avoid
  * promote multiple times.
+ * 提高精度
  */
 case class PromotePrecision(child: Expression) extends UnaryExpression {
-  override def dataType: DataType = child.dataType
+  override def dataType: DataType = child.dataType //返回值还是参数的返回值.因为他的目标就是提高精度.不改变原类型
   override def eval(input: InternalRow): Any = child.eval(input)
   override def gen(ctx: CodeGenContext): GeneratedExpressionCode = child.gen(ctx)
   override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = ""
@@ -77,14 +86,15 @@ case class PromotePrecision(child: Expression) extends UnaryExpression {
 /**
  * Rounds the decimal to given scale and check whether the decimal can fit in provided precision
  * or not, returns null if not.
+ * 更改child表达式对应的精度和小数点位数
  */
 case class CheckOverflow(child: Expression, dataType: DecimalType) extends UnaryExpression {
 
   override def nullable: Boolean = true
 
   override def nullSafeEval(input: Any): Any = {
-    val d = input.asInstanceOf[Decimal].clone()
-    if (d.changePrecision(dataType.precision, dataType.scale)) {
+    val d = input.asInstanceOf[Decimal].clone() //复制原有的小数
+    if (d.changePrecision(dataType.precision, dataType.scale)) {//更改child表达式对应的精度和小数点位数
       d
     } else {
       null

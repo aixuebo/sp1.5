@@ -22,7 +22,7 @@ import scala.reflect.ClassTag
 import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
 
 abstract class ArrayData extends SpecializedGetters with Serializable {
-  def numElements(): Int
+  def numElements(): Int //数组元素个数
 
   def copy(): ArrayData
 

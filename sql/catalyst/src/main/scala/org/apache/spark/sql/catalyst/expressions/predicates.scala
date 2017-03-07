@@ -443,7 +443,7 @@ case class LessThanOrEqual(left: Expression, right: Expression) extends BinaryCo
 
 case class GreaterThan(left: Expression, right: Expression) extends BinaryComparison {
 
-  override def inputType: AbstractDataType = TypeCollection.Ordered
+  override def inputType: AbstractDataType = TypeCollection.Ordered //输入参数是可以排序的
 
   override def symbol: String = ">"
 

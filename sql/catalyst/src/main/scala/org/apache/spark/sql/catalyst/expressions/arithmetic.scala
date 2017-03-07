@@ -22,18 +22,19 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
+//该类表示算数运算的表达式,即加减乘除运算
 
 
-//- 表达式
+//- 表达式  将表达式的值转换成负数
 case class UnaryMinus(child: Expression) extends UnaryExpression with ExpectsInputTypes {
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection.NumericAndInterval)
+  override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection.NumericAndInterval) //输入参数是数字类型和间隔类型,他们用于加减法
 
-  override def dataType: DataType = child.dataType
+  override def dataType: DataType = child.dataType //返回类型与参数的类型相同
 
   override def toString: String = s"-$child"
 
-  private lazy val numeric = TypeUtils.getNumeric(dataType)
+  private lazy val numeric = TypeUtils.getNumeric(dataType) //将数据类型转换成Numeric类型
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = dataType match {
     case dt: DecimalType => defineCodeGen(ctx, ev, c => s"$c.unary_$$minus()")
@@ -49,29 +50,31 @@ case class UnaryMinus(child: Expression) extends UnaryExpression with ExpectsInp
   }
 
   protected override def nullSafeEval(input: Any): Any = {
-    if (dataType.isInstanceOf[CalendarIntervalType]) {
+    if (dataType.isInstanceOf[CalendarIntervalType]) { //时间类型
       input.asInstanceOf[CalendarInterval].negate()
     } else {
-      numeric.negate(input)
+      numeric.negate(input) //将表达式的值转换成负数
     }
   }
 }
 
+//一元正数(不是数一定是正的,主要是带的是加法),即加法
 case class UnaryPositive(child: Expression) extends UnaryExpression with ExpectsInputTypes {
   override def prettyName: String = "positive"
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection.NumericAndInterval)
+  override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection.NumericAndInterval) //输入参数是数字类型和间隔类型,他们用于加减法
 
-  override def dataType: DataType = child.dataType
+  override def dataType: DataType = child.dataType //返回类型与参数的类型相同
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String =
     defineCodeGen(ctx, ev, c => c)
 
-  protected override def nullSafeEval(input: Any): Any = input
+  protected override def nullSafeEval(input: Any): Any = input //返回表达式对应的值
 }
 
 /**
  * A function that get the absolute value of the numeric value.
+ * 返回绝对值
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns the absolute value of the numeric value",
@@ -82,7 +85,7 @@ case class Abs(child: Expression) extends UnaryExpression with ExpectsInputTypes
 
   override def dataType: DataType = child.dataType
 
-  private lazy val numeric = TypeUtils.getNumeric(dataType)
+  private lazy val numeric = TypeUtils.getNumeric(dataType) //如何将数据转换成NumericType类型
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = dataType match {
     case dt: DecimalType =>
@@ -94,11 +97,11 @@ case class Abs(child: Expression) extends UnaryExpression with ExpectsInputTypes
   protected override def nullSafeEval(input: Any): Any = numeric.abs(input)
 }
 
-abstract class BinaryArithmetic extends BinaryOperator {
+abstract class BinaryArithmetic extends BinaryOperator { //二元表达式
 
-  override def dataType: DataType = left.dataType
+  override def dataType: DataType = left.dataType //返回值就是其中的元素类型
 
-  override lazy val resolved = childrenResolved && checkInputDataTypes().isSuccess
+  override lazy val resolved = childrenResolved && checkInputDataTypes().isSuccess //进行校验参数类型
 
   /** Name of the function for this expression on a [[Decimal]] type. */
   def decimalMethod: String =
@@ -116,23 +119,25 @@ abstract class BinaryArithmetic extends BinaryOperator {
   }
 }
 
+//拆成2个表达式对象
 private[sql] object BinaryArithmetic {
   def unapply(e: BinaryArithmetic): Option[(Expression, Expression)] = Some((e.left, e.right))
 }
 
+//纯粹的加法
 case class Add(left: Expression, right: Expression) extends BinaryArithmetic {
 
   override def inputType: AbstractDataType = TypeCollection.NumericAndInterval
 
   override def symbol: String = "+"
 
-  private lazy val numeric = TypeUtils.getNumeric(dataType)
+  private lazy val numeric = TypeUtils.getNumeric(dataType) //将数据类型转换成Numeric类型
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = {
-    if (dataType.isInstanceOf[CalendarIntervalType]) {
+    if (dataType.isInstanceOf[CalendarIntervalType]) { //时间类型
       input1.asInstanceOf[CalendarInterval].add(input2.asInstanceOf[CalendarInterval])
     } else {
-      numeric.plus(input1, input2)
+      numeric.plus(input1, input2) //加法
     }
   }
 
@@ -149,6 +154,7 @@ case class Add(left: Expression, right: Expression) extends BinaryArithmetic {
   }
 }
 
+//减法
 case class Subtract(left: Expression, right: Expression) extends BinaryArithmetic {
 
   override def inputType: AbstractDataType = TypeCollection.NumericAndInterval
@@ -200,6 +206,7 @@ case class Divide(left: Expression, right: Expression) extends BinaryArithmetic 
   override def decimalMethod: String = "$div"
   override def nullable: Boolean = true
 
+  //(Any, Any) => Any 表示二元函数 即该方法返回一个除法函数   执行过程是判断返回值是int还是浮点数
   private lazy val div: (Any, Any) => Any = dataType match {
     case ft: FractionalType => ft.fractional.asInstanceOf[Fractional[Any]].div
     case it: IntegralType => it.integral.asInstanceOf[Integral[Any]].quot
@@ -207,14 +214,14 @@ case class Divide(left: Expression, right: Expression) extends BinaryArithmetic 
 
   override def eval(input: InternalRow): Any = {
     val input2 = right.eval(input)
-    if (input2 == null || input2 == 0) {
+    if (input2 == null || input2 == 0) {//解决分母不是0的问题,直接返回null
       null
     } else {
       val input1 = left.eval(input)
       if (input1 == null) {
         null
       } else {
-        div(input1, input2)
+        div(input1, input2)//执行除法
       }
     }
   }
@@ -254,7 +261,7 @@ case class Divide(left: Expression, right: Expression) extends BinaryArithmetic 
   }
 }
 
-//%运算
+//%运算   比如5%3 = 2,即余数为2
 case class Remainder(left: Expression, right: Expression) extends BinaryArithmetic {
 
   override def inputType: AbstractDataType = NumericType
@@ -263,7 +270,8 @@ case class Remainder(left: Expression, right: Expression) extends BinaryArithmet
   override def decimalMethod: String = "remainder"
   override def nullable: Boolean = true
 
-  private lazy val integral = dataType match {
+  //运算函数
+  private lazy val integral = dataType match { //根据返回值不同,创建不同的运算方式
     case i: IntegralType => i.integral.asInstanceOf[Integral[Any]]
     case i: FractionalType => i.asIntegral.asInstanceOf[Integral[Any]]
   }
@@ -317,14 +325,15 @@ case class Remainder(left: Expression, right: Expression) extends BinaryArithmet
   }
 }
 
+//返回两个数的较大的一个.如果是null,则返回另外一个,如果都是null,则返回null
 case class MaxOf(left: Expression, right: Expression) extends BinaryArithmetic {
   // TODO: Remove MaxOf and MinOf, and replace its usage with Greatest and Least.
 
-  override def inputType: AbstractDataType = TypeCollection.Ordered
+  override def inputType: AbstractDataType = TypeCollection.Ordered //数据数据是可以排序的类型
 
   override def nullable: Boolean = left.nullable && right.nullable
 
-  private lazy val ordering = TypeUtils.getInterpretedOrdering(dataType)
+  private lazy val ordering = TypeUtils.getInterpretedOrdering(dataType) //返回值是可以排序的类型
 
   override def eval(input: InternalRow): Any = {
     val input1 = left.eval(input)
@@ -371,6 +380,7 @@ case class MaxOf(left: Expression, right: Expression) extends BinaryArithmetic {
   override def symbol: String = "max"
 }
 
+//返回两个数的较小的一个.如果是null,则返回另外一个,如果都是null,则返回null
 case class MinOf(left: Expression, right: Expression) extends BinaryArithmetic {
   // TODO: Remove MaxOf and MinOf, and replace its usage with Greatest and Least.
 
@@ -431,13 +441,14 @@ case class Pmod(left: Expression, right: Expression) extends BinaryArithmetic {
 
   override def symbol: String = "pmod"
 
+  //判断类型是数字类型或者null类型
   protected def checkTypesInternal(t: DataType) =
     TypeUtils.checkForNumericExpr(t, "pmod")
 
-  override def inputType: AbstractDataType = NumericType
+  override def inputType: AbstractDataType = NumericType //输入类型是数字类型
 
   protected override def nullSafeEval(left: Any, right: Any) =
-    dataType match {
+    dataType match {//根据返回值类型不同,创建不同的pmod方法
       case IntegerType => pmod(left.asInstanceOf[Int], right.asInstanceOf[Int])
       case LongType => pmod(left.asInstanceOf[Long], right.asInstanceOf[Long])
       case ShortType => pmod(left.asInstanceOf[Short], right.asInstanceOf[Short])
@@ -484,7 +495,7 @@ case class Pmod(left: Expression, right: Expression) extends BinaryArithmetic {
   }
 
   private def pmod(a: Int, n: Int): Int = {
-    val r = a % n
+    val r = a % n //计算余数,比如5 % 3 = 2,即余数是2
     if (r < 0) {(r + n) % n} else r
   }
 

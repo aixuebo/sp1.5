@@ -121,6 +121,7 @@ abstract class Expression extends TreeNode[Expression] {
    * placeholders or has data types mismatch.
    * Implementations of expressions should override this if the resolution of this type of
    * expression involves more than just the resolution of its children and type checking.
+   * true表示表达式以及所有的子表达式都已经校验完成
    */
   lazy val resolved: Boolean = childrenResolved && checkInputDataTypes().isSuccess
 
@@ -134,8 +135,9 @@ abstract class Expression extends TreeNode[Expression] {
   /**
    * Returns true if  all the children of this expression have been resolved to a specific schema
    * and false if any still contains any unresolved placeholders.
+   * 子类已经校验完成
    */
-  def childrenResolved: Boolean = children.forall(_.resolved)
+  def childrenResolved: Boolean = children.forall(_.resolved) //所有的子表达式resolved都是true,则返回true
 
   /**
    * Returns true when two expressions will always compute the same result, even if they differ
@@ -159,6 +161,7 @@ abstract class Expression extends TreeNode[Expression] {
    * Checks the input data types, returns `TypeCheckResult.success` if it's valid,
    * or returns a `TypeCheckResult` with an error message if invalid.
    * Note: it's not valid to call this method until `childrenResolved == true`.
+   * 本类校验输入类型是否校验成功
    */
   def checkInputDataTypes(): TypeCheckResult = TypeCheckResult.TypeCheckSuccess
 

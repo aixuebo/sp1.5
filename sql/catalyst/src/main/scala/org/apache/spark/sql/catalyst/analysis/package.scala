@@ -30,6 +30,7 @@ package object analysis {
   /**
    * Resolver should return true if the first string refers to the same entity as the second string.
    * For example, by using case insensitive equality.
+   * true表示是否有两个字符串的映射关系,这个Resolver对象就相当于一个map中的一个元素,存在则返回true,即有该两个字符串的映射
    */
   type Resolver = (String, String) => Boolean
 

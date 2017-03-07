@@ -29,7 +29,7 @@ import org.apache.spark.sql.types._
  */
 case class BitwiseAnd(left: Expression, right: Expression) extends BinaryArithmetic {
 
-  override def inputType: AbstractDataType = IntegralType
+  override def inputType: AbstractDataType = IntegralType //输入数据是整数
 
   override def symbol: String = "&"
 
@@ -44,7 +44,7 @@ case class BitwiseAnd(left: Expression, right: Expression) extends BinaryArithme
       ((evalE1: Long, evalE2: Long) => evalE1 & evalE2).asInstanceOf[(Any, Any) => Any]
   }
 
-  protected override def nullSafeEval(input1: Any, input2: Any): Any = and(input1, input2)
+  protected override def nullSafeEval(input1: Any, input2: Any): Any = and(input1, input2) //两个int进行&操作
 }
 
 /**
@@ -55,7 +55,7 @@ case class BitwiseAnd(left: Expression, right: Expression) extends BinaryArithme
  */
 case class BitwiseOr(left: Expression, right: Expression) extends BinaryArithmetic {
 
-  override def inputType: AbstractDataType = IntegralType
+  override def inputType: AbstractDataType = IntegralType //输入数据是整数
 
   override def symbol: String = "|"
 
@@ -70,7 +70,7 @@ case class BitwiseOr(left: Expression, right: Expression) extends BinaryArithmet
       ((evalE1: Long, evalE2: Long) => evalE1 | evalE2).asInstanceOf[(Any, Any) => Any]
   }
 
-  protected override def nullSafeEval(input1: Any, input2: Any): Any = or(input1, input2)
+  protected override def nullSafeEval(input1: Any, input2: Any): Any = or(input1, input2) //两个int进行|操作
 }
 
 /**
@@ -82,7 +82,7 @@ case class BitwiseOr(left: Expression, right: Expression) extends BinaryArithmet
  */
 case class BitwiseXor(left: Expression, right: Expression) extends BinaryArithmetic {
 
-  override def inputType: AbstractDataType = IntegralType
+  override def inputType: AbstractDataType = IntegralType //输入数据是整数
 
   override def symbol: String = "^"
 
@@ -97,7 +97,7 @@ case class BitwiseXor(left: Expression, right: Expression) extends BinaryArithme
       ((evalE1: Long, evalE2: Long) => evalE1 ^ evalE2).asInstanceOf[(Any, Any) => Any]
   }
 
-  protected override def nullSafeEval(input1: Any, input2: Any): Any = xor(input1, input2)
+  protected override def nullSafeEval(input1: Any, input2: Any): Any = xor(input1, input2) //两个int进行非操作
 }
 
 /**
@@ -106,7 +106,7 @@ case class BitwiseXor(left: Expression, right: Expression) extends BinaryArithme
  */
 case class BitwiseNot(child: Expression) extends UnaryExpression with ExpectsInputTypes {
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(IntegralType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(IntegralType) //输入数据是整数
 
   override def dataType: DataType = child.dataType
 
@@ -127,5 +127,5 @@ case class BitwiseNot(child: Expression) extends UnaryExpression with ExpectsInp
     defineCodeGen(ctx, ev, c => s"(${ctx.javaType(dataType)}) ~($c)")
   }
 
-  protected override def nullSafeEval(input: Any): Any = not(input)
+  protected override def nullSafeEval(input: Any): Any = not(input) //对该表达式进行~操作
 }

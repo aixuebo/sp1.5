@@ -104,6 +104,8 @@ private[this] object GetJsonObject {
 /**
  * Extracts json object from a json string based on json path specified, and returns json string
  * of the extracted json object. It will return null if the input json string is invalid.
+ * 从json字符串对象中抽取一个json字符串,该抽取规则是基于path路径的,即json对象的path
+ * 返回json字符串,如果输入json对象是非法的,则返回null
  */
 case class GetJsonObject(json: Expression, path: Expression)
   extends BinaryExpression with ExpectsInputTypes with CodegenFallback {
@@ -113,20 +115,22 @@ case class GetJsonObject(json: Expression, path: Expression)
   import WriteStyle._
   import com.fasterxml.jackson.core.JsonToken._
 
-  override def left: Expression = json
-  override def right: Expression = path
-  override def inputTypes: Seq[DataType] = Seq(StringType, StringType)
-  override def dataType: DataType = StringType
+  override def left: Expression = json //json内容
+  override def right: Expression = path //要抽取的path路径
+
+  override def inputTypes: Seq[DataType] = Seq(StringType, StringType) //输入是两个字符串
+  override def dataType: DataType = StringType //输出是一个字符串
   override def prettyName: String = "get_json_object"
 
   @transient private lazy val parsedPath = parsePath(path.eval().asInstanceOf[UTF8String])
 
   override def eval(input: InternalRow): Any = {
-    val jsonStr = json.eval(input).asInstanceOf[UTF8String]
+    val jsonStr = json.eval(input).asInstanceOf[UTF8String] //解析json对应的内容
     if (jsonStr == null) {
       return null
     }
 
+    //Option类型的值
     val parsed = if (path.foldable) {
       parsedPath
     } else {
@@ -136,10 +140,10 @@ case class GetJsonObject(json: Expression, path: Expression)
     if (parsed.isDefined) {
       try {
         val parser = jsonFactory.createParser(jsonStr.getBytes)
-        val output = new ByteArrayOutputStream()
+        val output = new ByteArrayOutputStream() //输出的内容
         val generator = jsonFactory.createGenerator(output, JsonEncoding.UTF8)
         parser.nextToken()
-        val matched = evaluatePath(parser, generator, RawStyle, parsed.get)
+        val matched = evaluatePath(parser, generator, RawStyle, parsed.get) //说明匹配上指定的path的数据
         generator.close()
         if (matched) {
           UTF8String.fromBytes(output.toByteArray)
@@ -191,7 +195,7 @@ case class GetJsonObject(json: Expression, path: Expression)
    * have been written to the generator
    */
   private def evaluatePath(
-      p: JsonParser,
+      p: JsonParser,//json对象,是已经解析了原始json数据产生的对象
       g: JsonGenerator,
       style: WriteStyle,
       path: List[PathInstruction]): Boolean = {

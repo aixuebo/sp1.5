@@ -25,7 +25,9 @@ import org.apache.spark.sql.types._
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // This file defines all the expressions to extract values out of complex types.
+//该文件定义了从复杂类型中去抽取值的所有的表达式
 // For example, getting a field out of an array, map, or struct.
+//例如从一个数组或者map或者对象中抽取一个field
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 
@@ -36,31 +38,32 @@ object ExtractValue {
    *
    *   `child`      |    `extraction`    |    concrete `ExtractValue`
    * ----------------------------------------------------------------
-   *    Struct      |   Literal String   |        GetStructField
-   * Array[Struct]  |   Literal String   |     GetArrayStructFields
-   *    Array       |   Integral type    |         GetArrayItem
-   *     Map        |   map key type     |         GetMapValue
+   *    Struct      |   Literal String   |        GetStructField 从Struct对象中抽取一个属性对应得知
+   * Array[Struct]  |   Literal String   |     GetArrayStructFields  从Struct数组中抽取一个属性对应的值的集合
+   *    Array       |   Integral type    |         GetArrayItem  从数组中抽取指定index下标对应的值
+   *     Map        |   map key type     |         GetMapValue  从map中抽取指定key对应的值
    */
   def apply(
-      child: Expression,
-      extraction: Expression,
-      resolver: Resolver): Expression = {
+      child: Expression, //数据集合表达式
+      extraction: Expression, //抽取表达式
+      resolver: Resolver) //映射函数,可以映射表达式对应的Struct中的name和抽取表达式extraction中的name映射关系
+     : Expression = {
 
     (child.dataType, extraction) match {
-      case (StructType(fields), NonNullLiteral(v, StringType)) =>
-        val fieldName = v.toString
-        val ordinal = findField(fields, fieldName, resolver)
+      case (StructType(fields), NonNullLiteral(v, StringType)) => //说明是一个StructType对象
+        val fieldName = v.toString //要抽取的属性name
+        val ordinal = findField(fields, fieldName, resolver) //找到该属性在StructType对象中,该属性在第几个位置上
         GetStructField(child, fields(ordinal).copy(name = fieldName), ordinal)
 
-      case (ArrayType(StructType(fields), containsNull), NonNullLiteral(v, StringType)) =>
+      case (ArrayType(StructType(fields), containsNull), NonNullLiteral(v, StringType)) => //从StructType数组中抽取一个属性的全部数据值
         val fieldName = v.toString
         val ordinal = findField(fields, fieldName, resolver)
         GetArrayStructFields(child, fields(ordinal).copy(name = fieldName),
           ordinal, fields.length, containsNull)
 
-      case (_: ArrayType, _) => GetArrayItem(child, extraction)
+      case (_: ArrayType, _) => GetArrayItem(child, extraction) //从数组中抽取一个下标的值
 
-      case (MapType(kt, _, _), _) => GetMapValue(child, extraction)
+      case (MapType(kt, _, _), _) => GetMapValue(child, extraction) //从map中抽取一个key对应的值
 
       case (otherType, _) =>
         val errorMsg = otherType match {
@@ -78,8 +81,8 @@ object ExtractValue {
    * desired fields are found.
    */
   private def findField(fields: Array[StructField], fieldName: String, resolver: Resolver): Int = {
-    val checkField = (f: StructField) => resolver(f.name, fieldName)
-    val ordinal = fields.indexWhere(checkField)
+    val checkField = (f: StructField) => resolver(f.name, fieldName) //true表示说明有name和数据结构的属性的映射
+    val ordinal = fields.indexWhere(checkField) //获取对应的下标index
     if (ordinal == -1) {
       throw new AnalysisException(
         s"No such struct field $fieldName in ${fields.map(_.name).mkString(", ")}")
@@ -96,16 +99,17 @@ object ExtractValue {
  * Returns the value of fields in the Struct `child`.
  *
  * No need to do type checking since it is handled by [[ExtractValue]].
+ * 从InternalRow中获取一个属性对应的值,该属性是第ordinal个属性,属性对应的schema是StructField
  */
 case class GetStructField(child: Expression, field: StructField, ordinal: Int)
   extends UnaryExpression {
 
-  override def dataType: DataType = field.dataType
+  override def dataType: DataType = field.dataType //返回值就是属性对应的类型
   override def nullable: Boolean = child.nullable || field.nullable
   override def toString: String = s"$child.${field.name}"
 
   protected override def nullSafeEval(input: Any): Any =
-    input.asInstanceOf[InternalRow].get(ordinal, field.dataType)
+    input.asInstanceOf[InternalRow].get(ordinal, field.dataType) //从行对象中获取第1个元素,从而得到对应的值
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     nullSafeCodeGen(ctx, ev, eval => {
@@ -124,13 +128,15 @@ case class GetStructField(child: Expression, field: StructField, ordinal: Int)
  * Returns the array of value of fields in the Array of Struct `child`.
  *
  * No need to do type checking since it is handled by [[ExtractValue]].
+ * 从strct数组中抽取某一个属性对应的值的集合
  */
 case class GetArrayStructFields(
-    child: Expression,
-    field: StructField,
-    ordinal: Int,
-    numFields: Int,
-    containsNull: Boolean) extends UnaryExpression {
+    child: Expression,//数组,
+    field: StructField,//要获取的元素属性对应的值
+    ordinal: Int,//该field是行里面第几个属性
+    numFields: Int,//该行有多少个属性
+    containsNull: Boolean) //是否允许是null
+  extends UnaryExpression {
 
   override def dataType: DataType = ArrayType(field.dataType, containsNull)
   override def nullable: Boolean = child.nullable || containsNull || field.nullable
@@ -138,14 +144,14 @@ case class GetArrayStructFields(
 
   protected override def nullSafeEval(input: Any): Any = {
     val array = input.asInstanceOf[ArrayData]
-    val length = array.numElements()
-    val result = new Array[Any](length)
+    val length = array.numElements() //数组的元素数量
+    val result = new Array[Any](length) //获取所有的该属性对应的值
     var i = 0
     while (i < length) {
-      if (array.isNullAt(i)) {
+      if (array.isNullAt(i)) {//说明数组的元素是null
         result(i) = null
       } else {
-        val row = array.getStruct(i, numFields)
+        val row = array.getStruct(i, numFields) //获取第i行,该列是struct组成的行,有numFields个属性
         if (row.isNullAt(ordinal)) {
           result(i) = null
         } else {
@@ -185,12 +191,13 @@ case class GetArrayStructFields(
  * Returns the field at `ordinal` in the Array `child`.
  *
  * We need to do type checking here as `ordinal` expression maybe unresolved.
+ * 从数组中获取一个下标对应的值
  */
 case class GetArrayItem(child: Expression, ordinal: Expression)
   extends BinaryExpression with ExpectsInputTypes {
 
   // We have done type checking for child in `ExtractValue`, so only need to check the `ordinal`.
-  override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType, IntegralType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType, IntegralType) //因为是下标,因此第二个参数是int
 
   override def toString: String = s"$child[$ordinal]"
 
@@ -200,14 +207,14 @@ case class GetArrayItem(child: Expression, ordinal: Expression)
   /** `Null` is returned for invalid ordinals. */
   override def nullable: Boolean = true
 
-  override def dataType: DataType = child.dataType.asInstanceOf[ArrayType].elementType
+  override def dataType: DataType = child.dataType.asInstanceOf[ArrayType].elementType //数据类型就是数组的元素类型
 
   protected override def nullSafeEval(value: Any, ordinal: Any): Any = {
-    val baseValue = value.asInstanceOf[ArrayData]
-    val index = ordinal.asInstanceOf[Number].intValue()
+    val baseValue = value.asInstanceOf[ArrayData] //得到数组
+    val index = ordinal.asInstanceOf[Number].intValue() //得到要获取的下标
     if (index >= baseValue.numElements() || index < 0) {
       null
-    } else {
+    } else { //直接获取下标对应的值
       baseValue.get(index, dataType)
     }
   }
@@ -228,16 +235,17 @@ case class GetArrayItem(child: Expression, ordinal: Expression)
 
 /**
  * Returns the value of key `key` in Map `child`.
- *
+ * 从map中获取一个key对应的值
  * We need to do type checking here as `key` expression maybe unresolved.
  */
 case class GetMapValue(child: Expression, key: Expression)
   extends BinaryExpression with ExpectsInputTypes {
 
-  private def keyType = child.dataType.asInstanceOf[MapType].keyType
+  //因为map的key和value所有数据都是相同的类型的
+  private def keyType = child.dataType.asInstanceOf[MapType].keyType //获取key对应的数据类型
 
   // We have done type checking for child in `ExtractValue`, so only need to check the `key`.
-  override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType, keyType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType, keyType) //输入类型,是一个任意类型和key的类型
 
   override def toString: String = s"$child[$key]"
 
@@ -247,19 +255,20 @@ case class GetMapValue(child: Expression, key: Expression)
   /** `Null` is returned for invalid ordinals. */
   override def nullable: Boolean = true
 
-  override def dataType: DataType = child.dataType.asInstanceOf[MapType].valueType
+  override def dataType: DataType = child.dataType.asInstanceOf[MapType].valueType //获取对应的value类型
 
   // todo: current search is O(n), improve it.
+  //ordinal 表示key的name
   protected override def nullSafeEval(value: Any, ordinal: Any): Any = {
     val map = value.asInstanceOf[MapData]
-    val length = map.numElements()
-    val keys = map.keyArray()
+    val length = map.numElements() //map中元素数量
+    val keys = map.keyArray() //map中key的集合
 
     var i = 0
-    var found = false
-    while (i < length && !found) {
-      if (keys.get(i, keyType) == ordinal) {
-        found = true
+    var found = false //是否找到了
+    while (i < length && !found) { //没找到就不断找
+      if (keys.get(i, keyType) == ordinal) {//获取第i个key是否是要的key
+        found = true //说明发现了
       } else {
         i += 1
       }
@@ -268,7 +277,7 @@ case class GetMapValue(child: Expression, key: Expression)
     if (!found) {
       null
     } else {
-      map.valueArray().get(i, dataType)
+      map.valueArray().get(i, dataType) //获取第i个发现的对应的值
     }
   }
 

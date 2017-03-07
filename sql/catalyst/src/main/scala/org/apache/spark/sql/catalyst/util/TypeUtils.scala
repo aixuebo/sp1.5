@@ -25,6 +25,8 @@ import org.apache.spark.sql.types._
  * Helper functions to check for valid data types.
  */
 object TypeUtils {
+
+  //判断类型是数字类型或者null类型
   def checkForNumericExpr(dt: DataType, caller: String): TypeCheckResult = {
     if (dt.isInstanceOf[NumericType] || dt == NullType) {
       TypeCheckResult.TypeCheckSuccess
@@ -33,8 +35,9 @@ object TypeUtils {
     }
   }
 
+  //dt类型是支持排序的类型,否则抛异常
   def checkForOrderingExpr(dt: DataType, caller: String): TypeCheckResult = {
-    if (RowOrdering.isOrderable(dt)) {
+    if (RowOrdering.isOrderable(dt)) {//说明是支持排序的类型
       TypeCheckResult.TypeCheckSuccess
     } else {
       TypeCheckResult.TypeCheckFailure(s"$caller does not support ordering on type $dt")
@@ -52,6 +55,7 @@ object TypeUtils {
     }
   }
 
+  //将数据类型转换成Numeric类型
   def getNumeric(t: DataType): Numeric[Any] =
     t.asInstanceOf[NumericType].numeric.asInstanceOf[Numeric[Any]]
 

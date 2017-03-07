@@ -24,18 +24,20 @@ package org.apache.spark.sql.catalyst.expressions
  */
 object AttributeMap {
   def apply[A](kvs: Seq[(Attribute, A)]): AttributeMap[A] = {
-    new AttributeMap(kvs.map(kv => (kv._1.exprId, kv)).toMap)
+    new AttributeMap(kvs.map(kv => (kv._1.exprId, kv)).toMap) //组成元组(id,(Attribute, A)),然后再转换成Map
   }
 }
 
+//一个map,表示一个属性对应一个值,即Map[Attribute, A]
+//外层又套了一层,即同一个id的属性使用同一套Attribute, A
 class AttributeMap[A](baseMap: Map[ExprId, (Attribute, A)])
   extends Map[Attribute, A] with Serializable {
 
-  override def get(k: Attribute): Option[A] = baseMap.get(k.exprId).map(_._2)
+  override def get(k: Attribute): Option[A] = baseMap.get(k.exprId).map(_._2) //获取属性对应的value,属性的通过id获取
 
-  override def + [B1 >: A](kv: (Attribute, B1)): Map[Attribute, B1] = baseMap.values.toMap + kv
+  override def + [B1 >: A](kv: (Attribute, B1)): Map[Attribute, B1] = baseMap.values.toMap + kv //添加一个key value
 
-  override def iterator: Iterator[(Attribute, A)] = baseMap.valuesIterator
+  override def iterator: Iterator[(Attribute, A)] = baseMap.valuesIterator //循环所有的key-value
 
-  override def -(key: Attribute): Map[Attribute, A] = baseMap.values.toMap - key
+  override def -(key: Attribute): Map[Attribute, A] = baseMap.values.toMap - key //减去一个key
 }

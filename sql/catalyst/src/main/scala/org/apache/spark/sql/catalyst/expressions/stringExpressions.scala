@@ -218,8 +218,11 @@ case class EndsWith(left: Expression, right: Expression)
   }
 }
 
+//字符串转换静态工具类
 object StringTranslate {
 
+  //建立词典
+  //比如matchingString为index replaceString为hello 因此结果就是i被替换成h  n被替换成e 等等
   def buildDict(matchingString: UTF8String, replaceString: UTF8String)
     : JMap[Character, Character] = {
     val matching = matchingString.toString()
@@ -242,14 +245,19 @@ object StringTranslate {
  * The characters in `replaceExpr` is corresponding to the characters in `matchingExpr`.
  * The translate will happen when any character in the string matching with the character
  * in the `matchingExpr`.
+ *
+ * scr字符串进行替换、匹配表达式、替换的字符内容
+ * 即在matchingExpr中任意字符出现在src中,都会被替换掉,替换的内容来自于replaceExpr
  */
 case class StringTranslate(srcExpr: Expression, matchingExpr: Expression, replaceExpr: Expression)
-  extends TernaryExpression with ImplicitCastInputTypes {
+  extends TernaryExpression //三元函数
+  with ImplicitCastInputTypes {
 
-  @transient private var lastMatching: UTF8String = _
-  @transient private var lastReplace: UTF8String = _
+  @transient private var lastMatching: UTF8String = _ //匹配表达式
+  @transient private var lastReplace: UTF8String = _ //替换的内容
   @transient private var dict: JMap[Character, Character] = _
 
+  //对原始字符串进行替换
   override def nullSafeEval(srcEval: Any, matchingEval: Any, replaceEval: Any): Any = {
     if (matchingEval != lastMatching || replaceEval != lastReplace) {
       lastMatching = matchingEval.asInstanceOf[UTF8String].clone()
@@ -297,11 +305,12 @@ case class StringTranslate(srcExpr: Expression, matchingExpr: Expression, replac
  * A function that returns the index (1-based) of the given string (left) in the comma-
  * delimited list (right). Returns 0, if the string wasn't found or if the given
  * string (left) contains a comma.
+ * 一个函数,返回index位置,左边是字符串,右边是用逗号拆分的字符串
  */
 case class FindInSet(left: Expression, right: Expression) extends BinaryExpression
     with ImplicitCastInputTypes {
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType) //输入两个字符串
 
   override protected def nullSafeEval(word: Any, set: Any): Any =
     set.asInstanceOf[UTF8String].findInSet(word.asInstanceOf[UTF8String])
@@ -312,7 +321,7 @@ case class FindInSet(left: Expression, right: Expression) extends BinaryExpressi
     )
   }
 
-  override def dataType: DataType = IntegerType
+  override def dataType: DataType = IntegerType //返回值整数
 }
 
 /**
