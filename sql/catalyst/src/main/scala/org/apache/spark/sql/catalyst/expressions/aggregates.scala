@@ -30,6 +30,7 @@ import org.apache.spark.util.collection.OpenHashSet
 
 trait AggregateExpression extends Expression with Unevaluable
 
+//表示聚合的表达式
 trait AggregateExpression1 extends AggregateExpression {
 
   /**
@@ -40,6 +41,7 @@ trait AggregateExpression1 extends AggregateExpression {
   /**
    * Creates a new instance that can be used to compute this aggregate expression for a group
    * of input rows/
+   * 创建一个实例 去真正计算每一行数据
    */
   def newInstance(): AggregateFunction1
 }
@@ -235,53 +237,57 @@ case class CountDistinctFunction(
   override def eval(input: InternalRow): Any = seen.size.toLong
 }
 
+//对数据行进行表达式转换--转换成新的数据,存储到set中
 case class CollectHashSet(expressions: Seq[Expression]) extends AggregateExpression1 {
   def this() = this(null)
 
-  override def children: Seq[Expression] = expressions
+  override def children: Seq[Expression] = expressions //表达式集合
   override def nullable: Boolean = false
-  override def dataType: OpenHashSetUDT = new OpenHashSetUDT(expressions.head.dataType)
+  override def dataType: OpenHashSetUDT = new OpenHashSetUDT(expressions.head.dataType)//返回是Set
   override def toString: String = s"AddToHashSet(${expressions.mkString(",")})"
   override def newInstance(): CollectHashSetFunction =
-    new CollectHashSetFunction(expressions, this)
+    new CollectHashSetFunction(expressions, this) //创建新的计算规则
 }
 
 case class CollectHashSetFunction(
-    @transient expr: Seq[Expression],
+    @transient expr: Seq[Expression],//根据表达式集合,将一行数据转换成新的一行数据,新的数据每一列就是一个表达式对应的值
     @transient base: AggregateExpression1)
   extends AggregateFunction1 {
 
   def this() = this(null, null) // Required for serialization.
 
-  val seen = new OpenHashSet[Any]()
+  val seen = new OpenHashSet[Any]()//初始化一个集合
 
   @transient
-  val distinctValue = new InterpretedProjection(expr)
+  val distinctValue = new InterpretedProjection(expr) //表达式
 
   override def update(input: InternalRow): Unit = {
     val evaluatedExpr = distinctValue(input)
-    if (!evaluatedExpr.anyNull) {
+    if (!evaluatedExpr.anyNull) {//有不是null的,则添加这条数据结果
       seen.add(evaluatedExpr)
     }
   }
 
   override def eval(input: InternalRow): Any = {
-    seen
+    seen //返回最终的set集合
   }
 }
 
+//返回set集合中的size  即合并set数据到set中,并且返回不重复的数量
+//表达式对应的结果是set集合
 case class CombineSetsAndCount(inputSet: Expression) extends AggregateExpression1 {
   def this() = this(null)
 
   override def children: Seq[Expression] = inputSet :: Nil
   override def nullable: Boolean = false
-  override def dataType: DataType = LongType
+  override def dataType: DataType = LongType //返回值是long类型
   override def toString: String = s"CombineAndCount($inputSet)"
   override def newInstance(): CombineSetsAndCountFunction = {
     new CombineSetsAndCountFunction(inputSet, this)
   }
 }
 
+//返回set集合中的size
 case class CombineSetsAndCountFunction(
     @transient inputSet: Expression,
     @transient base: AggregateExpression1)
@@ -289,20 +295,22 @@ case class CombineSetsAndCountFunction(
 
   def this() = this(null, null) // Required for serialization.
 
-  val seen = new OpenHashSet[Any]()
+  val seen = new OpenHashSet[Any]() //创建空的set集合
 
   override def update(input: InternalRow): Unit = {
-    val inputSetEval = inputSet.eval(input).asInstanceOf[OpenHashSet[Any]]
+    val inputSetEval = inputSet.eval(input).asInstanceOf[OpenHashSet[Any]] //将一行数据转换成set集合
     val inputIterator = inputSetEval.iterator
-    while (inputIterator.hasNext) {
+    while (inputIterator.hasNext) {//不断循环set的每一个元素,添加到结果集中
       seen.add(inputIterator.next)
     }
   }
 
-  override def eval(input: InternalRow): Any = seen.size.toLong
+  override def eval(input: InternalRow): Any = seen.size.toLong //返回set集合中的size
 }
 
-/** The data type of ApproxCountDistinctPartition since its output is a HyperLogLog object. */
+/** The data type of ApproxCountDistinctPartition since its output is a HyperLogLog object.
+  * 粗略估计不重复的元素数量
+  **/
 private[sql] case object HyperLogLogUDT extends UserDefinedType[HyperLogLog] {
 
   override def sqlType: DataType = BinaryType
@@ -605,6 +613,8 @@ case class SumDistinctFunction(expr: Expression, base: AggregateExpression1)
   }
 }
 
+//inputSet表达式的返回值是一个set集合,set元素是InternalRow,其中InternalRow的第一个元素是Numeric类型的
+//该表达式表示合并所有的set,并且计算和
 case class CombineSetsAndSum(inputSet: Expression, base: Expression) extends AggregateExpression1 {
   def this() = this(null, null)
 
@@ -624,43 +634,46 @@ case class CombineSetsAndSumFunction(
 
   def this() = this(null, null) // Required for serialization.
 
-  val seen = new OpenHashSet[Any]()
+  val seen = new OpenHashSet[Any]() //初始化最终set
 
   override def update(input: InternalRow): Unit = {
-    val inputSetEval = inputSet.eval(input).asInstanceOf[OpenHashSet[Any]]
+    val inputSetEval = inputSet.eval(input).asInstanceOf[OpenHashSet[Any]] //返回set集合
     val inputIterator = inputSetEval.iterator
-    while (inputIterator.hasNext) {
-      seen.add(inputIterator.next())
+    while (inputIterator.hasNext) {//循环每一个元素
+      seen.add(inputIterator.next()) //将元素添加到新集合中
     }
   }
 
   override def eval(input: InternalRow): Any = {
-    val casted = seen.asInstanceOf[OpenHashSet[InternalRow]]
+    val casted = seen.asInstanceOf[OpenHashSet[InternalRow]] //强转成InternalRow元素的set集合
     if (casted.size == 0) {
       null
     } else {
       Cast(Literal(
-        casted.iterator.map(f => f.get(0, null)).reduceLeft(
-          base.dataType.asInstanceOf[NumericType].numeric.asInstanceOf[Numeric[Any]].plus)),
+        casted.iterator.map(f => f.get(0, null)) //获取第一个元素
+          .reduceLeft(
+          base.dataType.asInstanceOf[NumericType].numeric.asInstanceOf[Numeric[Any]].plus)),//求和
         base.dataType).eval(null)
     }
   }
 }
 
+//返回第一个非null的元素
 case class First(child: Expression) extends UnaryExpression with PartialAggregate1 {
   override def nullable: Boolean = true
   override def dataType: DataType = child.dataType
   override def toString: String = s"FIRST($child)"
 
   override def asPartial: SplitEvaluation = {
-    val partialFirst = Alias(First(child), "PartialFirst")()
+    val partialFirst = Alias(First(child), "PartialFirst")() //获取第一个元素的表达式.设置一个别名
     SplitEvaluation(
-      First(partialFirst.toAttribute),
-      partialFirst :: Nil)
+      First(partialFirst.toAttribute),//获取第一个值对应的属性对象
+      partialFirst :: Nil) //别名对象
   }
   override def newInstance(): FirstFunction = new FirstFunction(child, this)
 }
 
+//返回第一个非null的元素
 case class FirstFunction(expr: Expression, base: AggregateExpression1) extends AggregateFunction1 {
   def this() = this(null, null) // Required for serialization.
 
@@ -676,10 +689,11 @@ case class FirstFunction(expr: Expression, base: AggregateExpression1) extends A
   override def eval(input: InternalRow): Any = result
 }
 
+//将表达式转换成具体值,如果是null则忽略,返回最后一个非null的值
 case class Last(child: Expression) extends UnaryExpression with PartialAggregate1 {
   override def references: AttributeSet = child.references
   override def nullable: Boolean = true
-  override def dataType: DataType = child.dataType
+  override def dataType: DataType = child.dataType //返回类型与参数类型一样
   override def toString: String = s"LAST($child)"
 
   override def asPartial: SplitEvaluation = {
@@ -694,8 +708,9 @@ case class Last(child: Expression) extends UnaryExpression with PartialAggregate
 case class LastFunction(expr: Expression, base: AggregateExpression1) extends AggregateFunction1 {
   def this() = this(null, null) // Required for serialization.
 
-  var result: Any = null
+  var result: Any = null //最后一个元素
 
+  //每次获取最后一个非null的元素
   override def update(input: InternalRow): Unit = {
     val value = expr.eval(input)
     // We ignore null values.

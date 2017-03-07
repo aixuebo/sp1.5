@@ -108,16 +108,17 @@ abstract class Attribute extends LeafExpression with NamedExpression {
  * @param exprId A globally unique id used to check if an [[AttributeReference]] refers to this
  *               alias. Auto-assigned if left blank.JVM内全局唯一ID
  * @param explicitMetadata Explicit metadata associated with this alias that overwrites child's.
+ * 别名表达式  name是别名  表达式运算的结果就是别名对应的值
  */
 case class Alias(child: Expression, name: String)(
-    val exprId: ExprId = NamedExpression.newExprId,
+    val exprId: ExprId = NamedExpression.newExprId,//获取唯一ID
     val qualifiers: Seq[String] = Nil,
     val explicitMetadata: Option[Metadata] = None)
   extends UnaryExpression with NamedExpression {
 
   // Alias(Generator, xx) need to be transformed into Generate(generator, ...)
   override lazy val resolved =
-    childrenResolved && checkInputDataTypes().isSuccess && !child.isInstanceOf[Generator]
+    childrenResolved && checkInputDataTypes().isSuccess && !child.isInstanceOf[Generator] //说明解析参数成功
 
   override def eval(input: InternalRow): Any = child.eval(input) //执行表达式
 
@@ -138,7 +139,7 @@ case class Alias(child: Expression, name: String)(
 
   override def toAttribute: Attribute = {
     if (resolved) {
-      AttributeReference(name, child.dataType, child.nullable, metadata)(exprId, qualifiers)
+      AttributeReference(name, child.dataType, child.nullable, metadata)(exprId, qualifiers) //定义一个name对应的field属性对象
     } else {
       UnresolvedAttribute(name)
     }

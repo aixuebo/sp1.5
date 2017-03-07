@@ -60,6 +60,7 @@ private[sql] case object Complete extends AggregateMode
 /**
  * A place holder expressions used in code-gen, it does not change the corresponding value
  * in the row.
+ * 一个占位符表达式
  */
 private[sql] case object NoOp extends Expression with Unevaluable {
   override def nullable: Boolean = true
@@ -139,7 +140,9 @@ abstract class AggregateFunction2
   /** The schema of the aggregation buffer. */
   def bufferSchema: StructType
 
-  /** Attributes of fields in bufferSchema. */
+  /** Attributes of fields in bufferSchema.
+    * 属性对应的field对象集合
+    **/
   def bufferAttributes: Seq[AttributeReference]
 
   /** Clones bufferAttributes. */
@@ -173,13 +176,14 @@ abstract class AggregateFunction2
 
 /**
  * A helper class for aggregate functions that can be implemented in terms of catalyst expressions.
+ * 一个聚合函数的帮助类
  */
 abstract class AlgebraicAggregate extends AggregateFunction2 with Serializable with Unevaluable {
 
-  val initialValues: Seq[Expression]
-  val updateExpressions: Seq[Expression]
-  val mergeExpressions: Seq[Expression]
-  val evaluateExpression: Expression
+  val initialValues: Seq[Expression] //初始化返回的值
+  val updateExpressions: Seq[Expression] //每次更新聚合函数
+  val mergeExpressions: Seq[Expression] //合并聚合函数
+  val evaluateExpression: Expression //最终值对应的表达式
 
   override lazy val cloneBufferAttributes = bufferAttributes.map(_.newInstance())
 

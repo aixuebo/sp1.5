@@ -215,14 +215,15 @@ case class Max(child: Expression) extends AlgebraicAggregate {
   override val evaluateExpression = max
 }
 
+//表达式解析返回最小的值
 case class Min(child: Expression) extends AlgebraicAggregate {
 
-  override def children: Seq[Expression] = child :: Nil
+  override def children: Seq[Expression] = child :: Nil //只有一个子表达式
 
   override def nullable: Boolean = true
 
   // Return data type.
-  override def dataType: DataType = child.dataType
+  override def dataType: DataType = child.dataType //返回类型就是数据参数类型
 
   // Expected input data type.
   override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType)
@@ -231,10 +232,12 @@ case class Min(child: Expression) extends AlgebraicAggregate {
 
   override val bufferAttributes = min :: Nil
 
+  //初始化最终的值
   override val initialValues = Seq(
-    /* min = */ Literal.create(null, child.dataType)
+    /* min = */ Literal.create(null, child.dataType) //初始化最小值为null,数据类型
   )
 
+  //每次更新值的表达式
   override val updateExpressions = Seq(
     /* min = */ If(IsNull(child), min, If(IsNull(min), child, Least(Seq(min, child))))
   )
