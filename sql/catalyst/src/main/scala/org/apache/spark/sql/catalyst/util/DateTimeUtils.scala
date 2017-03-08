@@ -39,11 +39,11 @@ object DateTimeUtils {
   // see http://stackoverflow.com/questions/466321/convert-unix-timestamp-to-julian
   // it's 2440587.5, rounding up to compatible with Hive
   final val JULIAN_DAY_OF_EPOCH = 2440588
-  final val SECONDS_PER_DAY = 60 * 60 * 24L
-  final val MICROS_PER_SECOND = 1000L * 1000L
-  final val NANOS_PER_SECOND = MICROS_PER_SECOND * 1000L
+  final val SECONDS_PER_DAY = 60 * 60 * 24L //一天有多少秒
+  final val MICROS_PER_SECOND = 1000L * 1000L //一秒有多少micros秒
+  final val NANOS_PER_SECOND = MICROS_PER_SECOND * 1000L //一秒有多少nanos秒
 
-  final val MILLIS_PER_DAY = SECONDS_PER_DAY * 1000L
+  final val MILLIS_PER_DAY = SECONDS_PER_DAY * 1000L //一天有多少秒
 
   // number of days in 400 years
   final val daysIn400Years: Int = 146097

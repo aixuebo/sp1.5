@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 @DeveloperApi
 abstract class ParserDialect {
   // this is the main function that will be implemented by sql parser.
+  //主要一个接口方法是给定sql如何进行查询,返回逻辑计划
   def parse(sqlText: String): LogicalPlan
 }
 
@@ -58,6 +59,9 @@ abstract class ParserDialect {
  *-- "sql" (for SQLContext) or
  *-- "hiveql" (for HiveContext)
  * }}}
+ *
+ *
+ * 默认的sql方言,属于spark sql范畴的方言
  */
 private[spark] class DefaultParserDialect extends ParserDialect {
   @transient

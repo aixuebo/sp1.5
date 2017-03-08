@@ -39,6 +39,7 @@ object CatalystTypeConverters {
   // Since the map values can be mutable, we explicitly import scala.collection.Map at here.
   import scala.collection.Map
 
+  //确定是否是spark支持的原声类型
   private def isPrimitive(dataType: DataType): Boolean = {
     dataType match {
       case BooleanType => true
@@ -52,6 +53,7 @@ object CatalystTypeConverters {
     }
   }
 
+  //类型转换,参数是目标类型,比如知道了目标类型是StringType,那么如何转换成StringType呢?找到对应的转换方法即可
   private def getConverterForType(dataType: DataType): CatalystTypeConverter[Any, Any, Any] = {
     val converter = dataType match {
       case udt: UserDefinedType[_] => UDTConverter(udt)
@@ -76,9 +78,9 @@ object CatalystTypeConverters {
 
   /**
    * Converts a Scala type to its Catalyst equivalent (and vice versa).
-   *
-   * @tparam ScalaInputType The type of Scala values that can be converted to Catalyst.
-   * @tparam ScalaOutputType The type of Scala values returned when converting Catalyst to Scala.
+   * 转换scala类型和spark类型,反之亦然
+   * @tparam ScalaInputType The type of Scala values that can be converted to Catalyst.scala类型的输入,该类型要去转换成spark类型
+   * @tparam ScalaOutputType The type of Scala values returned when converting Catalyst to Scala.当spark类型转换成scala的时候,scala返回什么类型
    * @tparam CatalystType The internal Catalyst type used to represent values of this Scala type.
    */
   private abstract class CatalystTypeConverter[ScalaInputType, ScalaOutputType, CatalystType]
@@ -87,13 +89,14 @@ object CatalystTypeConverters {
     /**
      * Converts a Scala type to its Catalyst equivalent while automatically handling nulls
      * and Options.
+     * 将scala类型转换成spark类型
      */
     final def toCatalyst(@Nullable maybeScalaValue: Any): CatalystType = {
-      if (maybeScalaValue == null) {
+      if (maybeScalaValue == null) {//null
         null.asInstanceOf[CatalystType]
-      } else if (maybeScalaValue.isInstanceOf[Option[ScalaInputType]]) {
-        val opt = maybeScalaValue.asInstanceOf[Option[ScalaInputType]]
-        if (opt.isDefined) {
+      } else if (maybeScalaValue.isInstanceOf[Option[ScalaInputType]]) {//scala类型是要求的输入类型
+        val opt = maybeScalaValue.asInstanceOf[Option[ScalaInputType]] //转换成scala类型
+        if (opt.isDefined) {//该泛型定义了,则进行转换
           toCatalystImpl(opt.get)
         } else {
           null.asInstanceOf[CatalystType]
@@ -117,6 +120,7 @@ object CatalystTypeConverters {
 
     /**
      * Converts a Scala value to its Catalyst equivalent.
+     * scala如何转换成spark
      * @param scalaValue the Scala value, guaranteed not to be null.
      * @return the Catalyst value.
      */
@@ -125,6 +129,7 @@ object CatalystTypeConverters {
     /**
      * Given a Catalyst row, convert the value at column `column` to its Scala equivalent.
      * This method will only be called on non-null columns.
+     * 给定一行spark数据.如何将某一列转换成scala
      */
     protected def toScalaImpl(row: InternalRow, column: Int): ScalaOutputType
   }

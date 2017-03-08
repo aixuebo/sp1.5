@@ -154,6 +154,7 @@ trait ScalaReflection {
     }
   }
 
+  //定义一个偏函数,根据第一个参数的类型不同,返回不同的DataType类型,即scala类型和catalyst类型的互相转换
   def typeOfObject: PartialFunction[Any, DataType] = {
     // The data type can be determined without ambiguity.
     case obj: Boolean => BooleanType

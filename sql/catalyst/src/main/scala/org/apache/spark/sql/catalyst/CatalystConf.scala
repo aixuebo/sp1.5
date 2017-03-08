@@ -31,5 +31,7 @@ object EmptyConf extends CatalystConf {
   }
 }
 
-/** A CatalystConf that can be used for local testing. */
+/** A CatalystConf that can be used for local testing.
+  * 简单的配置文件.通过构造函数构造一个boolean类型,从而简单的实现
+  **/
 case class SimpleCatalystConf(caseSensitiveAnalysis: Boolean) extends CatalystConf

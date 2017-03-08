@@ -19,15 +19,16 @@ package org.apache.spark.sql.catalyst
 
 /**
  * Identifies a `table` in `database`.  If `database` is not defined, the current database is used.
+ * 表示一个表名字,表名字一定存在,库名字可能存在,因此库名字是Option
  */
 private[sql] case class TableIdentifier(table: String, database: Option[String] = None) {
   def withDatabase(database: String): TableIdentifier = this.copy(database = Some(database))
 
-  def toSeq: Seq[String] = database.toSeq :+ table
+  def toSeq: Seq[String] = database.toSeq :+ table //库+表组成集合
 
-  override def toString: String = quotedString
+  override def toString: String = quotedString //产生 `database`.`table` 格式
 
-  def quotedString: String = toSeq.map("`" + _ + "`").mkString(".")
+  def quotedString: String = toSeq.map("`" + _ + "`").mkString(".") //加入``,即`database`.`table`
 
-  def unquotedString: String = toSeq.mkString(".")
+  def unquotedString: String = toSeq.mkString(".") //database.table形式的正常格式
 }
