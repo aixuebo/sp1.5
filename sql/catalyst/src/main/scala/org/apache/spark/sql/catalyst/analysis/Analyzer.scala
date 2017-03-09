@@ -48,6 +48,7 @@ class Analyzer(
     maxIterations: Int = 100)
   extends RuleExecutor[LogicalPlan] with CheckAnalysis {
 
+  //用于判断两个字符串是否相同
   def resolver: Resolver = {
     if (conf.caseSensitiveAnalysis) {
       caseSensitiveResolution
@@ -56,18 +57,23 @@ class Analyzer(
     }
   }
 
+  //循环次数策略
   val fixedPoint = FixedPoint(maxIterations)
 
   /**
    * Override to provide additional rules for the "Resolution" batch.
+   * 扩展的规则
    */
   val extendedResolutionRules: Seq[Rule[LogicalPlan]] = Nil
 
+  //批处理集合
   lazy val batches: Seq[Batch] = Seq(
     Batch("Substitution", fixedPoint,
       CTESubstitution ::
       WindowsSubstitution ::
       Nil : _*),
+
+
     Batch("Resolution", fixedPoint,
       ResolveRelations ::
       ResolveReferences ::
@@ -81,8 +87,10 @@ class Analyzer(
       ResolveAggregateFunctions ::
       HiveTypeCoercion.typeCoercionRules ++
       extendedResolutionRules : _*),
+
     Batch("Nondeterministic", Once,
       PullOutNondeterministic),
+
     Batch("Cleanup", fixedPoint,
       CleanupAliases)
   )

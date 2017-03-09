@@ -37,13 +37,15 @@ class NoSuchDatabaseException extends Exception //没有数据库异常
 
 /**
  * An interface for looking up relations by name.  Used by an [[Analyzer]].
+ * 目录接口,用于查找一个表名对应的逻辑计划
  */
 trait Catalog {
 
-  val conf: CatalystConf
+  val conf: CatalystConf //配置文件
 
-  def tableExists(tableIdentifier: Seq[String]): Boolean
+  def tableExists(tableIdentifier: Seq[String]): Boolean //该表是否存在
 
+  //查获表名对应的逻辑计划,并且为表设置别名
   def lookupRelation(
       tableIdentifier: Seq[String],
       alias: Option[String] = None): LogicalPlan
@@ -51,17 +53,21 @@ trait Catalog {
   /**
    * Returns tuples of (tableName, isTemporary) for all tables in the given database.
    * isTemporary is a Boolean value indicates if a table is a temporary or not.
+   * 返回在当前数据库下所有table名字和是否是临时表的元组
    */
   def getTables(databaseName: Option[String]): Seq[(String, Boolean)]
 
   def refreshTable(tableIdent: TableIdentifier): Unit
 
   // TODO: Refactor it in the work of SPARK-10104
+  //注册一个表名和逻辑计划的关系
   def registerTable(tableIdentifier: Seq[String], plan: LogicalPlan): Unit
 
   // TODO: Refactor it in the work of SPARK-10104
+  //取消一个表
   def unregisterTable(tableIdentifier: Seq[String]): Unit
 
+  //取消所有的表
   def unregisterAllTables(): Unit
 
   // TODO: Refactor it in the work of SPARK-10104
@@ -94,6 +100,7 @@ trait Catalog {
   /**
    * It is not allowed to specifiy database name for tables stored in [[SimpleCatalog]].
    * We use this method to check it.
+   * 不允许指定数据库名字
    * 校验table名字是否合法
    */
   protected def checkTableIdentifier(tableIdentifier: Seq[String]): Unit = {
@@ -111,44 +118,47 @@ class SimpleCatalog(val conf: CatalystConf) extends Catalog {
   override def registerTable(
       tableIdentifier: Seq[String],
       plan: LogicalPlan): Unit = {
-    checkTableIdentifier(tableIdentifier)
-    val tableIdent = processTableIdentifier(tableIdentifier)
+    checkTableIdentifier(tableIdentifier) //校验合法性
+    val tableIdent = processTableIdentifier(tableIdentifier) //对表名进行处理,让其都转换成大写
     tables.put(getDbTableName(tableIdent), plan)
   }
 
   override def unregisterTable(tableIdentifier: Seq[String]): Unit = {
     checkTableIdentifier(tableIdentifier)
-    val tableIdent = processTableIdentifier(tableIdentifier)
+    val tableIdent = processTableIdentifier(tableIdentifier) //对表名进行处理,让其都转换成大写
     tables.remove(getDbTableName(tableIdent))
   }
 
+  //取消所有注册过的表
   override def unregisterAllTables(): Unit = {
     tables.clear()
   }
 
   override def tableExists(tableIdentifier: Seq[String]): Boolean = {
     checkTableIdentifier(tableIdentifier)
-    val tableIdent = processTableIdentifier(tableIdentifier)
+    val tableIdent = processTableIdentifier(tableIdentifier) //对表名进行处理,让其都转换成大写
     tables.containsKey(getDbTableName(tableIdent))
   }
 
+  //找到对应的表,并且为表设置别名
   override def lookupRelation(
       tableIdentifier: Seq[String],
       alias: Option[String] = None): LogicalPlan = {
     checkTableIdentifier(tableIdentifier)
-    val tableIdent = processTableIdentifier(tableIdentifier)
-    val tableFullName = getDbTableName(tableIdent)
-    val table = tables.get(tableFullName)
+    val tableIdent = processTableIdentifier(tableIdentifier) //对表名进行处理,让其都转换成大写
+    val tableFullName = getDbTableName(tableIdent) //获取表名
+    val table = tables.get(tableFullName) //是否存在该表
     if (table == null) {
       sys.error(s"Table Not Found: $tableFullName")
     }
-    val tableWithQualifiers = Subquery(tableIdent.last, table)
+    val tableWithQualifiers = Subquery(tableIdent.last, table) //设置别名和逻辑计划
 
     // If an alias was specified by the lookup, wrap the plan in a subquery so that attributes are
     // properly qualified with this alias.
     alias.map(a => Subquery(a, tableWithQualifiers)).getOrElse(tableWithQualifiers)
   }
 
+  //返回在当前数据库下所有table名字和是否是临时表的元组
   override def getTables(databaseName: Option[String]): Seq[(String, Boolean)] = {
     val result = ArrayBuffer.empty[(String, Boolean)]
     for (name <- tables.keySet()) {
@@ -172,6 +182,28 @@ trait OverrideCatalog extends Catalog {
 
   // TODO: This doesn't work when the database changes...
   val overrides = new mutable.HashMap[(Option[String], String), LogicalPlan]()
+
+  override def registerTable(
+                              tableIdentifier: Seq[String],
+                              plan: LogicalPlan): Unit = {
+    checkTableIdentifier(tableIdentifier)
+    val tableIdent = processTableIdentifier(tableIdentifier) //对表名进行处理,让其都转换成大写
+    overrides.put(getDBTable(tableIdent), plan)
+  }
+
+  override def unregisterTable(tableIdentifier: Seq[String]): Unit = {
+    // A temporary tables only has a single part in the tableIdentifier.
+    // If tableIdentifier has more than one parts, it is not a temporary table
+    // and we do not need to do anything at here.
+    if (tableIdentifier.length == 1) {
+      val tableIdent = processTableIdentifier(tableIdentifier)
+      overrides.remove(getDBTable(tableIdent))
+    }
+  }
+
+  override def unregisterAllTables(): Unit = {
+    overrides.clear()
+  }
 
   abstract override def tableExists(tableIdentifier: Seq[String]): Boolean = {
     val tableIdent = processTableIdentifier(tableIdentifier) //对table名字进行大小写处理
@@ -214,28 +246,6 @@ trait OverrideCatalog extends Catalog {
     }.toSeq
 
     temporaryTables ++ super.getTables(databaseName)
-  }
-
-  override def registerTable(
-      tableIdentifier: Seq[String],
-      plan: LogicalPlan): Unit = {
-    checkTableIdentifier(tableIdentifier)
-    val tableIdent = processTableIdentifier(tableIdentifier)
-    overrides.put(getDBTable(tableIdent), plan)
-  }
-
-  override def unregisterTable(tableIdentifier: Seq[String]): Unit = {
-    // A temporary tables only has a single part in the tableIdentifier.
-    // If tableIdentifier has more than one parts, it is not a temporary table
-    // and we do not need to do anything at here.
-    if (tableIdentifier.length == 1) {
-      val tableIdent = processTableIdentifier(tableIdentifier)
-      overrides.remove(getDBTable(tableIdent))
-    }
-  }
-
-  override def unregisterAllTables(): Unit = {
-    overrides.clear()
   }
 }
 

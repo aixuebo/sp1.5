@@ -22,11 +22,13 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, SortOrd
 /**
  * Performs a physical redistribution of the data.  Used when the consumer of the query
  * result have expectations about the distribution and ordering of partitioned input data.
+ * 执行物理的数据分布,对查询结果进行分布
  */
 abstract class RedistributeData extends UnaryNode {
   override def output: Seq[Attribute] = child.output
 }
 
+//排序表达式,对子类的逻辑结果进行排序 分区
 case class SortPartitions(sortExpressions: Seq[SortOrder], child: LogicalPlan)
   extends RedistributeData
 
@@ -35,6 +37,7 @@ case class SortPartitions(sortExpressions: Seq[SortOrder], child: LogicalPlan)
  * number of partitions during execution. Used when a specific ordering or distribution is
  * expected by the consumer of the query result. Use [[Repartition]] for RDD-like
  * `coalesce` and `repartition`.
+ * 重新分区使用分区表达式
  */
 case class RepartitionByExpression(partitionExpressions: Seq[Expression], child: LogicalPlan)
   extends RedistributeData

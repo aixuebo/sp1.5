@@ -24,6 +24,7 @@ import org.apache.spark.sql.types.StringType
  * A logical node that represents a non-query command to be executed by the system.  For example,
  * commands can be used by parsers to represent DDL operations.  Commands, unlike queries, are
  * eagerly executed.
+ * 执行非查询的命令,比如解析dddl操作
  */
 trait Command
 
@@ -38,7 +39,7 @@ private[sql] case class DescribeFunction(
 
   override def children: Seq[LogicalPlan] = Seq.empty
   override val output: Seq[Attribute] = Seq(
-    AttributeReference("function_desc", StringType, nullable = false)())
+    AttributeReference("function_desc", StringType, nullable = false)()) //属性名字是function_desc,类型是String
 }
 
 /**
@@ -49,5 +50,5 @@ private[sql] case class ShowFunctions(
     db: Option[String], pattern: Option[String]) extends LogicalPlan with Command {
   override def children: Seq[LogicalPlan] = Seq.empty
   override val output: Seq[Attribute] = Seq(
-    AttributeReference("function", StringType, nullable = false)())
+    AttributeReference("function", StringType, nullable = false)()) //输出属性名字是function,类型是String
 }

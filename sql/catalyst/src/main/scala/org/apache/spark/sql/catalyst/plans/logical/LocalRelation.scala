@@ -23,14 +23,18 @@ import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, analy
 import org.apache.spark.sql.types.{StructField, StructType}
 
 object LocalRelation {
+
+  //根据输出的属性集合,创建空的表,即没有数据的表
   def apply(output: Attribute*): LocalRelation = new LocalRelation(output)
 
+  //根据输出的属性集合,创建空的表,即没有数据的表
   def apply(output1: StructField, output: StructField*): LocalRelation = {
     new LocalRelation(StructType(output1 +: output).toAttributes)
   }
 
+  //根据输出的属性集合,创建对应的schema,将数据转换成内部的InternalRow
   def fromExternalRows(output: Seq[Attribute], data: Seq[Row]): LocalRelation = {
-    val schema = StructType.fromAttributes(output)
+    val schema = StructType.fromAttributes(output) //根据输出的属性集合,创建对应的schema
     val converter = CatalystTypeConverters.createToCatalystConverter(schema)
     LocalRelation(output, data.map(converter(_).asInstanceOf[InternalRow]))
   }
@@ -42,6 +46,7 @@ object LocalRelation {
   }
 }
 
+//本地的一个表,第一个参数是表的输出schema,第二个属性是表内数据集合
 case class LocalRelation(output: Seq[Attribute], data: Seq[InternalRow] = Nil)
   extends LeafNode with analysis.MultiInstanceRelation {
 
@@ -49,6 +54,7 @@ case class LocalRelation(output: Seq[Attribute], data: Seq[InternalRow] = Nil)
    * Returns an identical copy of this relation with new exprIds for all attributes.  Different
    * attributes are required when a relation is going to be included multiple times in the same
    * query.
+   * 根据out的属性集合,创建一个本地表
    */
   override final def newInstance(): this.type = {
     LocalRelation(output.map(_.newInstance()), data).asInstanceOf[this.type]
@@ -56,12 +62,14 @@ case class LocalRelation(output: Seq[Attribute], data: Seq[InternalRow] = Nil)
 
   override protected def stringArgs = Iterator(output)
 
+  //是否相同,主要看输出的数据类型是否相同 && 数据内容是否相同
   override def sameResult(plan: LogicalPlan): Boolean = plan match {
     case LocalRelation(otherOutput, otherData) =>
       otherOutput.map(_.dataType) == output.map(_.dataType) && otherData == data
     case _ => false
   }
 
+  //输出所占字节大小.即输出字段类型的字节大小之和 * 数据行数
   override lazy val statistics =
     Statistics(sizeInBytes = output.map(_.dataType.defaultSize).sum * data.length)
 }

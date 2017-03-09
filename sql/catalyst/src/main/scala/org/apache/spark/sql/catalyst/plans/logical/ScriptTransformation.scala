@@ -22,10 +22,10 @@ import org.apache.spark.sql.catalyst.expressions.{AttributeSet, Attribute, Expre
 /**
  * Transforms the input by forking and running the specified script.
  *
- * @param input the set of expression that should be passed to the script.
- * @param script the command that should be executed.
- * @param output the attributes that are produced by the script.
- * @param ioschema the input and output schema applied in the execution of the script.
+ * @param input the set of expression that should be passed to the script.表达式集合,返回值要被传递到脚本中
+ * @param script the command that should be executed.要执行的脚本命令
+ * @param output the attributes that are produced by the script. 该脚本产生哪些属性输出
+ * @param ioschema the input and output schema applied in the execution of the script. 脚本中输入和输出的schema
  */
 case class ScriptTransformation(
     input: Seq[Expression],
@@ -33,11 +33,12 @@ case class ScriptTransformation(
     output: Seq[Attribute],
     child: LogicalPlan,
     ioschema: ScriptInputOutputSchema) extends UnaryNode {
-  override def references: AttributeSet = AttributeSet(input.flatMap(_.references))
+  override def references: AttributeSet = AttributeSet(input.flatMap(_.references)) //输入表达式对应的属性集合
 }
 
 /**
  * A placeholder for implementation specific input and output properties when passing data
  * to a script. For example, in Hive this would specify which SerDes to use.
+ * 一个占位符
  */
 trait ScriptInputOutputSchema

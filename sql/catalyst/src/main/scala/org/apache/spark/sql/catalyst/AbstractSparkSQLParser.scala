@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 private[sql] abstract class AbstractSparkSQLParser
   extends StandardTokenParsers with PackratParsers {
 
+  //开始解析,给定一个sql,返回执行的逻辑计划
   def parse(input: String): LogicalPlan = {
     // Initialize the Keywords.
     initLexical
@@ -36,6 +37,7 @@ private[sql] abstract class AbstractSparkSQLParser
       case failureOrError => sys.error(failureOrError.toString)
     }
   }
+
   /* One time initialization of lexical.This avoid reinitialization of  lexical in parse method */
   protected lazy val initLexical: Unit = lexical.initialize(reservedWords) //通过反射,获取到Keyword关键案子的name集合,然后初始化给sql语法解析器,让其知道这个是关键词
 
@@ -61,19 +63,19 @@ private[sql] abstract class AbstractSparkSQLParser
   // Set the keywords as empty by default, will change that later.
   override val lexical = new SqlLexical
 
-  protected def start: Parser[LogicalPlan]
+  protected def start: Parser[LogicalPlan] //程序入口,返回解析后的逻辑计划
 
-  // Returns the whole input string
+  // Returns the whole input string 返回整个的数据内容
   protected lazy val wholeInput: Parser[String] = new Parser[String] {
     def apply(in: Input): ParseResult[String] =
       Success(in.source.toString, in.drop(in.source.length()))
   }
 
-  // Returns the rest of the input string that are not parsed yet
+  // Returns the rest of the input string that are not parsed yet 返回没有被解析的剩余的输入内容
   protected lazy val restInput: Parser[String] = new Parser[String] {
     def apply(in: Input): ParseResult[String] =
       Success(
-        in.source.subSequence(in.offset, in.source.length()).toString,
+        in.source.subSequence(in.offset, in.source.length()).toString,//从offset现在已经解析到的位置开始截取字符串
         in.drop(in.source.length()))
   }
 }

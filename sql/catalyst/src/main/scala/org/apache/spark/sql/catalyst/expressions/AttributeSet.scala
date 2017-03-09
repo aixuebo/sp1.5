@@ -37,8 +37,8 @@ object AttributeSet {
   def apply(baseSet: Iterable[Expression]): AttributeSet = {
     new AttributeSet(
       baseSet
-        .flatMap(_.references)
-        .map(new AttributeEquals(_)).toSet)
+        .flatMap(_.references) //汇总所有表达式对应的属性
+        .map(new AttributeEquals(_)).toSet) //将所有属性转换成AttributeEquals对象集合
   }
 }
 
@@ -57,22 +57,30 @@ object AttributeSet {
 class AttributeSet private (val baseSet: Set[AttributeEquals])
   extends Traversable[Attribute] with Serializable {
 
-  /** Returns true if the members of this AttributeSet and other are the same. */
+  /** Returns true if the members of this AttributeSet and other are the same.
+    * 判断两个属性集合是相同的
+    **/
   override def equals(other: Any): Boolean = other match {
     case otherSet: AttributeSet =>
-      otherSet.size == baseSet.size && baseSet.map(_.a).forall(otherSet.contains)
+      otherSet.size == baseSet.size && baseSet.map(_.a).forall(otherSet.contains) //两个集合size相同,并且内容相同
     case _ => false
   }
 
-  /** Returns true if this set contains an Attribute with the same expression id as `elem` */
+  /** Returns true if this set contains an Attribute with the same expression id as `elem`
+    * true表示集合中是否包含该元素
+    **/
   def contains(elem: NamedExpression): Boolean =
     baseSet.contains(new AttributeEquals(elem.toAttribute))
 
-  /** Returns a new [[AttributeSet]] that contains `elem` in addition to the current elements. */
+  /** Returns a new [[AttributeSet]] that contains `elem` in addition to the current elements.
+    * 集合中追加一个元素
+    **/
   def +(elem: Attribute): AttributeSet =  // scalastyle:ignore
     new AttributeSet(baseSet + new AttributeEquals(elem))
 
-  /** Returns a new [[AttributeSet]] that does not contain `elem`. */
+  /** Returns a new [[AttributeSet]] that does not contain `elem`.
+    * 集合中减少一个元素
+    **/
   def -(elem: Attribute): AttributeSet =
     new AttributeSet(baseSet - new AttributeEquals(elem))
 

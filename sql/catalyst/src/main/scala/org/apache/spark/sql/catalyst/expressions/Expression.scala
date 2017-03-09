@@ -142,6 +142,7 @@ abstract class Expression extends TreeNode[Expression] {
   /**
    * Returns true when two expressions will always compute the same result, even if they differ
    * cosmetically (i.e. capitalization of names in attributes may be different).
+   * 两个表达式的语义是相同的.则返回true
    */
   def semanticEquals(other: Expression): Boolean = this.getClass == other.getClass && {
     def checkSemantic(elements1: Seq[Any], elements2: Seq[Any]): Boolean = {

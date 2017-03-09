@@ -35,11 +35,13 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
   /**
    * All Attributes that appear in expressions from this operator.  Note that this set does not
    * include attributes that are implicitly referenced by being passed through to the output tuple.
+   * 出现在所有表达式中的属性集合
    */
   def references: AttributeSet = AttributeSet(expressions.flatMap(_.references))
 
   /**
    * The set of all attributes that are input to this operator by its children.
+   * 子类输入的所有属性集合
    */
   def inputSet: AttributeSet =
     AttributeSet(children.flatMap(_.asInstanceOf[QueryPlan[PlanType]].output))
@@ -51,6 +53,7 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
    *
    * Note that virtual columns should be excluded. Currently, we only support the grouping ID
    * virtual column.
+   * 获取缺失掉的属性集合,即子类需要若干个属性,但是输入中缺少,因此没办法让程序跑起来
    */
   def missingInput: AttributeSet =
     (references -- inputSet).filter(_.name != VirtualColumn.groupingIdName)
@@ -60,6 +63,7 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
    * Users should not expect a specific directionality. If a specific directionality is needed,
    * transformExpressionsDown or transformExpressionsUp should be used.
    * @param rule the rule to be applied to every expression in this operator.
+   * 将表达式转换成新的表达式-----该表达式表示规则
    */
   def transformExpressions(rule: PartialFunction[Expression, Expression]): this.type = {
     transformExpressionsDown(rule)
@@ -68,6 +72,7 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
   /**
    * Runs [[transformDown]] with `rule` on all expressions present in this query operator.
    * @param rule the rule to be applied to every expression in this operator.
+   * 接收偏函数   将表达式转换成新的表达式 -----该表达式表示规则
    */
   def transformExpressionsDown(rule: PartialFunction[Expression, Expression]): this.type = {
     var changed = false
@@ -132,11 +137,13 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
     * and all its children. */
   def transformAllExpressions(rule: PartialFunction[Expression, Expression]): this.type = {
     transform {
-      case q: QueryPlan[_] => q.transformExpressions(rule).asInstanceOf[PlanType]
+      case q: QueryPlan[_] => q.transformExpressions(rule).asInstanceOf[PlanType] //创建一个匿名的偏函数
     }.asInstanceOf[this.type]
   }
 
-  /** Returns all of the expressions present in this query plan operator. */
+  /** Returns all of the expressions present in this query plan operator.
+    * 获取所有的表达式
+    **/
   def expressions: Seq[Expression] = {
     productIterator.flatMap {
       case e: Expression => e :: Nil
@@ -149,12 +156,16 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
     }.toSeq
   }
 
-  lazy val schema: StructType = StructType.fromAttributes(output)
+  lazy val schema: StructType = StructType.fromAttributes(output) //从输出属性中获取schema,name就是属性的name别名或者定义的名字,数据类型和数据内容,就是属性表达式对应的返回值和返回值类型
 
-  /** Returns the output schema in the tree format. */
+  /** Returns the output schema in the tree format.
+    * 格式化输出对象的schema
+    **/
   def schemaString: String = schema.treeString
 
-  /** Prints out the schema in the tree format */
+  /** Prints out the schema in the tree format
+    * 打印schema信息
+    **/
   // scalastyle:off println
   def printSchema(): Unit = println(schemaString)
   // scalastyle:on println
@@ -163,6 +174,7 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
    * A prefix string used when printing the plan.
    *
    * We use "!" to indicate an invalid plan, and "'" to indicate an unresolved plan.
+   * 使用!表示一个无效的计划,""表示一个未校验的计划
    */
   protected def statePrefix = if (missingInput.nonEmpty && children.nonEmpty) "!" else ""
 

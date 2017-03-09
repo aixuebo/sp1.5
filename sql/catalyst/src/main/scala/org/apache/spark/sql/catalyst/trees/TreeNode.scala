@@ -92,7 +92,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   /**
    * Runs the given function on this node and then recursively on [[children]].
    * @param f the function to be applied to each node in the tree.
-   * 自己本类和子类都调用函数f,f的参数就是本类自己
+   * 从自己开始执行表达式,依次延伸到孙子上
    */
   def foreach(f: BaseType => Unit): Unit = {
     f(this)
@@ -102,7 +102,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   /**
    * Runs the given function recursively on [[children]] then on this node.
    * @param f the function to be applied to each node in the tree.
-   * 与foreach顺序相反,先深度递归调用子类
+   * 从孙子的表达式开始执行f函数
    */
   def foreachUp(f: BaseType => Unit): Unit = {
     children.foreach(_.foreachUp(f))
@@ -135,6 +135,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
    * Returns a Seq containing the result of applying a partial function to all elements in this
    * tree on which the function is defined.
    * 偏函数接收BaseType类型参数,转换成B对象
+   * 即收集所有符合偏函数转换的数据
    */
   def collect[B](pf: PartialFunction[BaseType, B]): Seq[B] = {
     val ret = new collection.mutable.ArrayBuffer[B]()
@@ -162,7 +163,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   def mapChildren(f: BaseType => BaseType): BaseType = {
     var changed = false
     val newArgs = productIterator.map {
-      case arg: TreeNode[_] if containsChild(arg) =>
+      case arg: TreeNode[_] if containsChild(arg) => //获取指定的子元素
         val newChild = f(arg.asInstanceOf[BaseType]) //判断转换后是否有更改
         if (newChild fastEquals arg) {
           arg
@@ -239,7 +240,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
 
     // Check if unchanged and then possibly return old copy to avoid gc churn.
     if (this fastEquals afterRule) {
-      transformChildren(rule, (t, r) => t.transformDown(r))
+      transformChildren(rule, (t, r) => t.transformDown(r)) //t表示每一个子对象,即每一个子对象都调用transformDown
     } else {
       afterRule.transformChildren(rule, (t, r) => t.transformDown(r))
     }
@@ -255,7 +256,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
       nextOperation: (BaseType, PartialFunction[BaseType, BaseType]) => BaseType): BaseType = {
     var changed = false
     val newArgs = productIterator.map {
-      case arg: TreeNode[_] if containsChild(arg) =>
+      case arg: TreeNode[_] if containsChild(arg) => //每一个子对象
         val newChild = nextOperation(arg.asInstanceOf[BaseType], rule)
         if (!(newChild fastEquals arg)) {
           changed = true

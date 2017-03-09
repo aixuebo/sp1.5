@@ -223,11 +223,13 @@ case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
     case _ => false
   }
 
+  //兼容性
   override def compatibleWith(other: Partitioning): Boolean = other match {
     case o: HashPartitioning => this == o
     case _ => false
   }
 
+  //保证性
   override def guarantees(other: Partitioning): Boolean = other match {
     case o: HashPartitioning => this == o
     case _ => false

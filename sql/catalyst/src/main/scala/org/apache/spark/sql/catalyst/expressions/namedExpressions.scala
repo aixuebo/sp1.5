@@ -25,7 +25,7 @@ import org.apache.spark.sql.types._
 object NamedExpression {
   private val curId = new java.util.concurrent.atomic.AtomicLong()
   def newExprId: ExprId = ExprId(curId.getAndIncrement()) //JVM中唯一的全局ID
-  def unapply(expr: NamedExpression): Option[(String, DataType)] = Some(expr.name, expr.dataType)
+  def unapply(expr: NamedExpression): Option[(String, DataType)] = Some(expr.name, expr.dataType) //返回一个表达式的命名和返回类型
 }
 
 /**
@@ -38,19 +38,21 @@ case class ExprId(id: Long)
 
 /**
  * An [[Expression]] that is named.
+ * 给一个表达式命名
  */
 trait NamedExpression extends Expression {
 
   /** We should never fold named expressions in order to not remove the alias. */
   override def foldable: Boolean = false
 
-  def name: String
+  def name: String //表达式的命名
   def exprId: ExprId //全局唯一ID
 
   /**
    * Returns a dot separated fully qualified name for this attribute.  Given that there can be
    * multiple qualifiers, it is possible that there are other possible way to refer to this
    * attribute.
+   * 返回使用.分隔的属性全名字
    */
   def qualifiedName: String = (qualifiers.headOption.toSeq :+ name).mkString(".")
 
@@ -71,6 +73,7 @@ trait NamedExpression extends Expression {
   /** Returns the metadata when an expression is a reference to another expression with metadata. */
   def metadata: Metadata = Metadata.empty
 
+  //为返回类型添加后缀,只有是Long类型的时候添加后缀L,其他类型不添加后缀
   protected def typeSuffix =
     if (resolved) {
       dataType match {
@@ -82,6 +85,7 @@ trait NamedExpression extends Expression {
     }
 }
 
+//属性表达式,同时追加命名服务
 abstract class Attribute extends LeafExpression with NamedExpression {
 
   override def references: AttributeSet = AttributeSet(this)
@@ -91,7 +95,7 @@ abstract class Attribute extends LeafExpression with NamedExpression {
   def withName(newName: String): Attribute
 
   override def toAttribute: Attribute = this
-  def newInstance(): Attribute
+  def newInstance(): Attribute //创建一个属性对象
 
 }
 
@@ -263,7 +267,8 @@ case class PrettyAttribute(name: String) extends Attribute with Unevaluable {
   override def dataType: DataType = NullType
 }
 
+//虚拟列
 object VirtualColumn {
-  val groupingIdName: String = "grouping__id"
+  val groupingIdName: String = "grouping__id" //分组的虚拟列名字
   val groupingIdAttribute: UnresolvedAttribute = UnresolvedAttribute(groupingIdName)
 }

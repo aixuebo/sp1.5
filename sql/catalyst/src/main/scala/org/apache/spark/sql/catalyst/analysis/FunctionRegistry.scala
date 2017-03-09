@@ -70,10 +70,10 @@ class SimpleFunctionRegistry extends FunctionRegistry {
   //查获表达式对应的实例类
   //name是函数名,Seq[Expression]是函数的构造函数需要的Expression参数集合
   override def lookupFunction(name: String, children: Seq[Expression]): Expression = {
-    val func = functionBuilders.get(name).map(_._2).getOrElse {
+    val func = functionBuilders.get(name).map(_._2).getOrElse { //返回表达式的构造函数
       throw new AnalysisException(s"undefined function $name")
     }
-    func(children)
+    func(children) //使用表达式集合作为参数,创建表达式的对象实例
   }
 
   //返回注册的所有函数name集合

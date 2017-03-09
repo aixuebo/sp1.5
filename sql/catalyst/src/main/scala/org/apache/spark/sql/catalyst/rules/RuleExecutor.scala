@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.catalyst.util.sideBySide
 
 object RuleExecutor {
+  //每一个规则执行的时间,即Map是String long类型的
   protected val timeMap = AtomicLongMap.create[String]()
 
   /** Resets statistics about time spent running specific rules */
@@ -46,19 +47,29 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
   /**
    * An execution strategy for rules that indicates the maximum number of executions. If the
    * execution reaches fix point (i.e. converge) before maxIterations, it will stop.
+   * 执行规则
    */
   abstract class Strategy { def maxIterations: Int }
 
-  /** A strategy that only runs once. */
+  /** A strategy that only runs once.
+    * 最大值为1,只允许一次
+    **/
   case object Once extends Strategy { val maxIterations = 1 }
 
-  /** A strategy that runs until fix point or maxIterations times, whichever comes first. */
+  /** A strategy that runs until fix point or maxIterations times, whichever comes first.
+    * 设置最大值
+    **/
   case class FixedPoint(maxIterations: Int) extends Strategy
 
-  /** A batch of rules. */
+  /** A batch of rules.
+    * 一个批次里面有很多规则
+    * 包含批处理的名字 以及策略,以及处理规则
+    **/
   protected case class Batch(name: String, strategy: Strategy, rules: Rule[TreeType]*)
 
-  /** Defines a sequence of rule batches, to be overridden by the implementation. */
+  /** Defines a sequence of rule batches, to be overridden by the implementation.
+    * 记录一个批次集合
+    **/
   protected val batches: Seq[Batch]
 
 
@@ -69,7 +80,7 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
   def execute(plan: TreeType): TreeType = {
     var curPlan = plan
 
-    batches.foreach { batch =>
+    batches.foreach { batch => //循环所有批次
       val batchStartPlan = curPlan
       var iteration = 1
       var lastPlan = curPlan
@@ -77,8 +88,8 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
 
       // Run until fix point (or the max number of iterations as specified in the strategy.
       while (continue) {
-        curPlan = batch.rules.foldLeft(curPlan) {
-          case (plan, rule) =>
+        curPlan = batch.rules.foldLeft(curPlan) { //循环一个批次里面的所有规则
+          case (plan, rule) => //合并后的plan计划,以及每一次循环的规则
             val startTime = System.nanoTime()
             val result = rule(plan)
             val runTime = System.nanoTime() - startTime

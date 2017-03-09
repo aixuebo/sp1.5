@@ -34,13 +34,15 @@ class UnresolvedException[TreeType <: TreeNode[_]](tree: TreeType, function: Str
 
 /**
  * Holds the name of a relation that has yet to be looked up in a [[Catalog]].
+ * 仅仅查询一个表,产生的一个执行计划
  */
 case class UnresolvedRelation(
-    tableIdentifier: Seq[String],
-    alias: Option[String] = None) extends LeafNode {
+    tableIdentifier: Seq[String],//表名,可能是数据库.表名,因此是一个集合
+    alias: Option[String] = None) //为表起的别名
+    extends LeafNode {
 
   /** Returns a `.` separated name for this relation. */
-  def tableName: String = tableIdentifier.mkString(".")
+  def tableName: String = tableIdentifier.mkString(".") //表名全路径
 
   override def output: Seq[Attribute] = Nil
 
@@ -134,6 +136,7 @@ object UnresolvedAttribute {
 }
 
 //表示一个函数名字 + 一组表达式集合
+//即从未定义过的函数
 case class UnresolvedFunction(
     name: String,//函数名字
     children: Seq[Expression],//函数需要的表达式集合
@@ -257,6 +260,7 @@ case class UnresolvedExtractValue(child: Expression, extraction: Expression)
 
 /**
  * Holds the expression that has yet to be aliased.
+ * 持有一个表达式
  */
 case class UnresolvedAlias(child: Expression)
   extends UnaryExpression with NamedExpression with Unevaluable {

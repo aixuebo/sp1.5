@@ -86,6 +86,7 @@ private[sql] trait DataTypeParser extends StandardTokenParsers {
     }) |
     ("(?i)struct".r ~ "<>" ^^^ StructType(Nil))
 
+  //返回数据类型
   protected lazy val dataType: Parser[DataType] =
     arrayType |
     mapType |

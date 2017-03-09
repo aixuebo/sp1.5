@@ -249,6 +249,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
   protected[sql] def toAttributes: Seq[AttributeReference] =
     map(f => AttributeReference(f.name, f.dataType, f.nullable, f.metadata)()) //f就代表StructField对象
 
+  //格式化输出对象的schema
   def treeString: String = {
     val builder = new StringBuilder
     builder.append("root\n")

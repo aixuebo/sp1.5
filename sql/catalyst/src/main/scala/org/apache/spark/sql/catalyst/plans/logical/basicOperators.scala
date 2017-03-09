@@ -23,18 +23,20 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.collection.OpenHashSet
 
+//projectList 表示select中的表达式集合   child表示在什么结果集上操作
 case class Project(projectList: Seq[NamedExpression], child: LogicalPlan) extends UnaryNode {
-  override def output: Seq[Attribute] = projectList.map(_.toAttribute)
+  override def output: Seq[Attribute] = projectList.map(_.toAttribute) //select的属性集合
 
   override lazy val resolved: Boolean = {
-    val hasSpecialExpressions = projectList.exists ( _.collect {
+    //true表示存在特殊的表达式,比如窗口表达式,聚类表达式,generator表达式
+    val hasSpecialExpressions = projectList.exists ( _.collect { //传入偏函数,
         case agg: AggregateExpression => agg
         case generator: Generator => generator
         case window: WindowExpression => window
       }.nonEmpty
     )
 
-    !expressions.exists(!_.resolved) && childrenResolved && !hasSpecialExpressions
+    !expressions.exists(!_.resolved) && childrenResolved && !hasSpecialExpressions //没有特殊的表达式
   }
 }
 
@@ -85,6 +87,7 @@ case class Generate(
   }
 }
 
+//where或者having条件,表达式 针对一个表child 结果进行过滤
 case class Filter(condition: Expression, child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
 }
@@ -115,12 +118,15 @@ case class Intersect(left: LogicalPlan, right: LogicalPlan) extends SetOperation
 
 case class Except(left: LogicalPlan, right: LogicalPlan) extends SetOperation(left, right)
 
+//做两个表的join
 case class Join(
-  left: LogicalPlan,
-  right: LogicalPlan,
-  joinType: JoinType,
-  condition: Option[Expression]) extends BinaryNode {
+  left: LogicalPlan,//左边表
+  right: LogicalPlan,//右边表
+  joinType: JoinType,//join类型
+  condition: Option[Expression]) //on表达式
+  extends BinaryNode {
 
+  //join的输出是两个表的全部属性
   override def output: Seq[Attribute] = {
     joinType match {
       case LeftSemi =>
@@ -136,39 +142,41 @@ case class Join(
     }
   }
 
-  def selfJoinResolved: Boolean = left.outputSet.intersect(right.outputSet).isEmpty
+  def selfJoinResolved: Boolean = left.outputSet.intersect(right.outputSet).isEmpty //true表示两个join属性相交为空
 
   // Joins are only resolved if they don't introduce ambiguous expression ids.
   override lazy val resolved: Boolean = {
     childrenResolved &&
       expressions.forall(_.resolved) &&
       selfJoinResolved &&
-      condition.forall(_.dataType == BooleanType)
+      condition.forall(_.dataType == BooleanType) //条件表达式是boolean类型的返回值
   }
 }
 
 /**
  * A hint for the optimizer that we should broadcast the `child` if used in a join operator.
+ * 广播字段冲突
  */
 case class BroadcastHint(child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
 }
 
+//insert 插入数据到一个表里面
 case class InsertIntoTable(
-    table: LogicalPlan,
-    partition: Map[String, Option[String]],
-    child: LogicalPlan,
-    overwrite: Boolean,
-    ifNotExists: Boolean)
+    table: LogicalPlan,//数据插入到哪个表中
+    partition: Map[String, Option[String]],//分区信息
+    child: LogicalPlan,//select查询出来的结果集
+    overwrite: Boolean,//是否覆盖
+    ifNotExists: Boolean) //表是否存在
   extends LogicalPlan {
 
   override def children: Seq[LogicalPlan] = child :: Nil
-  override def output: Seq[Attribute] = Seq.empty
+  override def output: Seq[Attribute] = Seq.empty //插入数据.不输出属性
 
   assert(overwrite || !ifNotExists)
-  override lazy val resolved: Boolean = childrenResolved && child.output.zip(table.output).forall {
-    case (childAttr, tableAttr) =>
-      DataType.equalsIgnoreCompatibleNullability(childAttr.dataType, tableAttr.dataType)
+  override lazy val resolved: Boolean = childrenResolved && child.output.zip(table.output).forall { //select的输出与 insert的输出 一对一关联
+    case (childAttr, tableAttr) => //分别表示两个结果集
+      DataType.equalsIgnoreCompatibleNullability(childAttr.dataType, tableAttr.dataType) //说明类型是可以相互转换的
   }
 }
 
@@ -197,29 +205,32 @@ case class WithWindowDefinition(
  * @param child  Child logical plan
  */
 case class Sort(
-    order: Seq[SortOrder],
-    global: Boolean,
+    order: Seq[SortOrder],//排序的表达式集合
+    global: Boolean,//是否全局排序,即order by 和sort by 区别
     child: LogicalPlan) extends UnaryNode {
-  override def output: Seq[Attribute] = child.output
+  override def output: Seq[Attribute] = child.output //因为是排序,不改变属性.因此输出还是子类的输出
 }
 
+//对group by进行操作
 case class Aggregate(
-    groupingExpressions: Seq[Expression],
-    aggregateExpressions: Seq[NamedExpression],
-    child: LogicalPlan)
+    groupingExpressions: Seq[Expression],//group by操作的表达式集合
+    aggregateExpressions: Seq[NamedExpression],//select中所有的表达式集合
+    child: LogicalPlan) //在什么结果集上进行group by聚合操作
   extends UnaryNode {
 
   override lazy val resolved: Boolean = {
+    //是否有窗口函数
     val hasWindowExpressions = aggregateExpressions.exists ( _.collect {
         case window: WindowExpression => window
       }.nonEmpty
     )
 
-    !expressions.exists(!_.resolved) && childrenResolved && !hasWindowExpressions
+    !expressions.exists(!_.resolved) && childrenResolved && !hasWindowExpressions //没有窗口函数
   }
 
   lazy val newAggregation: Option[Aggregate] = Utils.tryConvert(this)
 
+  //聚合函数的输出就是select的属性集合
   override def output: Seq[Attribute] = aggregateExpressions.map(_.toAttribute)
 }
 
@@ -375,9 +386,9 @@ case class Rollup(
     this.copy(aggregations = aggs)
 }
 
-//limit操作
+//limit操作 limit表达式对现在的结果集上进行处理
 case class Limit(limitExpr: Expression, child: LogicalPlan) extends UnaryNode {
-  override def output: Seq[Attribute] = child.output
+  override def output: Seq[Attribute] = child.output //limit不改变输出的字段,因此输出字段还是子类的字段集合
 
   override lazy val statistics: Statistics = {
     val limit = limitExpr.eval().asInstanceOf[Int]
@@ -387,8 +398,9 @@ case class Limit(limitExpr: Expression, child: LogicalPlan) extends UnaryNode {
 }
 
 //子查询操作
+//alias 表示子查询别名,child表示子查询的完整逻辑
 case class Subquery(alias: String, child: LogicalPlan) extends UnaryNode {
-  override def output: Seq[Attribute] = child.output.map(_.withQualifiers(alias :: Nil))
+  override def output: Seq[Attribute] = child.output.map(_.withQualifiers(alias :: Nil)) //子类的输出属性不会改变,但是名字会改变成别名
 }
 
 /**
@@ -415,7 +427,7 @@ case class Sample(
  * Returns a new logical plan that dedups input rows.
  */
 case class Distinct(child: LogicalPlan) extends UnaryNode {
-  override def output: Seq[Attribute] = child.output
+  override def output: Seq[Attribute] = child.output //distinct不会改变子类的输出属性
 }
 
 /**
@@ -423,6 +435,7 @@ case class Distinct(child: LogicalPlan) extends UnaryNode {
  * [[RepartitionByExpression]] as this method is called directly by DataFrame's, because the user
  * asked for `coalesce` or `repartition`. [[RepartitionByExpression]] is used when the consumer
  * of the output requires some specific ordering or distribution of the data.
+ * 改变子类逻辑的partiton数量,可鞥涉及到shuffle操作
  */
 case class Repartition(numPartitions: Int, shuffle: Boolean, child: LogicalPlan)
   extends UnaryNode {
@@ -431,9 +444,10 @@ case class Repartition(numPartitions: Int, shuffle: Boolean, child: LogicalPlan)
 
 /**
  * A relation with one row. This is used in "SELECT ..." without a from clause.
+ * 表示一行的结果集,被使用于select ... 没有from的情况
  */
 case object OneRowRelation extends LeafNode {
-  override def output: Seq[Attribute] = Nil
+  override def output: Seq[Attribute] = Nil //没有输出属性
 
   /**
    * Computes [[Statistics]] for this plan. The default implementation assumes the output

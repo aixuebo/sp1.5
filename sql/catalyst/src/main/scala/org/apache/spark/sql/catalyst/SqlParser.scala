@@ -50,7 +50,7 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
     }
   }
 
-  //解析唯一名称
+  //解析databases.tablename表名字
   def parseTableIdentifier(input: String): TableIdentifier = {
     // Initialize the Keywords.
     initLexical
@@ -118,8 +118,8 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
     start1 | insert | cte
 
   protected lazy val start1: Parser[LogicalPlan] =
-    (select | ("(" ~> select <~ ")")) * //纯粹的select 或者子查询中的select
-    ( UNION ~ ALL        ^^^ { (q1: LogicalPlan, q2: LogicalPlan) => Union(q1, q2) }//union操作
+    (select | ("(" ~> select <~ ")")) * //纯粹的一个完整的sql 或者子查询中完成的sql   *表示若干个
+    ( UNION ~ ALL        ^^^ { (q1: LogicalPlan, q2: LogicalPlan) => Union(q1, q2) }//union操作  两个select进行union
     | INTERSECT          ^^^ { (q1: LogicalPlan, q2: LogicalPlan) => Intersect(q1, q2) }//两个集合做交集
     | EXCEPT             ^^^ { (q1: LogicalPlan, q2: LogicalPlan) => Except(q1, q2)}
     | UNION ~ DISTINCT.? ^^^ { (q1: LogicalPlan, q2: LogicalPlan) => Distinct(Union(q1, q2)) }//union操作后过滤重复
@@ -127,30 +127,33 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
 
   //将select sql 转换成一个逻辑执行计划
   protected lazy val select: Parser[LogicalPlan] =
-    SELECT ~> DISTINCT.? ~
-      repsep(projection, ",") ~
-      (FROM   ~> relations).? ~
-      (WHERE  ~> expression).? ~
-      (GROUP  ~  BY ~> rep1sep(expression, ",")).? ~
-      (HAVING ~> expression).? ~
-      sortType.? ~
-      (LIMIT  ~> expression).? ^^ {
-        case d ~ p ~ r ~ f ~ g ~ h ~ o ~ l =>
-          val base = r.getOrElse(OneRowRelation)
-          val withFilter = f.map(Filter(_, base)).getOrElse(base)
+    SELECT ~> DISTINCT.? ~ //select distinct(可能不存在)
+      repsep(projection, ",") ~ //解析表达式  表达式 as 别名 集合,多个列使用逗号分割
+      (FROM   ~> relations).? ~ //要查询的表
+      (WHERE  ~> expression).? ~ //where条件
+      (GROUP  ~  BY ~> rep1sep(expression, ",")).? ~ //group by 多个表达式用逗号拆分
+      (HAVING ~> expression).? ~ //having表达式
+      sortType.? ~ //order by 或者 sort by
+      (LIMIT  ~> expression).? ^^ { //limit 表达式
+        case d ~ p ~ r ~ f ~ g ~ h ~ o ~ l => //d表示是否distinct,   p表示select的属性集合   r 表示要查询的表集合  f表示where条件的一个表达式   g表示gruop by的表达式集合  h表示having对应的一个表达式   o表示rrder by表达式   l表示limit 表达式
+          val base = r.getOrElse(OneRowRelation) //查询索要的表
+          val withFilter = f.map(Filter(_, base)).getOrElse(base) //where条件,表达式 针对一个表child 结果进行过滤    没有where条件,则返回base原始表   , Filter(_, base)的结果依然是逻辑计划,因此相当于在原来的计划上进行过滤,filter是父,原来的base是子
           val withProjection = g
-            .map(Aggregate(_, p.map(UnresolvedAlias(_)), withFilter))
-            .getOrElse(Project(p.map(UnresolvedAlias(_)), withFilter))
+            .map(Aggregate(_, p.map(UnresolvedAlias(_)), withFilter)) //循环g的每一个表达式,每一个表达式转换成Aggregate对象
+            .getOrElse(Project(p.map(UnresolvedAlias(_)), withFilter))//在过滤的结果集上进行group by 聚合
+
           val withDistinct = d.map(_ => Distinct(withProjection)).getOrElse(withProjection)
-          val withHaving = h.map(Filter(_, withDistinct)).getOrElse(withDistinct)
-          val withOrder = o.map(_(withHaving)).getOrElse(withHaving)
+          val withHaving = h.map(Filter(_, withDistinct)).getOrElse(withDistinct) //在gourp by 的基础上进行having过滤
+
+          val withOrder = o.map(_(withHaving)).getOrElse(withHaving) //o是一个函数,参数是LogicalPlan,返回值也是LogicalPlan,因此_(withHaving)的含义就是调用order by 函数,参数就是已经过滤到现在的结果集,返回排序后的结果集
           val withLimit = l.map(Limit(_, withOrder)).getOrElse(withOrder)
           withLimit
       }
 
+  //insert OVERWRITE/INTO TABLE biao(或者join的结果集合) select逻辑计划
   protected lazy val insert: Parser[LogicalPlan] = //处理inster语法城市一个逻辑执行计划
     INSERT ~> (OVERWRITE ^^^ true | INTO ^^^ false) ~ (TABLE ~> relation) ~ select ^^ {
-      case o ~ r ~ s => InsertIntoTable(r, Map.empty[String, Option[String]], s, o, false)
+      case o ~ r ~ s => InsertIntoTable(r, Map.empty[String, Option[String]], s, o, false) //o表示OVERWRITE  r表示 table对应的表  s表示select部分的语法
     }
 
   //表达式 with ident as (sql),(sql)  或者 sql 或者insert sql
@@ -159,42 +162,46 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
       case r ~ s => With(s, r.map({case n ~ s => (n, Subquery(n, s))}).toMap) //子查询操作
     }
 
-  //解析表达式   表达式 as 别名
+  //解析表达式  表达式 as 别名
   protected lazy val projection: Parser[Expression] =
     expression ~ (AS.? ~> ident.?) ^^ {
-      case e ~ a => a.fold(e)(Alias(e, _)())
+      case e ~ a => a.fold(e)(Alias(e, _)()) //a.fold(e) 表示a别名如何为null,没有设置,则使用e表达式就当名字,如果e有设置,则执行(Alias(e, _)()) 即将表达式e 起一个别名为a
     }
 
   // Based very loosely on the MySQL Grammar.
   // http://dev.mysql.com/doc/refman/5.0/en/join.html
   //解析join
   protected lazy val relations: Parser[LogicalPlan] =
-    ( relation ~ rep1("," ~> relation) ^^ {
+    ( relation ~ rep1("," ~> relation) ^^ { //使用以前常用的方式,不用join,就是用逗号分隔每一个表,或者子查询,比如from a,b 也没有on条件,也没有join方式,因此是默认采用inner join,on条件为null
         case r1 ~ joins => joins.foldLeft(r1) { case(lhs, r) => Join(lhs, r, Inner, None) } } //默认是inner join,其中None 表示关联条件
     | relation
     )
 
+  //数据来源,比如来源于一个表,或者子查询产生的结果,或者多个表进行join,总之产生一个逻辑计划
   protected lazy val relation: Parser[LogicalPlan] =
     joinedRelation | relationFactor
 
+
+  //相当于from biao  相当于没有join的表
   protected lazy val relationFactor: Parser[LogicalPlan] =
-    ( rep1sep(ident, ".") ~ (opt(AS) ~> opt(ident)) ^^ {
+    ( rep1sep(ident, ".") ~ (opt(AS) ~> opt(ident)) ^^ { //ident.ident.ident（若干,一般就是两个最多,表示数据库.表名） as(可有可无)  ident(别名,可有可无)
         case tableIdent ~ alias => UnresolvedRelation(tableIdent, alias)
       }
-      | ("(" ~> start <~ ")") ~ (AS.? ~> ident) ^^ { case s ~ a => Subquery(a, s) }
+      | ("(" ~> start <~ ")") ~ (AS.? ~> ident) ^^ { case s ~ a => Subquery(a, s) } //子查询 s表示一个完整的子查询sql,a表示别名
     )
 
+  //可以多个表进行join,  相当于多个表参与join
   protected lazy val joinedRelation: Parser[LogicalPlan] =
-    relationFactor ~ rep1(joinType.? ~ (JOIN ~> relationFactor) ~ joinConditions.?) ^^ {
-      case r1 ~ joins =>
-        joins.foldLeft(r1) { case (lhs, jt ~ rhs ~ cond) =>
-          Join(lhs, rhs, joinType = jt.getOrElse(Inner), cond)
+    relationFactor ~ rep1(joinType.? ~ (JOIN ~> relationFactor) ~ joinConditions.?) ^^ { //表1 (join 表2 on 条件) 可以同时join多张表,因此用()围上,表示可以重复
+      case r1 ~ joins => //r1表示基础表,joins 表示要join的所有表集合,每一个元素表示join类型、join哪个表 、 什么条件
+        joins.foldLeft(r1) { case (lhs, jt ~ rhs ~ cond) => //循环joins所有的表,基础是r1,lhs 表示每次join一个表后的结果,jt表示join类型、rhs 表示要join的新表、cond表示join条件
+          Join(lhs, rhs, joinType = jt.getOrElse(Inner), cond) //join类型默认是inner join
         }
     }
 
   //join的条件在on后面接入表达式
   protected lazy val joinConditions: Parser[Expression] =
-    ON ~> expression
+    ON ~> expression //expression 表示一个总大表达式
 
   protected lazy val joinType: Parser[JoinType] =
     ( INNER           ^^^ Inner
@@ -204,15 +211,15 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
     | FULL  ~ OUTER.? ^^^ FullOuter
     )
 
-  //排序支持order by和sort by
+  //排序支持order by和sort by  返回从一个计划到另外一个计划映射函数
   protected lazy val sortType: Parser[LogicalPlan => LogicalPlan] =
-    ( ORDER ~ BY  ~> ordering ^^ { case o => l: LogicalPlan => Sort(o, true, l) }
+    ( ORDER ~ BY  ~> ordering ^^ { case o => l: LogicalPlan => Sort(o, true, l) } //返回值o解析后是排序的表达式集合,然后调用sort方法进行排序,将原有逻辑计划l传进去
     | SORT ~ BY  ~> ordering ^^ { case o => l: LogicalPlan => Sort(o, false, l) }
     )
 
   //按照哪些表达式或者属性进行order by sort by操作
-  protected lazy val ordering: Parser[Seq[SortOrder]] =
-    ( rep1sep(expression ~ direction.? , ",") ^^ {
+  protected lazy val ordering: Parser[Seq[SortOrder]] = //返回表达式集合
+    ( rep1sep(expression ~ direction.? , ",") ^^ { //order by 跟的表达式一组用逗号拆分的
         case exps => exps.map(pair => SortOrder(pair._1, pair._2.getOrElse(Ascending)))
       }
     )
@@ -470,10 +477,10 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
   protected lazy val signedPrimary: Parser[Expression] =
     sign ~ primary ^^ { case s ~ e => if (s == "-") UnaryMinus(e) else e }
 
-  //返回属性名字
+  //返回属性名字  --- 第二个函数是一个偏函数,将任意元素转换成String
   protected lazy val attributeName: Parser[String] = acceptMatch("attribute name", {
     case lexical.Identifier(str) => str //属性name字符串
-    case lexical.Keyword(str) if !lexical.delimiters.contains(str) => str
+    case lexical.Keyword(str) if !lexical.delimiters.contains(str) => str //返回关键字
   })
 
   //支持的全部sql内容
@@ -492,7 +499,7 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
     | attributeName ^^ UnresolvedAttribute.quoted //表示属性名字
     )
 
-  //name.name.name的方式确定一个属性
+  //name.name.name的方式确定一个属性 前两个必须存在
   protected lazy val dotExpressionHeader: Parser[Expression] =
     (ident <~ ".") ~ ident ~ rep("." ~> ident) ^^ {
       case i1 ~ i2 ~ rest => UnresolvedAttribute(Seq(i1, i2) ++ rest)
@@ -500,6 +507,7 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
 
   //匹配 database.table 可能database不存在
   protected lazy val tableIdentifier: Parser[TableIdentifier] =
+  //(ident <~ ".").?表示.前面是一个任意字符,?表示这段可以没有
     (ident <~ ".").? ~ ident ^^ {
       case maybeDbName ~ tableName => TableIdentifier(tableName, maybeDbName)
     }
