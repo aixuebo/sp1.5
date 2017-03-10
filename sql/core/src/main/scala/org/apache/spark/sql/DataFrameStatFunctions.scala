@@ -29,6 +29,7 @@ import org.apache.spark.sql.execution.stat._
  * Statistic functions for [[DataFrame]]s.
  *
  * @since 1.4.0
+ * 该类持有一个DF,因此是对DF的进一步统计操作
  */
 @Experimental
 final class DataFrameStatFunctions private[sql](df: DataFrame) {

@@ -176,11 +176,14 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
    * Given an attribute name, split it to name parts by dot, but
    * don't split the name parts quoted by backticks, for example,
    * `ab.cd`.`efg` should be split into two parts "ab.cd" and "efg".
+   * 给一个属性名字.使用.进行拆分,但是不能拆分在``里面的.
    */
   def resolveQuoted(
-      name: String,
-      resolver: Resolver): Option[NamedExpression] = {
-    resolve(UnresolvedAttribute.parseAttributeName(name), output, resolver)
+      name: String,//要查询的属性名字
+      resolver: Resolver) //判断两个名字是否相同
+    : Option[NamedExpression] = {
+    resolve(UnresolvedAttribute.parseAttributeName(name) //将name拆分成集合
+      , output, resolver)
   }
 
   /**
@@ -189,16 +192,18 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
    * This assumes `name` has multiple parts, where the 1st part is a qualifier
    * (i.e. table name, alias, or subquery alias).
    * See the comment above `candidates` variable in resolve() for semantics the returned data.
+   * 匹配table.column
    */
   private def resolveAsTableColumn(
-      nameParts: Seq[String],
-      resolver: Resolver,
-      attribute: Attribute): Option[(Attribute, List[String])] = {
+      nameParts: Seq[String],//要匹配的属性内容,比如table.column.fileldName
+      resolver: Resolver,//如何判断两个字符串先通过
+      attribute: Attribute) //该nameParts是否与该属性相似
+    : Option[(Attribute, List[String])] = {
     assert(nameParts.length > 1)
-    if (attribute.qualifiers.exists(resolver(_, nameParts.head))) {
+    if (attribute.qualifiers.exists(resolver(_, nameParts.head))) {//说明table匹配上了
       // At least one qualifier matches. See if remaining parts match.
-      val remainingParts = nameParts.tail
-      resolveAsColumn(remainingParts, resolver, attribute)
+      val remainingParts = nameParts.tail //获取剩下的部分
+      resolveAsColumn(remainingParts, resolver, attribute)//匹配column
     } else {
       None
     }
@@ -209,23 +214,27 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
    *
    * Different from resolveAsTableColumn, this assumes `name` does NOT start with a qualifier.
    * See the comment above `candidates` variable in resolve() for semantics the returned data.
+   * 匹配column属性
    */
   private def resolveAsColumn(
-      nameParts: Seq[String],
+      nameParts: Seq[String],//要匹配的属性内容,比如column.fileldName
       resolver: Resolver,
       attribute: Attribute): Option[(Attribute, List[String])] = {
-    if (resolver(attribute.name, nameParts.head)) {
+    if (resolver(attribute.name, nameParts.head)) {//说明匹配成功
       Option((attribute.withName(nameParts.head), nameParts.tail.toList))
     } else {
       None
     }
   }
 
-  /** Performs attribute resolution given a name and a sequence of possible attributes. */
+  /** Performs attribute resolution given a name and a sequence of possible attributes.
+    * 给一个属性名字以及属性集合,来执行name属于哪个属性
+    **/
   protected def resolve(
-      nameParts: Seq[String],
-      input: Seq[Attribute],
-      resolver: Resolver): Option[NamedExpression] = {
+      nameParts: Seq[String],//要查找的属性名字,比如数据库.tableName
+      input: Seq[Attribute],//输入的属性集合
+      resolver: Resolver) //如何比较两个字符是相同的
+      : Option[NamedExpression] = {
 
     // A sequence of possible candidate matches.
     // Each candidate is a tuple. The first element is a resolved attribute, followed by a list
@@ -245,7 +254,7 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
     }
 
     // If none of attributes match `table.column` pattern, we try to resolve it as a column.
-    if (candidates.isEmpty) {
+    if (candidates.isEmpty) { //说明没有匹配table.column模式,因此我们要尝试使用column拮据
       candidates = input.flatMap { candidate =>
         resolveAsColumn(nameParts, resolver, candidate)
       }
@@ -254,7 +263,7 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
     def name = UnresolvedAttribute(nameParts).name
 
     candidates.distinct match {
-      // One match, no nested fields, use it.
+      // One match, no nested fields, use it. //说明只有一个名字,不是嵌套的属性
       case Seq((a, Nil)) => Some(a)
 
       // One match, but we also need to extract the requested nested field.
@@ -268,12 +277,12 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
           ExtractValue(expr, Literal(fieldName), resolver))
         Some(Alias(fieldExprs, nestedFields.last)())
 
-      // No matches.
+      // No matches.说明没有匹配成功
       case Seq() =>
         logTrace(s"Could not find $name in ${input.mkString(", ")}")
         None
 
-      // More than one match.
+      // More than one match.多余一个匹配,引用不明确
       case ambiguousReferences =>
         val referenceNames = ambiguousReferences.map(_._1).mkString(", ")
         throw new AnalysisException(

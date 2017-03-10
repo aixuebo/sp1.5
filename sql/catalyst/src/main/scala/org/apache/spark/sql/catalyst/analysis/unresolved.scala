@@ -231,6 +231,7 @@ case class MultiAlias(child: Expression, names: Seq[String])
  * in the data frame DSL.
  *
  * @param expressions Expressions to expand.
+ * 代表所有的输入属性表达式集合
  */
 case class ResolvedStar(expressions: Seq[NamedExpression]) extends Star with Unevaluable {
   override def expand(input: Seq[Attribute], resolver: Resolver): Seq[NamedExpression] = expressions

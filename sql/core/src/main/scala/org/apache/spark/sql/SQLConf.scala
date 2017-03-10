@@ -414,6 +414,7 @@ private[spark] object SQLConf {
     isPublic = false)
 
   // Whether to retain group by columns or not in GroupedData.agg.
+  //是否保留group的属性
   val DATAFRAME_RETAIN_GROUP_COLUMNS = booleanConf(
     "spark.sql.retainGroupColumns",
     defaultValue = Some(true),
@@ -527,7 +528,7 @@ private[sql] class SQLConf extends Serializable with CatalystConf {
   private[spark] def dataFrameSelfJoinAutoResolveAmbiguity: Boolean =
     getConf(DATAFRAME_SELF_JOIN_AUTO_RESOLVE_AMBIGUITY)
 
-  private[spark] def dataFrameRetainGroupColumns: Boolean = getConf(DATAFRAME_RETAIN_GROUP_COLUMNS)
+  private[spark] def dataFrameRetainGroupColumns: Boolean = getConf(DATAFRAME_RETAIN_GROUP_COLUMNS) //是否保留group的属性
 
   /** ********************** SQLConf functionality methods ************ */
 

@@ -32,6 +32,8 @@ import org.apache.spark.sql.types._
  * Functionality for working with missing data in [[DataFrame]]s.
  *
  * @since 1.3.1
+ * 该类持有一个DF,因此是对DF的进一步过滤 填充操作
+ * 主要对数据的null和Nan如何处理
  */
 @Experimental
 final class DataFrameNaFunctions private[sql](df: DataFrame) {
@@ -40,6 +42,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
    * Returns a new [[DataFrame]] that drops rows containing any null or NaN values.
    *
    * @since 1.3.1
+   * 只要有一列是null,则抛弃该列
    */
   def drop(): DataFrame = drop("any", df.columns)
 
@@ -50,6 +53,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
    * If `how` is "all", then drop rows only if every column is null or NaN for that row.
    *
    * @since 1.3.1
+   * 对所有列进行考察
    */
   def drop(how: String): DataFrame = drop(how, df.columns)
 
@@ -58,6 +62,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
    * in the specified columns.
    *
    * @since 1.3.1
+   * 重要有一个列是null,则就抛弃
    */
   def drop(cols: Array[String]): DataFrame = drop(cols.toSeq)
 
@@ -66,6 +71,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
    * in the specified columns.
    *
    * @since 1.3.1
+   * 重要有一个列是null,则就抛弃
    */
   def drop(cols: Seq[String]): DataFrame = drop(cols.size, cols)
 
@@ -91,8 +97,8 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
    */
   def drop(how: String, cols: Seq[String]): DataFrame = {
     how.toLowerCase match {
-      case "any" => drop(cols.size, cols)
-      case "all" => drop(1, cols)
+      case "any" => drop(cols.size, cols) //任意一列是null,则都抛弃,因此至少要有所有列,即cols.size
+      case "all" => drop(1, cols) //所有的属性都是null,才将这行抛弃掉,1就表示只要有一个非null的属性,我都选择要,因此只有全部都是null的时候才会丢弃
       case _ => throw new IllegalArgumentException(s"how ($how) must be 'any' or 'all'")
     }
   }
@@ -102,6 +108,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
    * less than `minNonNulls` non-null and non-NaN values.
    *
    * @since 1.3.1
+   * 没设置列集合,则说明所有列都考虑
    */
   def drop(minNonNulls: Int): DataFrame = drop(minNonNulls, df.columns)
 
@@ -116,19 +123,21 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
   /**
    * (Scala-specific) Returns a new [[DataFrame]] that drops rows containing less than
    * `minNonNulls` non-null and non-NaN values in the specified columns.
-   *
+   * 返回一个新的DataFrame,在原来的DataFrame上进行过滤,丢弃掉一些行
+   * 在给定的属性集合中,只要满足多于minNonNulls数量的非null,非Nan,则就继续保留数据
    * @since 1.3.1
    */
   def drop(minNonNulls: Int, cols: Seq[String]): DataFrame = {
     // Filtering condition:
     // only keep the row if it has at least `minNonNulls` non-null and non-NaN values.
+    //创建过滤的表达式,表达式至少有多少个非null,非Nan的数据,我们就要这行数据
     val predicate = AtLeastNNonNulls(minNonNulls, cols.map(name => df.resolve(name)))
-    df.filter(Column(predicate))
+    df.filter(Column(predicate)) //对原有数据进行过滤
   }
 
   /**
    * Returns a new [[DataFrame]] that replaces null or NaN values in numeric columns with `value`.
-   *
+   * 只是会替换值为null或者Nan的数字列,替换成value,如果该数字列不是Nan或者null,则不会被替换
    * @since 1.3.1
    */
   def fill(value: Double): DataFrame = fill(value, df.columns)
@@ -153,15 +162,20 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
    * numeric columns. If a specified column is not a numeric column, it is ignored.
    *
    * @since 1.3.1
+   * 返回新的 DataFrame,如果列不是数字的,则忽略该列,即该列不被更改,如果是数字列,则填充一个默认值value
+   *
+   * 注意:只是会替换值为null或者Nan的数字列,替换成value,如果该数字列不是Nan或者null,则不会被替换
    */
   def fill(value: Double, cols: Seq[String]): DataFrame = {
-    val columnEquals = df.sqlContext.analyzer.resolver
-    val projections = df.schema.fields.map { f =>
+    val columnEquals = df.sqlContext.analyzer.resolver //如何分别两个列是相同的对象
+
+    //新的select属性集合
+    val projections = df.schema.fields.map { f => //循环所有的属性
       // Only fill if the column is part of the cols list.
-      if (f.dataType.isInstanceOf[NumericType] && cols.exists(col => columnEquals(f.name, col))) {
-        fillCol[Double](f, value)
+      if (f.dataType.isInstanceOf[NumericType] && cols.exists(col => columnEquals(f.name, col))) { //如果属性是数字类型 && 该属性是要填充的属性
+        fillCol[Double](f, value) //为该属性设置一个值,注意:只是会替换值为null或者Nan的数字列,替换成value,如果该数字列不是Nan或者null,则不会被替换
       } else {
-        df.col(f.name)
+        df.col(f.name) //说明不是需要填充的属性,则默认还是该属性
       }
     }
     df.select(projections : _*)
@@ -172,6 +186,8 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
    * If a specified column is not a string column, it is ignored.
    *
    * @since 1.3.1
+   * 为String类型的属性填充默认值
+   * 注意:只是会替换值为null或者Nan的数字列,替换成value,如果该String列不是Nan或者null,则不会被替换
    */
   def fill(value: String, cols: Array[String]): DataFrame = fill(value, cols.toSeq)
 
@@ -180,15 +196,16 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
    * specified string columns. If a specified column is not a string column, it is ignored.
    *
    * @since 1.3.1
+   * 注意:只是会替换值为null或者Nan的数字列,替换成value,如果该String列不是Nan或者null,则不会被替换
    */
   def fill(value: String, cols: Seq[String]): DataFrame = {
-    val columnEquals = df.sqlContext.analyzer.resolver
-    val projections = df.schema.fields.map { f =>
+    val columnEquals = df.sqlContext.analyzer.resolver //如何分别两个列是相同的对象
+    val projections = df.schema.fields.map { f => //循环每一个列
       // Only fill if the column is part of the cols list.
-      if (f.dataType.isInstanceOf[StringType] && cols.exists(col => columnEquals(f.name, col))) {
-        fillCol[String](f, value)
+      if (f.dataType.isInstanceOf[StringType] && cols.exists(col => columnEquals(f.name, col))) { //如果属性是String类型 && 该属性是要填充的属性
+        fillCol[String](f, value) //对该列填充新值,注意:只是会替换值为null或者Nan的数字列,替换成value,如果该String列不是Nan或者null,则不会被替换
       } else {
-        df.col(f.name)
+        df.col(f.name) //保持原有列
       }
     }
     df.select(projections : _*)
@@ -208,6 +225,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
    * }}}
    *
    * @since 1.3.1
+   * 传入一个Map,key是要更改的属性,value是值,如果属性在df中的值是Nan或者null,则设置成参数对应的value
    */
   def fill(valueMap: java.util.Map[String, Any]): DataFrame = fill0(valueMap.toSeq)
 
@@ -227,6 +245,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
    * }}}
    *
    * @since 1.3.1
+   * 传入一个Map,key是要更改的属性,value是值,如果属性在df中的值是Nan或者null,则设置成参数对应的value
    */
   def fill(valueMap: Map[String, Any]): DataFrame = fill0(valueMap.toSeq)
 
@@ -252,6 +271,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
    * @param replacement value replacement map, as explained above
    *
    * @since 1.3.1
+   * 对一个列进行替换,该列的值与map中的key相同的时候,则替换成对应的value,否则保持原来数据
    */
   def replace[T](col: String, replacement: java.util.Map[T, T]): DataFrame = {
     replace[T](col, replacement.toMap : Map[T, T])
@@ -275,6 +295,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
    * @param replacement value replacement map, as explained above
    *
    * @since 1.3.1
+   * 对一组列都进行替换,该列的值与map中的key相同的时候,则替换成对应的value,否则保持原来数据
    */
   def replace[T](cols: Array[String], replacement: java.util.Map[T, T]): DataFrame = {
     replace(cols.toSeq, replacement.toMap)
@@ -300,10 +321,11 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
    * @param replacement value replacement map, as explained above
    *
    * @since 1.3.1
+   * 对一个列进行替换,该列的值与map中的key相同的时候,则替换成对应的value,否则保持原来数据
    */
   def replace[T](col: String, replacement: Map[T, T]): DataFrame = {
     if (col == "*") {
-      replace0(df.columns, replacement)
+      replace0(df.columns, replacement) //表示对全部列进行替换
     } else {
       replace0(Seq(col), replacement)
     }
@@ -325,6 +347,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
    * @param replacement value replacement map, as explained above
    *
    * @since 1.3.1
+   * 对一组列进行替换,该列的值与map中的key相同的时候,则替换成对应的value,否则保持原来数据
    */
   def replace[T](cols: Seq[String], replacement: Map[T, T]): DataFrame = replace0(cols, replacement)
 
@@ -334,39 +357,48 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
     }
 
     // replacementMap is either Map[String, String] or Map[Double, Double]
+    //replacement.head._2 表示获取第一条记录中的value,根据value的类型可以进行转换
     val replacementMap: Map[_, _] = replacement.head._2 match {
-      case v: String => replacement
-      case _ => replacement.map { case (k, v) => (convertToDouble(k), convertToDouble(v)) }
+      case v: String => replacement //说明传递的就是String类型的
+      case _ => replacement.map { case (k, v) => (convertToDouble(k), convertToDouble(v)) } //将原始的map转换成double类型的map
     }
 
     // targetColumnType is either DoubleType or StringType
+    ///replacement.head._1 表示获取第一条记录中的key
     val targetColumnType = replacement.head._1 match {
       case _: jl.Double | _: jl.Float | _: jl.Integer | _: jl.Long => DoubleType
       case _: String => StringType
     }
 
-    val columnEquals = df.sqlContext.analyzer.resolver
-    val projections = df.schema.fields.map { f =>
-      val shouldReplace = cols.exists(colName => columnEquals(colName, f.name))
-      if (f.dataType.isInstanceOf[NumericType] && targetColumnType == DoubleType && shouldReplace) {
+    val columnEquals = df.sqlContext.analyzer.resolver //判断属性是否相同的对象
+    val projections = df.schema.fields.map { f => //循环所有的属性
+      val shouldReplace = cols.exists(colName => columnEquals(colName, f.name)) //判断属性是否要进行替换
+      if (f.dataType.isInstanceOf[NumericType] && targetColumnType == DoubleType && shouldReplace) { //属性是数字的,代替的值是double的,应该替换.因此则替换
         replaceCol(f, replacementMap)
-      } else if (f.dataType == targetColumnType && shouldReplace) {
+      } else if (f.dataType == targetColumnType && shouldReplace) { //类型相同也可以替换
         replaceCol(f, replacementMap)
       } else {
-        df.col(f.name)
+        df.col(f.name) //保留原始
       }
     }
     df.select(projections : _*)
   }
 
+  /**
+   * 传入一个元组集合,元组由(属性,value)组成
+   * 1.如果df中的name不在传入的元组属性中.则保留df该列不变
+   * 2.如果df的name在传入的属性中.则判断df的列值是否是null或者Nan,如果是则替换成传入的value,如果不是null,则保留原有列数据
+   */
   private def fill0(values: Seq[(String, Any)]): DataFrame = {
+
+    //数据校验
     // Error handling
-    values.foreach { case (colName, replaceValue) =>
+    values.foreach { case (colName, replaceValue) => //循环所有的列和对应的值
       // Check column name exists
-      df.resolve(colName)
+      df.resolve(colName) //校验列的名字
 
       // Check data type
-      replaceValue match {
+      replaceValue match { //校验值的类型
         case _: jl.Double | _: jl.Float | _: jl.Integer | _: jl.Long | _: String =>
           // This is good
         case _ => throw new IllegalArgumentException(
@@ -374,31 +406,35 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
       }
     }
 
-    val columnEquals = df.sqlContext.analyzer.resolver
-    val projections = df.schema.fields.map { f =>
-      values.find { case (k, _) => columnEquals(k, f.name) }.map { case (_, v) =>
-        v match {
-          case v: jl.Float => fillCol[Double](f, v.toDouble)
-          case v: jl.Double => fillCol[Double](f, v)
-          case v: jl.Long => fillCol[Double](f, v.toDouble)
-          case v: jl.Integer => fillCol[Double](f, v.toDouble)
-          case v: String => fillCol[String](f, v)
-        }
-      }.getOrElse(df.col(f.name))
+    val columnEquals = df.sqlContext.analyzer.resolver //判断两列是否相同的对象
+    val projections = df.schema.fields.map { f => //循环所有的属性
+      values.find { case (k, _) => columnEquals(k, f.name) } //循环所有的values,k表示value中的name,判断两个name是否相同
+        .map { case (_, v) =>
+            v match { //对null或者Nan的数据进行替换
+              case v: jl.Float => fillCol[Double](f, v.toDouble)
+              case v: jl.Double => fillCol[Double](f, v)
+              case v: jl.Long => fillCol[Double](f, v.toDouble)
+              case v: jl.Integer => fillCol[Double](f, v.toDouble)
+              case v: String => fillCol[String](f, v)
+            }
+      }.getOrElse(df.col(f.name)) //找到与属性相同的name,则进行替换,没有找到,则保持原有属性
     }
     df.select(projections : _*)
   }
 
   /**
    * Returns a [[Column]] expression that replaces null value in `col` with `replacement`.
+   * 只是将null值替换成新的值,非null值不会被替换
+   * 为一个属性设置一个新的值,该值的类型是T,即是String或者数字等等,返回新的列
    */
   private def fillCol[T](col: StructField, replacement: T): Column = {
     col.dataType match {
       case DoubleType | FloatType =>
-        coalesce(nanvl(df.col("`" + col.name + "`"), lit(null)),
-          lit(replacement).cast(col.dataType)).as(col.name)
+        //最后强制选择第一个非null的值
+        coalesce(nanvl(df.col("`" + col.name + "`"), lit(null)),//非Nan函数
+          lit(replacement).cast(col.dataType)).as(col.name) //将代替的内容转换成Double类型,然后设置别名为原始名字
       case _ =>
-        coalesce(df.col("`" + col.name + "`"), lit(replacement).cast(col.dataType)).as(col.name)
+        coalesce(df.col("`" + col.name + "`"), lit(replacement).cast(col.dataType)).as(col.name) //将代替的内容转换成String类型,然后设置别名为原始名字
     }
   }
 
@@ -407,16 +443,19 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
    * value in `replacementMap`, using [[CaseWhen]].
    *
    * TODO: This can be optimized to use broadcast join when replacementMap is large.
+   * 对一个列进行替换,该列的值与map中的key相同的时候,则替换成对应的value,否则保持原来数据
    */
   private def replaceCol(col: StructField, replacementMap: Map[_, _]): Column = {
-    val keyExpr = df.col(col.name).expr
-    def buildExpr(v: Any) = Cast(Literal(v), keyExpr.dataType)
+    val keyExpr = df.col(col.name).expr //找到列的表达式
+    def buildExpr(v: Any) = Cast(Literal(v), keyExpr.dataType) //对v进行强转换成列对应的返回值
+
     val branches = replacementMap.flatMap { case (source, target) =>
-      Seq(buildExpr(source), buildExpr(target))
+      Seq(buildExpr(source), buildExpr(target)) //对原始map转换成元组,
     }.toSeq
-    new Column(CaseKeyWhen(keyExpr, branches :+ keyExpr)).as(col.name)
+    new Column(CaseKeyWhen(keyExpr, branches :+ keyExpr)).as(col.name) //转换成case 表达式 when 表达式 then 表达式 else 表达式 end 操作.即key表达式的结果,当key的值满足的时候,则替换成对应的值
   }
 
+  //将数据转换成double
   private def convertToDouble(v: Any): Double = v match {
     case v: Float => v.toDouble
     case v: Double => v

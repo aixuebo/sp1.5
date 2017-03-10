@@ -136,12 +136,13 @@ class DataFrame private[sql](
     })
   }
 
+  //获取执行计划
   @transient protected[sql] val logicalPlan: LogicalPlan = queryExecution.logical match {
     // For various commands (like DDL) and queries with side effects, we force query optimization to
     // happen right away to let these side effects take place eagerly.
-    case _: Command |
-         _: InsertIntoTable |
-         _: CreateTableUsingAsSelect =>
+    case _: Command | //ddl命令
+         _: InsertIntoTable | //插入insert 语句
+         _: CreateTableUsingAsSelect => //插入insert into select语句
       LogicalRDD(queryExecution.analyzed.output, queryExecution.toRdd)(sqlContext)
     case _ =>
       queryExecution.analyzed
@@ -150,28 +151,33 @@ class DataFrame private[sql](
   /**
    * An implicit conversion function internal to this class for us to avoid doing
    * "new DataFrame(...)" everywhere.
+   * 隐士转换,可以将一个逻辑计划转换成DF对象
+   * 因此后面很多方法,比如where等方法虽然返回LogicalPlan,但是都是返回值是DF
    */
   @inline private implicit def logicalPlanToDataFrame(logicalPlan: LogicalPlan): DataFrame = {
     new DataFrame(sqlContext, logicalPlan)
   }
 
+  //获取一个属性对应的表达式
   protected[sql] def resolve(colName: String): NamedExpression = {
     queryExecution.analyzed.resolveQuoted(colName, sqlContext.analyzer.resolver).getOrElse {
       throw new AnalysisException(
-        s"""Cannot resolve column name "$colName" among (${schema.fieldNames.mkString(", ")})""")
+        s"""Cannot resolve column name "$colName" among (${schema.fieldNames.mkString(", ")})""") //找不到该列名
     }
   }
 
+  //将NumericType类型的field转换成表达式
   protected[sql] def numericColumns: Seq[Expression] = {
+    //先找到所有的NumericType类型的属性集合,
     schema.fields.filter(_.dataType.isInstanceOf[NumericType]).map { n =>
-      queryExecution.analyzed.resolveQuoted(n.name, sqlContext.analyzer.resolver).get
+      queryExecution.analyzed.resolveQuoted(n.name, sqlContext.analyzer.resolver).get //将NumericType类型的field转换成表达式
     }
   }
 
   /**
    * Compose the string representing rows for output
    * @param _numRows Number of rows to show 展示行数
-   * @param truncate Whether truncate long strings and align cells right 是否截断太长的字符串数据
+   * @param truncate Whether truncate long strings and align cells right 是否截断太长的字符串数据,只允许在17个字节内容之内
    * 展示数据
    */
   private[sql] def showString(_numRows: Int, truncate: Boolean = true): String = {
@@ -188,8 +194,8 @@ class DataFrame private[sql](
     // For array values, replace Seq and Array with square brackets
     // For cells that are beyond 20 characters, replace it with the first 17 and "..."
     //所有数据组成集合,第一个set存储记录集合,第二个set存储同一行记录的属性集合,最终属性内容是String类型
-    val rows: Seq[Seq[String]] = schema.fieldNames.toSeq +: data.map { row =>
-      row.toSeq.map { cell =>
+    val rows: Seq[Seq[String]] = schema.fieldNames.toSeq +: data.map { row => //循环每一行数据
+      row.toSeq.map { cell => //行数据转换成Seq集合,每一个cell表示一列
         val str = cell match {
           case null => "null"
           case array: Array[_] => array.mkString("[", ", ", "]")
@@ -204,9 +210,9 @@ class DataFrame private[sql](
     val colWidths = Array.fill(numCols)(3) //默认每一列占用3个字节位置,该数据存储每一列数据的最大长度
 
     // Compute the width of each column
-    for (row <- rows) {
+    for (row <- rows) { //循环所有数据
       for ((cell, i) <- row.zipWithIndex) {
-        colWidths(i) = math.max(colWidths(i), cell.length)
+        colWidths(i) = math.max(colWidths(i), cell.length) //设置每一个属性的长度
       }
     }
 
@@ -273,24 +279,28 @@ class DataFrame private[sql](
    *   rdd.toDF()  // this implicit conversion creates a DataFrame with column name _1 and _2
    *   rdd.toDF("id", "name")  // this creates a DataFrame with column name "id" and "name"
    * }}}
+   * 返回新的DataFrame,该新的DataFrame只是对老的数据进行了最终列属性重新命名而已,
+   * 例如上面注释的demo,可以将一个RDD元素是元组的,直接给与一组名字,避免使用_1方式操作RDD
    * @group basic
    * @since 1.3.0
    */
   @scala.annotation.varargs
   def toDF(colNames: String*): DataFrame = {
+    //列的数量必须相同
     require(schema.size == colNames.size,
       "The number of columns doesn't match.\n" +
         s"Old column names (${schema.size}): " + schema.fields.map(_.name).mkString(", ") + "\n" +
         s"New column names (${colNames.size}): " + colNames.mkString(", "))
 
-    val newCols = logicalPlan.output.zip(colNames).map { case (oldAttribute, newName) =>
-      Column(oldAttribute).as(newName)
+    val newCols = logicalPlan.output.zip(colNames).map { case (oldAttribute, newName) => //新老名字组合成元组
+      Column(oldAttribute).as(newName) //新的属性
     }
     select(newCols : _*)
   }
 
   /**
    * Returns the schema of this [[DataFrame]].
+   * DF的输出描述
    * @group basic
    * @since 1.3.0
    */
@@ -298,6 +308,7 @@ class DataFrame private[sql](
 
   /**
    * Returns all column names and their data types as an array.
+   * 返回所有属性的name和数据类型的数组
    * @group basic
    * @since 1.3.0
    */
@@ -309,6 +320,7 @@ class DataFrame private[sql](
    * Returns all column names as an array.
    * @group basic
    * @since 1.3.0
+   * 返回所有属性的集合
    */
   def columns: Array[String] = schema.fields.map(_.name)
 
@@ -418,6 +430,7 @@ class DataFrame private[sql](
    *
    * @group dfops
    * @since 1.3.1
+   * 对数据的null和Nan如何处理
    */
   def na: DataFrameNaFunctions = new DataFrameNaFunctions(this)
 
@@ -441,6 +454,7 @@ class DataFrame private[sql](
    * @param right Right side of the join operation.
    * @group dfops
    * @since 1.3.0
+   * 做笛卡尔的join,属于innerjoin,没有on条件
    */
   def join(right: DataFrame): DataFrame = {
     Join(logicalPlan, right.logicalPlan, joinType = Inner, None)
@@ -465,6 +479,7 @@ class DataFrame private[sql](
    * @param usingColumn Name of the column to join on. This column must exist on both sides.
    * @group dfops
    * @since 1.4.0
+   * 方法将本表与参数right的表进行inner join,条件就是right表的usingColumns列的数据与本表usingColumns列的数据相同的进行join,即两个表都有相同的join需要的字段才能进行join
    */
   def join(right: DataFrame, usingColumn: String): DataFrame = {
     join(right, Seq(usingColumn))
@@ -475,6 +490,7 @@ class DataFrame private[sql](
    *
    * Different from other join functions, the join columns will only appear once in the output,
    * i.e. similar to SQL's `JOIN USING` syntax.
+   * join的列仅仅出现在一次,因为出现两次也没有意义
    *
    * {{{
    *   // Joining df1 and df2 using the columns "user_id" and "user_name"
@@ -486,9 +502,11 @@ class DataFrame private[sql](
    * there is no way to disambiguate which side of the join you would like to reference.
    *
    * @param right Right side of the join operation.
-   * @param usingColumns Names of the columns to join on. This columns must exist on both sides.
+   * @param usingColumns Names of the columns to join on. This columns must exist on both sides. 注意:这个列必须在两个表中都存在
    * @group dfops
    * @since 1.4.0
+   * 该方法将本表与参数right的表进行inner join,条件就是right表的usingColumns列的数据与本表usingColumns列的数据相同的进行join
+   * 比如df1.join(df2, Seq("user_id", "user_name"))  表示df1 innter join df2 on df1.user_id = df2.user_id and df1.user_name = df2.user_name,即两个表都有相同的join需要的字段才能进行join
    */
   def join(right: DataFrame, usingColumns: Seq[String]): DataFrame = {
     // Analyze the self join. The assumption is that the analyzer will disambiguate left vs right
@@ -497,15 +515,16 @@ class DataFrame private[sql](
       Join(logicalPlan, right.logicalPlan, joinType = Inner, None)).analyzed.asInstanceOf[Join]
 
     // Project only one of the join columns.
-    val joinedCols = usingColumns.map(col => joined.right.resolve(col))
+    val joinedCols = usingColumns.map(col => joined.right.resolve(col)) //join列对应右边表的column列集合
+
     val condition = usingColumns.map { col =>
-      catalyst.expressions.EqualTo(joined.left.resolve(col), joined.right.resolve(col))
+      catalyst.expressions.EqualTo(joined.left.resolve(col), joined.right.resolve(col)) //将左右两个表对应该列的表达式设置为相等条件
     }.reduceLeftOption[catalyst.expressions.BinaryExpression] { (cond, eqTo) =>
-      catalyst.expressions.And(cond, eqTo)
+      catalyst.expressions.And(cond, eqTo) //所有的列的表达式使用and 做交接
     }
 
     Project(
-      joined.output.filterNot(joinedCols.contains(_)),
+      joined.output.filterNot(joinedCols.contains(_)),//刨除右边表在join的列,因为这列在左边已经存在了,因此不需要在展现了
       Join(
         joined.left,
         joined.right,
@@ -524,6 +543,7 @@ class DataFrame private[sql](
    * }}}
    * @group dfops
    * @since 1.3.0
+   * 两个表join,使用inner join 同时传入on的表达式
    */
   def join(right: DataFrame, joinExprs: Column): DataFrame = join(right, joinExprs, "inner")
 
@@ -546,6 +566,7 @@ class DataFrame private[sql](
    * @param joinType One of: `inner`, `outer`, `left_outer`, `right_outer`, `leftsemi`.
    * @group dfops
    * @since 1.3.0
+   * 两个表join,同时传入on的表达式
    */
   def join(right: DataFrame, joinExprs: Column, joinType: String): DataFrame = {
     // Note that in this function, we introduce a hack in the case of self-join to automatically
@@ -569,13 +590,14 @@ class DataFrame private[sql](
     // If left/right have no output set intersection, return the plan.
     val lanalyzed = this.logicalPlan.queryExecution.analyzed
     val ranalyzed = right.logicalPlan.queryExecution.analyzed
-    if (lanalyzed.outputSet.intersect(ranalyzed.outputSet).isEmpty) {
+    if (lanalyzed.outputSet.intersect(ranalyzed.outputSet).isEmpty) {//说明输出的字段,两个表不冲突,则返回
       return plan
     }
 
     // Otherwise, find the trivially true predicates and automatically resolves them to both sides.
     // By the time we get here, since we have already run analysis, all attributes should've been
     // resolved and become AttributeReference.
+    //对where中名字有冲突的两个表,进行重新设置
     val cond = plan.condition.map { _.transform {
       case catalyst.expressions.EqualTo(a: AttributeReference, b: AttributeReference)
           if a.sameRef(b) =>
@@ -594,6 +616,7 @@ class DataFrame private[sql](
    * }}}
    * @group dfops
    * @since 1.3.0
+   * 按照若干个属性进行排序
    */
   @scala.annotation.varargs
   def sort(sortCol: String, sortCols: String*): DataFrame = {
@@ -607,18 +630,19 @@ class DataFrame private[sql](
    * }}}
    * @group dfops
    * @since 1.3.0
+   * 按照若干个属性进行排序
    */
   @scala.annotation.varargs
   def sort(sortExprs: Column*): DataFrame = {
     val sortOrder: Seq[SortOrder] = sortExprs.map { col =>
       col.expr match {
-        case expr: SortOrder =>
+        case expr: SortOrder => //属性本来就是排序的
           expr
-        case expr: Expression =>
+        case expr: Expression => //表达式默认是正序
           SortOrder(expr, Ascending)
       }
     }
-    Sort(sortOrder, global = true, logicalPlan)
+    Sort(sortOrder, global = true, logicalPlan) //global = true表示全局排序
   }
 
   /**
@@ -652,12 +676,13 @@ class DataFrame private[sql](
    * Note that the column name can also reference to a nested column like `a.b`.
    * @group dfops
    * @since 1.3.0
+   * 给定一个列名字,返回该列对应的Column对象
    */
   def col(colName: String): Column = colName match {
     case "*" =>
-      Column(ResolvedStar(schema.fieldNames.map(resolve)))
+      Column(ResolvedStar(schema.fieldNames.map(resolve))) //代表所有的输入属性表达式集合 组成的列
     case _ =>
-      val expr = resolve(colName)
+      val expr = resolve(colName) //返回列名对应的表达式
       Column(expr)
   }
 
@@ -665,6 +690,7 @@ class DataFrame private[sql](
    * Returns a new [[DataFrame]] with an alias set.
    * @group dfops
    * @since 1.3.0
+   * 对整个df设置一个别名,即df作为一个子查询
    */
   def as(alias: String): DataFrame = Subquery(alias, logicalPlan)
 
@@ -689,14 +715,14 @@ class DataFrame private[sql](
       // Wrap UnresolvedAttribute with UnresolvedAlias, as when we resolve UnresolvedAttribute, we
       // will remove intermediate Alias for ExtractValue chain, and we need to alias it again to
       // make it a NamedExpression.
-      case Column(u: UnresolvedAttribute) => UnresolvedAlias(u)
+      case Column(u: UnresolvedAttribute) => UnresolvedAlias(u) //纯粹的属性名字
       case Column(expr: NamedExpression) => expr
       // Leave an unaliased explode with an empty list of names since the analyzer will generate the
       // correct defaults after the nested expression's type has been resolved.
       case Column(explode: Explode) => MultiAlias(explode, Nil)
-      case Column(expr: Expression) => Alias(expr, expr.prettyString)()
+      case Column(expr: Expression) => Alias(expr, expr.prettyString)() //为一个表达式设置别名
     }
-    Project(namedExpressions.toSeq, logicalPlan)
+    Project(namedExpressions.toSeq, logicalPlan) //在原有逻辑计划基础上,进一步选择select
   }
 
   /**
@@ -710,6 +736,7 @@ class DataFrame private[sql](
    * }}}
    * @group dfops
    * @since 1.3.0
+   * 至少传入一列
    */
   @scala.annotation.varargs
   def select(col: String, cols: String*): DataFrame = select((col +: cols).map(Column(_)) : _*)
@@ -723,6 +750,7 @@ class DataFrame private[sql](
    * }}}
    * @group dfops
    * @since 1.3.0
+   * 传入select的表达式集合,转换成列对象
    */
   @scala.annotation.varargs
   def selectExpr(exprs: String*): DataFrame = {
@@ -740,6 +768,7 @@ class DataFrame private[sql](
    * }}}
    * @group dfops
    * @since 1.3.0
+   * 使用一列,该列有表达式,因此对元数据进行过滤
    */
   def filter(condition: Column): DataFrame = Filter(condition.expr, logicalPlan)
 
@@ -750,6 +779,7 @@ class DataFrame private[sql](
    * }}}
    * @group dfops
    * @since 1.3.0
+   * 直接传入一个表达式字符串,进行过滤操作
    */
   def filter(conditionExpr: String): DataFrame = {
     filter(Column(new SqlParser().parseExpression(conditionExpr)))
@@ -764,6 +794,7 @@ class DataFrame private[sql](
    * }}}
    * @group dfops
    * @since 1.3.0
+   * 其实就是调用filter,传入一个列,列对应的就是该属性的表达式
    */
   def where(condition: Column): DataFrame = filter(condition)
 
@@ -774,6 +805,7 @@ class DataFrame private[sql](
    * }}}
    * @group dfops
    * @since 1.5.0
+   * 其实调用的就是filter,传入一个表达式
    */
   def where(conditionExpr: String): DataFrame = {
     filter(Column(new SqlParser().parseExpression(conditionExpr)))
@@ -795,6 +827,7 @@ class DataFrame private[sql](
    * }}}
    * @group dfops
    * @since 1.3.0
+   * 参数可以没有,因为参数集合是*
    */
   @scala.annotation.varargs
   def groupBy(cols: Column*): GroupedData = {
@@ -934,6 +967,8 @@ class DataFrame private[sql](
    * }}}
    * @group dfops
    * @since 1.3.0
+   * 在group by的基础上追加一组聚合函数值
+   * 注意:此时group by是没有的,即不会在数据集上真的group by,只是在数据集合上进行聚合
    */
   def agg(aggExpr: (String, String), aggExprs: (String, String)*): DataFrame = {
     groupBy().agg(aggExpr, aggExprs : _*)
@@ -982,7 +1017,7 @@ class DataFrame private[sql](
    * @group dfops
    * @since 1.3.0
    */
-  def limit(n: Int): DataFrame = Limit(Literal(n), logicalPlan)
+  def limit(n: Int): DataFrame = Limit(Literal(n), logicalPlan) //在执行计划的基础上,追加一个limit逻辑计划,注意有可能logicalPlan已经存在limit了,但是不影响,这个是追加的limit,因为他们是一棵树结构
 
   /**
    * Returns a new [[DataFrame]] containing union of rows in this frame and another frame.
@@ -990,7 +1025,7 @@ class DataFrame private[sql](
    * @group dfops
    * @since 1.3.0
    */
-  def unionAll(other: DataFrame): DataFrame = Union(logicalPlan, other.logicalPlan)
+  def unionAll(other: DataFrame): DataFrame = Union(logicalPlan, other.logicalPlan) //两个逻辑计划进行union
 
   /**
    * Returns a new [[DataFrame]] containing rows only in both this frame and another frame.
@@ -1142,39 +1177,45 @@ class DataFrame private[sql](
   /**
    * Returns a new [[DataFrame]] by adding a column or replacing the existing column that has
    * the same name.
+   * @param colName 要替换或者增加的列名字
+   * @param col  要替换或者增加的列对象
    * @group dfops
    * @since 1.3.0
+   * 产生新的DF,该DF是追加一列或者替代已经存在的列
+   *
    */
   def withColumn(colName: String, col: Column): DataFrame = {
     val resolver = sqlContext.analyzer.resolver
-    val replaced = schema.exists(f => resolver(f.name, colName))
-    if (replaced) {
+    val replaced = schema.exists(f => resolver(f.name, colName)) //是否代替,即该列是否存在
+    if (replaced) {//代替
       val colNames = schema.map { field =>
         val name = field.name
-        if (resolver(name, colName)) col.as(colName) else Column(name)
+        if (resolver(name, colName)) col.as(colName) else Column(name) //找到该列,则使用新的列col,并且设置col的名字为老的列的名字.否则使用原始列
       }
       select(colNames : _*)
     } else {
-      select(Column("*"), col.as(colName))
+      select(Column("*"), col.as(colName)) //追加新的列
     }
   }
 
   /**
    * Returns a new [[DataFrame]] with a column renamed.
    * This is a no-op if schema doesn't contain existingName.
+   * @param existingName 要更改名字的列名字
+   * @param newName 列的新名字
    * @group dfops
    * @since 1.3.0
    */
   def withColumnRenamed(existingName: String, newName: String): DataFrame = {
     val resolver = sqlContext.analyzer.resolver
-    val shouldRename = schema.exists(f => resolver(f.name, existingName))
-    if (shouldRename) {
+    val shouldRename = schema.exists(f => resolver(f.name, existingName)) //查找是否存在要更改名字的列
+    if (shouldRename) {//存在要替换名字的列
       val colNames = schema.map { field =>
         val name = field.name
-        if (resolver(name, existingName)) Column(name).as(newName) else Column(name)
+        if (resolver(name, existingName)) Column(name).as(newName) else Column(name) //找到该列,对该列的名字进行重新修改
       }
       select(colNames : _*)
-    } else {
+    } else {//找不到.则保持原有即可
       this
     }
   }
@@ -1184,16 +1225,17 @@ class DataFrame private[sql](
    * This is a no-op if schema doesn't contain column name.
    * @group dfops
    * @since 1.4.0
+   * 删除一个列,得到新的数据
    */
   def drop(colName: String): DataFrame = {
     val resolver = sqlContext.analyzer.resolver
-    val shouldDrop = schema.exists(f => resolver(f.name, colName))
+    val shouldDrop = schema.exists(f => resolver(f.name, colName)) //确定可以删除一个列,即该删除的列是真实存在的
     if (shouldDrop) {
-      val colsAfterDrop = schema.filter { field =>
+      val colsAfterDrop = schema.filter { field => //将该删除的列过滤掉
         val name = field.name
         !resolver(name, colName)
-      }.map(f => Column(f.name))
-      select(colsAfterDrop : _*)
+      }.map(f => Column(f.name))//转换成新的列
+      select(colsAfterDrop : _*) //进行重新查询数据
     } else {
       this
     }
@@ -1206,6 +1248,7 @@ class DataFrame private[sql](
    * with an equivalent expression.
    * @group dfops
    * @since 1.4.1
+   * 删除一个列
    */
   def drop(col: Column): DataFrame = {
     val attrs = this.logicalPlan.output
@@ -1220,6 +1263,7 @@ class DataFrame private[sql](
    * This is an alias for `distinct`.
    * @group dfops
    * @since 1.4.0
+   * 对所有的列都进行比较,有相同的数据,则删除掉,即按照所有的列的值进行聚合
    */
   def dropDuplicates(): DataFrame = dropDuplicates(this.columns)
 
@@ -1229,14 +1273,15 @@ class DataFrame private[sql](
    *
    * @group dfops
    * @since 1.4.0
+   * 重新对数据进行聚合操作
    */
   def dropDuplicates(colNames: Seq[String]): DataFrame = {
-    val groupCols = colNames.map(resolve)
-    val groupColExprIds = groupCols.map(_.exprId)
-    val aggCols = logicalPlan.output.map { attr =>
-      if (groupColExprIds.contains(attr.exprId)) {
+    val groupCols = colNames.map(resolve) //将列名字转换成列对象
+    val groupColExprIds = groupCols.map(_.exprId) //找到该列的表达式
+    val aggCols = logicalPlan.output.map { attr => //循环所有的输出列
+      if (groupColExprIds.contains(attr.exprId)) {//如果该列是唯一列值的列,则保留
         attr
-      } else {
+      } else {//说明不是唯一列值的,则仅仅保留一条数据
         Alias(First(attr), attr.name)()
       }
     }
@@ -1339,6 +1384,7 @@ class DataFrame private[sql](
    * Returns a new RDD by applying a function to all rows of this DataFrame.
    * @group rdd
    * @since 1.3.0
+   * 将一行数据转换成R对象,并且返回的是RDD[R],而不再是DF了
    */
   def map[R: ClassTag](f: Row => R): RDD[R] = rdd.map(f)
 
@@ -1347,6 +1393,7 @@ class DataFrame private[sql](
    * and then flattening the results.
    * @group rdd
    * @since 1.3.0
+   * 将一行数据转换成R对象集合,并且返回的是RDD[R],而不再是DF了
    */
   def flatMap[R: ClassTag](f: Row => TraversableOnce[R]): RDD[R] = rdd.flatMap(f)
 
@@ -1354,6 +1401,7 @@ class DataFrame private[sql](
    * Returns a new RDD by applying a function to each partition of this DataFrame.
    * @group rdd
    * @since 1.3.0
+   * 将一个分区数据转换成R对象迭代器,并且返回的是RDD[R],而不再是DF了
    */
   def mapPartitions[R: ClassTag](f: Iterator[Row] => Iterator[R]): RDD[R] = {
     rdd.mapPartitions(f)
@@ -1363,6 +1411,7 @@ class DataFrame private[sql](
    * Applies a function `f` to all rows.
    * @group rdd
    * @since 1.3.0
+   * 每一个数据进行f函数处理
    */
   def foreach(f: Row => Unit): Unit = withNewExecutionId {
     rdd.foreach(f)
@@ -1372,6 +1421,7 @@ class DataFrame private[sql](
    * Applies a function f to each partition of this [[DataFrame]].
    * @group rdd
    * @since 1.3.0
+   * 每一个分区进行f函数处理
    */
   def foreachPartition(f: Iterator[Row] => Unit): Unit = withNewExecutionId {
     rdd.foreachPartition(f)
@@ -1388,6 +1438,7 @@ class DataFrame private[sql](
    * Returns an array that contains all of [[Row]]s in this [[DataFrame]].
    * @group action
    * @since 1.3.0
+   * 返回所有的数据集合
    */
   def collect(): Array[Row] = withNewExecutionId {
     queryExecution.executedPlan.executeCollect()
@@ -1413,6 +1464,7 @@ class DataFrame private[sql](
    * Returns a new [[DataFrame]] that has exactly `numPartitions` partitions.
    * @group rdd
    * @since 1.3.0
+   * 改变子类逻辑的partiton数量,可鞥涉及到shuffle操作
    */
   def repartition(numPartitions: Int): DataFrame = {
     Repartition(numPartitions, shuffle = true, logicalPlan)
@@ -1425,6 +1477,7 @@ class DataFrame private[sql](
    * the 100 new partitions will claim 10 of the current partitions.
    * @group rdd
    * @since 1.4.0
+   * 改变子类逻辑的partiton数量,可鞥涉及到shuffle操作
    */
   def coalesce(numPartitions: Int): DataFrame = {
     Repartition(numPartitions, shuffle = false, logicalPlan)
@@ -1435,6 +1488,7 @@ class DataFrame private[sql](
    * This is an alias for `dropDuplicates`.
    * @group dfops
    * @since 1.3.0
+   * 对所有的列都进行比较,有相同的数据,则删除掉,即按照所有的列的值进行聚合
    */
   def distinct(): DataFrame = dropDuplicates()
 
@@ -1517,7 +1571,8 @@ class DataFrame private[sql](
    *
    * @group basic
    * @since 1.3.0
-   * 为本类对应的sql设置一个表名字
+   * 为一个df的逻辑结构设置一个临时的表名字,
+   * 该表名字仅仅存储在SQLContext生命周期内,也是在driver的内存里面存储
    */
   def registerTempTable(tableName: String): Unit = {
     sqlContext.registerDataFrameAsTable(this, tableName)
@@ -1529,6 +1584,7 @@ class DataFrame private[sql](
    *
    * @group output
    * @since 1.4.0
+   * 对DF进行写数据的处理
    */
   @Experimental
   def write: DataFrameWriter = new DataFrameWriter(this)
@@ -1568,9 +1624,10 @@ class DataFrame private[sql](
    * Returns a best-effort snapshot of the files that compose this DataFrame. This method simply
    * asks each constituent BaseRelation for its respective files and takes the union of all results.
    * Depending on the source relations, this may not find all input files. Duplicates are removed.
+   * 返回数据源的文件集合
    */
   def inputFiles: Array[String] = {
-    val files: Seq[String] = logicalPlan.collect {
+    val files: Seq[String] = logicalPlan.collect { //收集所有符合偏函数转换的数据
       case LogicalRelation(fsBasedRelation: FileRelation) =>
         fsBasedRelation.inputFiles
       case fr: FileRelation =>
@@ -1594,12 +1651,13 @@ class DataFrame private[sql](
 
   ////////////////////////////////////////////////////////////////////////////
   ////////////////////////////////////////////////////////////////////////////
-  // Deprecated methods
+  // Deprecated methods 过期的方法
   ////////////////////////////////////////////////////////////////////////////
   ////////////////////////////////////////////////////////////////////////////
 
   /**
    * @deprecated As of 1.3.0, replaced by `toDF()`.
+   * 现在已经叫做toDF方法了
    */
   @deprecated("use toDF", "1.3.0")
   def toSchemaRDD: DataFrame = this
@@ -1907,6 +1965,7 @@ class DataFrame private[sql](
   /**
    * Wrap a DataFrame action to track all Spark jobs in the body so that we can connect them with
    * an execution.
+   *
    */
   private[sql] def withNewExecutionId[T](body: => T): T = {
     SQLExecution.withNewExecutionId(sqlContext, queryExecution)(body)

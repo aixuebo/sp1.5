@@ -78,6 +78,7 @@ object functions {
    *
    * @group normal_funcs
    * @since 1.3.0
+   * 创建一个常量类,给定数据的值,则可以创建Column对象
    */
   def lit(literal: Any): Column = {
     literal match {
@@ -593,6 +594,7 @@ object functions {
    *
    * @group normal_funcs
    * @since 1.3.0
+   * 返回第一个非null的表达式,参数是传入的一组列集合
    */
   @scala.annotation.varargs
   def coalesce(e: Column*): Column = Coalesce(e.map(_.expr))
@@ -636,6 +638,7 @@ object functions {
    *
    * @group normal_funcs
    * @since 1.5.0
+   * 返回两个列中非Nan的列
    */
   def nanvl(col1: Column, col2: Column): Column = NaNvl(col1.expr, col2.expr)
 

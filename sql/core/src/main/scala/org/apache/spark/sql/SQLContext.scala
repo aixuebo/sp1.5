@@ -650,6 +650,8 @@ class SQLContext(@transient val sparkContext: SparkContext)
   /**
    * Registers the given [[DataFrame]] as a temporary table in the catalog. Temporary tables exist
    * only during the lifetime of this instance of SQLContext.
+   * 为一个df的逻辑结构设置一个临时的表名字,
+   * 该表名字仅仅存储在SQLContext生命周期内,也是在driver的内存里面存储
    */
   private[sql] def registerDataFrameAsTable(df: DataFrame, tableName: String): Unit = {
     catalog.registerTable(Seq(tableName), df.logicalPlan)
@@ -663,6 +665,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    *
    * @group basic
    * @since 1.3.0
+   * 取消该临时表
    */
   def dropTempTable(tableName: String): Unit = {
     cacheManager.tryUncacheQuery(table(tableName))

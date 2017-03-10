@@ -758,6 +758,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    *
    * @group expr_ops
    * @since 1.3.0
+   * 为属性设置别名,即包装一层表达式
    */
   def as(alias: String): Column = expr match {
     case ne: NamedExpression => Alias(expr, alias)(explicitMetadata = Some(ne.metadata))

@@ -34,6 +34,7 @@ import org.apache.spark.sql.sources.HadoopFsRelation
  * key-value stores, etc). Use [[DataFrame.write]] to access this.
  *
  * @since 1.4.0
+ * 内部维护了一个DF,说明该类是针对一个DF进一步的处理,主要用于写数据的处理
  */
 @Experimental
 final class DataFrameWriter private[sql](df: DataFrame) {

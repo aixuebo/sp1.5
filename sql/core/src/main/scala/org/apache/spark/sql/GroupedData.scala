@@ -28,12 +28,14 @@ import org.apache.spark.sql.types.NumericType
 
 /**
  * Companion object for GroupedData
+ * GroupedData的伴随对象
  */
 private[sql] object GroupedData {
   def apply(
-      df: DataFrame,
-      groupingExprs: Seq[Expression],
-      groupType: GroupType): GroupedData = {
+      df: DataFrame,//group by 应用在哪个df上
+      groupingExprs: Seq[Expression],//group by表达式集合
+      groupType: GroupType) //group by的方式
+    : GroupedData = {
     new GroupedData(df, groupingExprs, groupType: GroupType)
   }
 
@@ -44,16 +46,19 @@ private[sql] object GroupedData {
 
   /**
    * To indicate it's the GroupBy
+   * 标准group by操作
    */
   private[sql] object GroupByType extends GroupType
 
   /**
    * To indicate it's the CUBE
+   * 窗口函数
    */
   private[sql] object CubeType extends GroupType
 
   /**
    * To indicate it's the ROLLUP
+   * 窗口函数
    */
   private[sql] object RollupType extends GroupType
 }
@@ -71,7 +76,8 @@ class GroupedData protected[sql](
     private val groupType: GroupedData.GroupType) {
 
   private[this] def toDF(aggExprs: Seq[Expression]): DataFrame = {
-    val aggregates = if (df.sqlContext.conf.dataFrameRetainGroupColumns) {
+    //最终聚合属性是group by的表达式与新的agg表达式之和
+    val aggregates = if (df.sqlContext.conf.dataFrameRetainGroupColumns) { //是否保留group的属性
       groupingExprs ++ aggExprs
     } else {
       aggExprs
@@ -98,16 +104,18 @@ class GroupedData protected[sql](
     }
   }
 
+  //对整数列进行函数包装,转换成新的表达式
   private[this] def aggregateNumericColumns(colNames: String*)(f: Expression => Expression)
     : DataFrame = {
 
-    val columnExprs = if (colNames.isEmpty) {
+    //将名字转换成属性集合
+    val columnExprs = if (colNames.isEmpty) {//如果没传参数
       // No columns specified. Use all numeric columns.
-      df.numericColumns
+      df.numericColumns //查找所有的数组类型的属性对应的表达式
     } else {
       // Make sure all specified columns are numeric.
       colNames.map { colName =>
-        val namedExpr = df.resolve(colName)
+        val namedExpr = df.resolve(colName) //将列名字转换成列属性对象
         if (!namedExpr.dataType.isInstanceOf[NumericType]) {
           throw new AnalysisException(
             s""""$colName" is not a numeric column. """ +
@@ -116,9 +124,10 @@ class GroupedData protected[sql](
         namedExpr
       }
     }
-    toDF(columnExprs.map(f))
+    toDF(columnExprs.map(f))//每一个属性都进行f函数处理,转换成新的属性
   }
 
+  //将表达式字符串转换成表达式--返回值是一个表达式参数传入,返回一个新的表达式
   private[this] def strToExpr(expr: String): (Expression => Expression) = {
     expr.toLowerCase match {
       case "avg" | "average" | "mean" => Average
@@ -169,8 +178,8 @@ class GroupedData protected[sql](
    * @since 1.3.0
    */
   def agg(exprs: Map[String, String]): DataFrame = {
-    toDF(exprs.map { case (colName, expr) =>
-      strToExpr(expr)(df(colName).expr)
+    toDF(exprs.map { case (colName, expr) => //属性名字 和 聚合的表达式
+      strToExpr(expr)(df(colName).expr) //strToExpr(expr)将表达式转换成 (Expression => Expression)形式聚合函数,然后将属性本身作为参数,应用到函数中,返回解析后的函数
     }.toSeq)
   }
 
@@ -232,6 +241,7 @@ class GroupedData protected[sql](
    * The resulting [[DataFrame]] will also contain the grouping columns.
    *
    * @since 1.3.0
+   * 增加count聚合
    */
   def count(): DataFrame = toDF(Seq(Alias(Count(Literal(1)), "count")()))
 
@@ -253,6 +263,7 @@ class GroupedData protected[sql](
    * When specified columns are given, only compute the max values for them.
    *
    * @since 1.3.0
+   * 计算参数集合中每一个属性的最大值
    */
   @scala.annotation.varargs
   def max(colNames: String*): DataFrame = {

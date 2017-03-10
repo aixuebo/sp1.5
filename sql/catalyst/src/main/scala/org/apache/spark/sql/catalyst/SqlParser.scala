@@ -143,7 +143,7 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
             .getOrElse(Project(p.map(UnresolvedAlias(_)), withFilter))//在过滤的结果集上进行group by 聚合
 
           val withDistinct = d.map(_ => Distinct(withProjection)).getOrElse(withProjection)
-          val withHaving = h.map(Filter(_, withDistinct)).getOrElse(withDistinct) //在gourp by 的基础上进行having过滤
+          val withHaving = h.map(Filter(_, withDistinct)).getOrElse(withDistinct) //在group by 的基础上进行having过滤
 
           val withOrder = o.map(_(withHaving)).getOrElse(withHaving) //o是一个函数,参数是LogicalPlan,返回值也是LogicalPlan,因此_(withHaving)的含义就是调用order by 函数,参数就是已经过滤到现在的结果集,返回排序后的结果集
           val withLimit = l.map(Limit(_, withOrder)).getOrElse(withOrder)

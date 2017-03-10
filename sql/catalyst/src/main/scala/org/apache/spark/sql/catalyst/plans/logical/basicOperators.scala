@@ -412,13 +412,15 @@ case class Subquery(alias: String, child: LogicalPlan) extends UnaryNode {
  * @param withReplacement Whether to sample with replacement.
  * @param seed the random seed
  * @param child the LogicalPlan
+ * 在数据集上进行抽样处理
  */
 case class Sample(
     lowerBound: Double,
     upperBound: Double,
     withReplacement: Boolean,
     seed: Long,
-    child: LogicalPlan) extends UnaryNode {
+    child: LogicalPlan) //数据集
+    extends UnaryNode {
 
   override def output: Seq[Attribute] = child.output
 }
