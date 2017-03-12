@@ -101,21 +101,21 @@ class HadoopTableReader(
     // Create local references to member variables, so that the entire `this` object won't be
     // serialized in the closure below.
     val tableDesc = relation.tableDesc
-    val broadcastedHiveConf = _broadcastedHiveConf
+    val broadcastedHiveConf = _broadcastedHiveConf //hive的配置文件
 
-    val tablePath = hiveTable.getPath
-    val inputPathStr = applyFilterIfNeeded(tablePath, filterOpt)
+    val tablePath = hiveTable.getPath //hive表对应的路径
+    val inputPathStr = applyFilterIfNeeded(tablePath, filterOpt) //对hadoop上的file路径 进行过滤,返回合法的路径集合
 
     // logDebug("Table input: %s".format(tablePath))
     val ifc = hiveTable.getInputFormatClass
-      .asInstanceOf[java.lang.Class[InputFormat[Writable, Writable]]]
-    val hadoopRDD = createHadoopRdd(tableDesc, inputPathStr, ifc)
+      .asInstanceOf[java.lang.Class[InputFormat[Writable, Writable]]] //使用说明类去读取hdfs上的文件
+    val hadoopRDD = createHadoopRdd(tableDesc, inputPathStr, ifc) //读取hadoop上的文件,返回hadoop的RDD
 
     val attrsWithIndex = attributes.zipWithIndex
-    val mutableRow = new SpecificMutableRow(attributes.map(_.dataType))
+    val mutableRow = new SpecificMutableRow(attributes.map(_.dataType)) //一个可变化的InternalRow对象
 
-    val deserializedHadoopRDD = hadoopRDD.mapPartitions { iter =>
-      val hconf = broadcastedHiveConf.value.value
+    val deserializedHadoopRDD = hadoopRDD.mapPartitions { iter => //循环每一行数据
+      val hconf = broadcastedHiveConf.value.value //hive的配置文件
       val deserializer = deserializerClass.newInstance()
       deserializer.initialize(hconf, tableDesc.getProperties)
       HadoopTableReader.fillObject(iter, deserializer, attrsWithIndex, mutableRow, deserializer)
@@ -251,12 +251,13 @@ class HadoopTableReader(
   /**
    * If `filterOpt` is defined, then it will be used to filter files from `path`. These files are
    * returned in a single, comma-separated string.
+   * 对hadoop上的file路径 进行过滤,返回合法的路径集合
    */
   private def applyFilterIfNeeded(path: Path, filterOpt: Option[PathFilter]): String = {
     filterOpt match {
       case Some(filter) =>
         val fs = path.getFileSystem(sc.hiveconf)
-        val filteredFiles = fs.listStatus(path, filter).map(_.getPath.toString)
+        val filteredFiles = fs.listStatus(path, filter).map(_.getPath.toString) //进行过滤
         filteredFiles.mkString(",")
       case None => path.toString
     }
@@ -267,11 +268,12 @@ class HadoopTableReader(
    * applied locally on each slave.
    */
   private def createHadoopRdd(
-    tableDesc: TableDesc,
-    path: String,
-    inputFormatClass: Class[InputFormat[Writable, Writable]]): RDD[Writable] = {
+    tableDesc: TableDesc,//要读取的hive表对象
+    path: String,//存储在哪些数据路径集合上.该集合用逗号进行拆分
+    inputFormatClass: Class[InputFormat[Writable, Writable]]) //如何读取数据源文件内容
+    : RDD[Writable] = {
 
-    val initializeJobConfFunc = HadoopTableReader.initializeLocalJobConfFunc(path, tableDesc) _
+    val initializeJobConfFunc = HadoopTableReader.initializeLocalJobConfFunc(path, tableDesc) _ //设置输出源在conf中
 
     val rdd = new HadoopRDD(
       sc.sparkContext,
@@ -293,7 +295,7 @@ private[hive] object HadoopTableReader extends HiveInspectors with Logging {
    * instantiate a HadoopRDD.
    */
   def initializeLocalJobConfFunc(path: String, tableDesc: TableDesc)(jobConf: JobConf) {
-    FileInputFormat.setInputPaths(jobConf, Seq[Path](new Path(path)): _*)
+    FileInputFormat.setInputPaths(jobConf, Seq[Path](new Path(path)): _*) //设置hadoop的数据源
     if (tableDesc != null) {
       PlanUtils.configureInputJobPropertiesForStorageHandler(tableDesc)
       Utilities.copyTableJobPropertiesToConf(tableDesc, jobConf)
@@ -304,12 +306,12 @@ private[hive] object HadoopTableReader extends HiveInspectors with Logging {
 
   /**
    * Transform all given raw `Writable`s into `Row`s.
-   *
-   * @param iterator Iterator of all `Writable`s to be transformed
+   * 将一个hadoop的RDD上Writable类型的RDD,转换成Row数据
+   * @param iterator Iterator of all `Writable`s to be transformed 一个partition上所有的数据的迭代器
    * @param rawDeser The `Deserializer` associated with the input `Writable`
    * @param nonPartitionKeyAttrs Attributes that should be filled together with their corresponding
    *                             positions in the output schema
-   * @param mutableRow A reusable `MutableRow` that should be filled
+   * @param mutableRow A reusable `MutableRow` that should be filled 一个row对象
    * @param tableDeser Table Deserializer
    * @return An `Iterator[Row]` transformed from `iterator`
    */
@@ -377,7 +379,7 @@ private[hive] object HadoopTableReader extends HiveInspectors with Logging {
     val converter = ObjectInspectorConverters.getConverter(rawDeser.getObjectInspector, soi)
 
     // Map each tuple to a row object
-    iterator.map { value =>
+    iterator.map { value => //循环每一行数据
       val raw = converter.convert(rawDeser.deserialize(value))
       var i = 0
       while (i < fieldRefs.length) {
@@ -390,7 +392,7 @@ private[hive] object HadoopTableReader extends HiveInspectors with Logging {
         i += 1
       }
 
-      mutableRow: InternalRow
+      mutableRow : InternalRow
     }
   }
 }
