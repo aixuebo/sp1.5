@@ -57,7 +57,9 @@ class Column(protected[sql] val expr: Expression) extends Logging {
     case _ => UnresolvedAttribute.quotedString(name)
   })
 
-  /** Creates a column based on the given expression. */
+  /** Creates a column based on the given expression.
+    * 隐士转换,一个表达式可以转换成一个列对象
+    **/
   implicit private def exprToColumn(newExpr: Expression): Column = new Column(newExpr)
 
   override def toString: String = expr.prettyString

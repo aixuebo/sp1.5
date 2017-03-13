@@ -21,18 +21,20 @@ import org.apache.spark.sql.catalyst.expressions.MutableRow
 import org.apache.spark.sql.columnar.{ColumnAccessor, NativeColumnAccessor}
 import org.apache.spark.sql.types.AtomicType
 
+//可压缩的方式访问列属性值
 private[sql] trait CompressibleColumnAccessor[T <: AtomicType] extends ColumnAccessor {
   this: NativeColumnAccessor[T] =>
 
-  private var decoder: Decoder[T] = _
+  private var decoder: Decoder[T] = _ //解压方式
 
   abstract override protected def initialize(): Unit = {
     super.initialize()
-    decoder = CompressionScheme(underlyingBuffer.getInt()).decoder(buffer, columnType)
+    decoder = CompressionScheme(underlyingBuffer.getInt()).decoder(buffer, columnType) //通过数压缩类型,得到具体的解压方式.有了解压方式,就可以对buffer进行解压.每一个元素的值是columnType类型的
   }
 
   abstract override def hasNext: Boolean = super.hasNext || decoder.hasNext
 
+  //不断抽取一个元素值,存储到row的第ordinal个元素位置上
   override def extractSingle(row: MutableRow, ordinal: Int): Unit = {
     decoder.next(row, ordinal)
   }

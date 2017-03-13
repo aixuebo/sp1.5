@@ -28,46 +28,53 @@ import org.apache.spark.sql.types._
  * extracted from the buffer, instead of directly returning it, the value is set into some field of
  * a [[MutableRow]]. In this way, boxing cost can be avoided by leveraging the setter methods
  * for primitive values provided by [[MutableRow]].
+ * 从ByteBuffer中抽取数据,类似迭代器一样,不断的从ByteBuffer中抽取数据
+ *
+ * 数据列的访问器
  */
 private[sql] trait ColumnAccessor {
   initialize()
 
   protected def initialize()
 
-  def hasNext: Boolean
+  def hasNext: Boolean //是否还有数据要被访问
 
+  //每一次抽取的值为该row的第ordinal个属性赋值
   def extractTo(row: MutableRow, ordinal: Int)
 
-  protected def underlyingBuffer: ByteBuffer
+  protected def underlyingBuffer: ByteBuffer //底层的缓冲池
 }
 
 private[sql] abstract class BasicColumnAccessor[JvmType](
-    protected val buffer: ByteBuffer,
-    protected val columnType: ColumnType[JvmType])
+    protected val buffer: ByteBuffer,//存储数据的buffer
+    protected val columnType: ColumnType[JvmType]) //buffer中存储的数据类型
   extends ColumnAccessor {
 
   protected def initialize() {}
 
-  override def hasNext: Boolean = buffer.hasRemaining
+  override def hasNext: Boolean = buffer.hasRemaining //buffer内还有数据,则true
 
+  //每一次抽取的值为该row的第ordinal个属性赋值
   override def extractTo(row: MutableRow, ordinal: Int): Unit = {
     extractSingle(row, ordinal)
   }
 
+  //每一次抽取的值为该row的第ordinal个属性赋值
   def extractSingle(row: MutableRow, ordinal: Int): Unit = {
-    columnType.extract(buffer, row, ordinal)
+    columnType.extract(buffer, row, ordinal)//从buffer中抽取数据,然后将结果为row的第ordinal个属性赋值
   }
 
-  protected def underlyingBuffer = buffer
+  protected def underlyingBuffer = buffer //底层的缓冲池
 }
 
 private[sql] abstract class NativeColumnAccessor[T <: AtomicType](
-    override protected val buffer: ByteBuffer,
-    override protected val columnType: NativeColumnType[T])
+    override protected val buffer: ByteBuffer,//存储数据的缓冲区
+    override protected val columnType: NativeColumnType[T])//缓冲区里面存储的是什么类型的数据
   extends BasicColumnAccessor(buffer, columnType)
   with NullableColumnAccessor
   with CompressibleColumnAccessor[T]
 
+//比如存储的是boolean类型的
 private[sql] class BooleanColumnAccessor(buffer: ByteBuffer)
   extends NativeColumnAccessor(buffer, BOOLEAN)
 
@@ -92,16 +99,8 @@ private[sql] class DoubleColumnAccessor(buffer: ByteBuffer)
 private[sql] class StringColumnAccessor(buffer: ByteBuffer)
   extends NativeColumnAccessor(buffer, STRING)
 
-private[sql] class BinaryColumnAccessor(buffer: ByteBuffer)
-  extends BasicColumnAccessor[Array[Byte]](buffer, BINARY)
-  with NullableColumnAccessor
-
 private[sql] class FixedDecimalColumnAccessor(buffer: ByteBuffer, precision: Int, scale: Int)
   extends NativeColumnAccessor(buffer, FIXED_DECIMAL(precision, scale))
-
-private[sql] class GenericColumnAccessor(buffer: ByteBuffer, dataType: DataType)
-  extends BasicColumnAccessor[Array[Byte]](buffer, GENERIC(dataType))
-  with NullableColumnAccessor
 
 private[sql] class DateColumnAccessor(buffer: ByteBuffer)
   extends NativeColumnAccessor(buffer, DATE)
@@ -109,13 +108,23 @@ private[sql] class DateColumnAccessor(buffer: ByteBuffer)
 private[sql] class TimestampColumnAccessor(buffer: ByteBuffer)
   extends NativeColumnAccessor(buffer, TIMESTAMP)
 
+//每次访问的
+private[sql] class BinaryColumnAccessor(buffer: ByteBuffer)
+  extends BasicColumnAccessor[Array[Byte]](buffer, BINARY)
+  with NullableColumnAccessor
+
+//抽取一组字节数组,然后将其转反序列化成对象,存储到对应的row的index位置上
+private[sql] class GenericColumnAccessor(buffer: ByteBuffer, dataType: DataType)
+  extends BasicColumnAccessor[Array[Byte]](buffer, GENERIC(dataType))
+  with NullableColumnAccessor
+
 private[sql] object ColumnAccessor {
   def apply(dataType: DataType, buffer: ByteBuffer): ColumnAccessor = {
     val dup = buffer.duplicate().order(ByteOrder.nativeOrder)
 
     // The first 4 bytes in the buffer indicate the column type.  This field is not used now,
     // because we always know the data type of the column ahead of time.
-    dup.getInt()
+    dup.getInt() //获取第一个int值,表示数据类型,但是因为我们传入参数已经知道了数据类型,因此不需要该数据了,但是需要从buffer中把该值抽取出来
 
     dataType match {
       case BooleanType => new BooleanColumnAccessor(dup)

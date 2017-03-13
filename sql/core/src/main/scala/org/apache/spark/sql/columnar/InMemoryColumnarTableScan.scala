@@ -62,7 +62,7 @@ private[sql] case class InMemoryRelation(
       _batchStats
     }
 
-  val partitionStatistics = new PartitionStatistics(output)
+  val partitionStatistics = new PartitionStatistics(output) //对属性进行统计
 
   private def computeSizeInBytes = {
     val sizeOfRow: Expression =

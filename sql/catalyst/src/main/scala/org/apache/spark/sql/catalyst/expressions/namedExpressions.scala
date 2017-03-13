@@ -178,9 +178,9 @@ case class Alias(child: Expression, name: String)(
  * 代表一个属性StructField的详细信息
  */
 case class AttributeReference(
-    name: String,
-    dataType: DataType,
-    nullable: Boolean = true,
+    name: String,//属性名字
+    dataType: DataType,//该属性对应的类型
+    nullable: Boolean = true,//该属性是否为null
     override val metadata: Metadata = Metadata.empty)(
     val exprId: ExprId = NamedExpression.newExprId,
     val qualifiers: Seq[String] = Nil)

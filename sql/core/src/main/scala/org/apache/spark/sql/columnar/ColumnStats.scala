@@ -22,19 +22,22 @@ import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, Attribute,
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
+//每一个属性对应的统计状态
+//对象数组组合成一个统计行
 private[sql] class ColumnStatisticsSchema(a: Attribute) extends Serializable {
-  val upperBound = AttributeReference(a.name + ".upperBound", a.dataType, nullable = true)()
-  val lowerBound = AttributeReference(a.name + ".lowerBound", a.dataType, nullable = true)()
-  val nullCount = AttributeReference(a.name + ".nullCount", IntegerType, nullable = false)()
-  val count = AttributeReference(a.name + ".count", IntegerType, nullable = false)()
-  val sizeInBytes = AttributeReference(a.name + ".sizeInBytes", LongType, nullable = false)()
+  val upperBound = AttributeReference(a.name + ".upperBound", a.dataType, nullable = true)() //统计该列的最大值,值就是属性本身的类型,因此类型是a.dataType
+  val lowerBound = AttributeReference(a.name + ".lowerBound", a.dataType, nullable = true)() //统计该列的最小值,值就是属性本身的类型,因此类型是a.dataType
+  val nullCount = AttributeReference(a.name + ".nullCount", IntegerType, nullable = false)()  //统计该列的null出现的次数,类型是IntegerType,不允许为null
+  val count = AttributeReference(a.name + ".count", IntegerType, nullable = false)() //统计该列null和非null值出现的总数,即该列有多少行数据,类型是IntegerType
+  val sizeInBytes = AttributeReference(a.name + ".sizeInBytes", LongType, nullable = false)() //返回该列null和非null对应的总字节大小,类型是LongType
 
   val schema = Seq(lowerBound, upperBound, nullCount, count, sizeInBytes)
 }
 
+//循环表中所有的属性
 private[sql] class PartitionStatistics(tableSchema: Seq[Attribute]) extends Serializable {
   val (forAttribute, schema) = {
-    val allStats = tableSchema.map(a => a -> new ColumnStatisticsSchema(a))
+    val allStats = tableSchema.map(a => a -> new ColumnStatisticsSchema(a)) //每一个属性对应一个ColumnStatisticsSchema对象,用于对该属性进行统计值存储,返回值是一个Map,key就是Attribute,value就是该属性的对应统计对象
     (AttributeMap(allStats), allStats.map(_._2.schema).foldLeft(Seq.empty[Attribute])(_ ++ _))
   }
 }
@@ -46,18 +49,18 @@ private[sql] class PartitionStatistics(tableSchema: Seq[Attribute]) extends Seri
  * brings significant performance penalty.
  */
 private[sql] sealed trait ColumnStats extends Serializable {
-  protected var count = 0
-  protected var nullCount = 0
-  protected var sizeInBytes = 0L
+  protected var count = 0 //一共null和非null的元素总数
+  protected var nullCount = 0 //该属性是null的次数
+  protected var sizeInBytes = 0L //该列所有值(null和非null值)占用的总字节
 
   /**
    * Gathers statistics information from `row(ordinal)`.
    */
   def gatherStats(row: InternalRow, ordinal: Int): Unit = {
-    if (row.isNullAt(ordinal)) {
-      nullCount += 1
+    if (row.isNullAt(ordinal)) { //说明该属性是null
+      nullCount += 1 //该属性是null的次数+1
       // 4 bytes for null position
-      sizeInBytes += 4
+      sizeInBytes += 4 //字节数+4,因为要存储nll的位置,因此是4个字节
     }
     count += 1
   }
@@ -138,17 +141,18 @@ private[sql] class IntColumnStats extends ColumnStats {
   protected var lower = Int.MaxValue
 
   override def gatherStats(row: InternalRow, ordinal: Int): Unit = {
-    super.gatherStats(row, ordinal)
-    if (!row.isNullAt(ordinal)) {
-      val value = row.getInt(ordinal)
+    super.gatherStats(row, ordinal) //对null的数据进行处理
+    if (!row.isNullAt(ordinal)) {//说明该数据不是null
+      val value = row.getInt(ordinal) //获取该数据值
+      //设置最大值和最小值
       if (value > upper) upper = value
       if (value < lower) lower = value
-      sizeInBytes += INT.defaultSize
+      sizeInBytes += INT.defaultSize //追加总字节数
     }
   }
 
   override def collectedStatistics: GenericInternalRow =
-    new GenericInternalRow(Array[Any](lower, upper, nullCount, count, sizeInBytes))
+    new GenericInternalRow(Array[Any](lower, upper, nullCount, count, sizeInBytes)) //对象数组组合成一个统计行
 }
 
 private[sql] class LongColumnStats extends ColumnStats {
