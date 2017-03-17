@@ -23,20 +23,21 @@ object StringUtils {
 
   // replace the _ with .{1} exactly match 1 time of any character
   // replace the % with .*, match 0 or more times with any character
+  //将like语法转换成正则表达式
   def escapeLikeRegex(v: String): String = {
     if (!v.isEmpty) {
       "(?s)" + (' ' +: v.init).zip(v).flatMap {
-        case (prev, '\\') => ""
-        case ('\\', c) =>
+        case (prev, '\\') => "" //取消转义字符\\
+        case ('\\', c) => //说明转义字符后面跟着字符
           c match {
-            case '_' => "_"
-            case '%' => "%"
+            case '_' => "_" //说明对_进行转义,因此原本需要的就是_,即他不是like语法
+            case '%' => "%" //说明对%进行转义了,因此原本要的就是%
             case _ => Pattern.quote("\\" + c)
           }
         case (prev, c) =>
           c match {
-            case '_' => "."
-            case '%' => ".*"
+            case '_' => "." //将_转换成. 表示支持任意字符
+            case '%' => ".*" //将%转换成.*,表示支持任意多个字符
             case _ => Pattern.quote(Character.toString(c))
           }
       }.mkString

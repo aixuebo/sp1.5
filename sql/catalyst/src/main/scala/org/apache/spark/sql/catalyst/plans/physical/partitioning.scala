@@ -21,9 +21,12 @@ import org.apache.spark.sql.catalyst.expressions.{Unevaluable, Expression, SortO
 import org.apache.spark.sql.types.{DataType, IntegerType}
 
 /**
- * Specifies how tuples that share common expressions will be distributed when a query is executed
- * in parallel on many machines.  Distribution can be used to refer to two distinct physical
- * properties:
+ * Specifies how tuples that share common expressions will be distributed when a query is executed in parallel on many machines.
+ * 当一个查询在多台物理机被并行的时候,指明如何共享公共的表达式元组集合
+ *
+ * Distribution can be used to refer to two distinct physical properties:
+ * 被使用指示两个不同的物理属性
+ *
  *  - Inter-node partitioning of data: In this case the distribution describes how tuples are
  *    partitioned across physical machines in a cluster.  Knowing this property allows some
  *    operators (e.g., Aggregate) to perform partition local operations instead of global ones.
@@ -108,7 +111,7 @@ case class OrderedDistribution(ordering: Seq[SortOrder]) extends Distribution {
  */
 sealed trait Partitioning {
   /** Returns the number of partitions that the data is split across */
-  val numPartitions: Int
+  val numPartitions: Int //数据被拆分多少个partition
 
   /**
    * Returns true iff the guarantees made by this [[Partitioning]] are sufficient
@@ -132,6 +135,7 @@ sealed trait Partitioning {
    *
    * Put another way, two partitionings are compatible with each other if they satisfy all of the
    * same distribution guarantees.
+   * 判断两个Partitioning是否兼容,true表示兼容
    */
   def compatibleWith(other: Partitioning): Boolean
 
@@ -168,15 +172,16 @@ sealed trait Partitioning {
 }
 
 object Partitioning {
+  //是否所有的Partitioning集合都是兼容的,true表示兼容
   def allCompatible(partitionings: Seq[Partitioning]): Boolean = {
     // Note: this assumes transitivity
     partitionings.sliding(2).map {
       case Seq(a) => true
       case Seq(a, b) =>
-        if (a.numPartitions != b.numPartitions) {
+        if (a.numPartitions != b.numPartitions) {//数量不同.一定返回false
           assert(!a.compatibleWith(b) && !b.compatibleWith(a))
           false
-        } else {
+        } else {//数量相同也可以兼容
           a.compatibleWith(b) && b.compatibleWith(a)
         }
     }.forall(_ == true)
@@ -193,7 +198,7 @@ case class UnknownPartitioning(numPartitions: Int) extends Partitioning {
 
   override def guarantees(other: Partitioning): Boolean = false
 }
-
+//仅仅一个分区
 case object SinglePartition extends Partitioning {
   val numPartitions = 1
 
@@ -214,7 +219,7 @@ case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
 
   override def children: Seq[Expression] = expressions
   override def nullable: Boolean = false
-  override def dataType: DataType = IntegerType
+  override def dataType: DataType = IntegerType //因为是hash分区,因此返回值是一个int
 
   override def satisfies(required: Distribution): Boolean = required match {
     case UnspecifiedDistribution => true

@@ -66,11 +66,14 @@ object TypeUtils {
     }
   }
 
+  //比较两个字节数组大小
   def compareBinary(x: Array[Byte], y: Array[Byte]): Int = {
-    for (i <- 0 until x.length; if i < y.length) {
+    //循环x的所有字节
+    for (i <- 0 until x.length; if i < y.length) {// if i < y.length 表示让x的每一个位置都跟存在的y进行比较
       val res = x(i).compareTo(y(i))
       if (res != 0) return res
     }
+    //上面说明x或者y比较完了,依然没有结果,那么就比较长度
     x.length - y.length
   }
 }
