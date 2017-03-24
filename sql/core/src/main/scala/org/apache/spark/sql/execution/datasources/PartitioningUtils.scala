@@ -337,26 +337,27 @@ private[sql] object PartitioningUtils {
     builder.toString()
   }
 
+  //将%+16进制的数据进行转换成10进制
   def unescapePathName(path: String): String = {
     val sb = new StringBuilder
     var i = 0
 
     while (i < path.length) {
       val c = path.charAt(i)
-      if (c == '%' && i + 2 < path.length) {
+      if (c == '%' && i + 2 < path.length) {//%后面跟着的是16进制数
         val code: Int = try {
-          Integer.valueOf(path.substring(i + 1, i + 3), 16)
+          Integer.valueOf(path.substring(i + 1, i + 3), 16)//将16进制转换成10进制
         } catch { case e: Exception =>
           -1: Integer
         }
         if (code >= 0) {
-          sb.append(code.asInstanceOf[Char])
+          sb.append(code.asInstanceOf[Char])//添加10进制的数
           i += 3
-        } else {
+        } else {//此时说明是异常值-1,因此追加该值
           sb.append(c)
           i += 1
         }
-      } else {
+      } else {//追加非%的值
         sb.append(c)
         i += 1
       }

@@ -32,14 +32,15 @@ private[sql] object FrequentItems extends Logging {
     /**
      * Add a new example to the counts if it exists, otherwise deduct the count
      * from existing items.
+     * 为key增加count
      */
     def add(key: Any, count: Long): this.type = {
-      if (baseMap.contains(key))  {
+      if (baseMap.contains(key))  {//说明key存在
         baseMap(key) += count
-      } else {
-        if (baseMap.size < size) {
+      } else {//新增
+        if (baseMap.size < size) {//容量足够
           baseMap += key -> count
-        } else {
+        } else {//容量不足
           val minCount = baseMap.values.min
           val remainder = count - minCount
           if (remainder >= 0) {

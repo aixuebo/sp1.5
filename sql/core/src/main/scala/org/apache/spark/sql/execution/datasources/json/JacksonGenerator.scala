@@ -26,6 +26,8 @@ import com.fasterxml.jackson.core._
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.types._
 
+import scala.math.Ordered
+
 /**
  * 该类表示如何让一个row对象转换成json字符串
  */
