@@ -28,6 +28,7 @@ import org.apache.spark.mllib.tree.configuration.QuantileStrategy._
 /**
  * :: Experimental ::
  * Stores all the configuration options for tree construction
+ * 用于存储决策树需要的全部配置
  * @param algo  Learning goal.  Supported:
  *              [[org.apache.spark.mllib.tree.configuration.Algo.Classification]],
  *              [[org.apache.spark.mllib.tree.configuration.Algo.Regression]]
@@ -70,10 +71,10 @@ import org.apache.spark.mllib.tree.configuration.QuantileStrategy._
 @Since("1.0.0")
 @Experimental
 class Strategy @Since("1.3.0") (
-    @Since("1.0.0") @BeanProperty var algo: Algo,
+    @Since("1.0.0") @BeanProperty var algo: Algo,//决策树用于分类还是回归
     @Since("1.0.0") @BeanProperty var impurity: Impurity,
     @Since("1.0.0") @BeanProperty var maxDepth: Int,
-    @Since("1.2.0") @BeanProperty var numClasses: Int = 2,
+    @Since("1.2.0") @BeanProperty var numClasses: Int = 2,//目标产生多少个分类
     @Since("1.0.0") @BeanProperty var maxBins: Int = 32,
     @Since("1.0.0") @BeanProperty var quantileCalculationStrategy: QuantileStrategy = Sort,
     @Since("1.0.0") @BeanProperty var categoricalFeaturesInfo: Map[Int, Int] = Map[Int, Int](),
@@ -85,6 +86,7 @@ class Strategy @Since("1.3.0") (
     @Since("1.2.0") @BeanProperty var checkpointInterval: Int = 10) extends Serializable {
 
   /**
+   * true表示多个分类
    */
   @Since("1.2.0")
   def isMulticlassClassification: Boolean = {

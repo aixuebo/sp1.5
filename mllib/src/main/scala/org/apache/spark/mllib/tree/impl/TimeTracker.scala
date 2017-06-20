@@ -23,16 +23,21 @@ import org.apache.spark.annotation.Experimental
 
 /**
  * Time tracker implementation which holds labeled timers.
+ * 说明该对象支持序列化
+ * 作用是跟踪每一个标签消耗了多长时间运算
  */
 @Experimental
 private[spark] class TimeTracker extends Serializable {
 
+  //记录每一个timerLabel的开始时间
   private val starts: MutableHashMap[String, Long] = new MutableHashMap[String, Long]()
 
+  //记录每一个timerLabel执行了多少nanoTime
   private val totals: MutableHashMap[String, Long] = new MutableHashMap[String, Long]()
 
   /**
    * Starts a new timer, or re-starts a stopped timer.
+   * 记录该timerLabel的开始时间
    */
   def start(timerLabel: String): Unit = {
     val currentTime = System.nanoTime()
@@ -45,6 +50,7 @@ private[spark] class TimeTracker extends Serializable {
 
   /**
    * Stops a timer and returns the elapsed time in seconds.
+   * 返回值是秒---该timerLabel执行了多少秒
    */
   def stop(timerLabel: String): Double = {
     val currentTime = System.nanoTime()
@@ -52,7 +58,7 @@ private[spark] class TimeTracker extends Serializable {
       throw new RuntimeException(s"TimeTracker.stop(timerLabel) called on" +
         s" timerLabel = $timerLabel, but that timer was not started.")
     }
-    val elapsed = currentTime - starts(timerLabel)
+    val elapsed = currentTime - starts(timerLabel)//该timerLabel消耗时间
     starts.remove(timerLabel)
     if (totals.contains(timerLabel)) {
       totals(timerLabel) += elapsed
@@ -64,6 +70,7 @@ private[spark] class TimeTracker extends Serializable {
 
   /**
    * Print all timing results in seconds.
+   * 输出每一个timerLabel执行了多少秒,单位是秒
    */
   override def toString: String = {
     totals.map { case (label, elapsed) =>

@@ -33,8 +33,8 @@ import org.apache.spark.SparkException
 @Since("0.8.0")
 @BeanInfo
 case class LabeledPoint @Since("1.0.0") (
-    @Since("0.8.0") label: Double,
-    @Since("1.0.0") features: Vector) {
+    @Since("0.8.0") label: Double,//数据点的标签
+    @Since("1.0.0") features: Vector) {//特征向量
   override def toString: String = {
     s"($label,$features)"
   }
@@ -55,7 +55,7 @@ object LabeledPoint {
   def parse(s: String): LabeledPoint = {
     if (s.startsWith("(")) {
       NumericParser.parse(s) match {
-        case Seq(label: Double, numeric: Any) =>
+        case Seq(label: Double, numeric: Any) => //any可能是一个double,也可能是一个数组或者一个Seq集合.因此该值最终存储的类型是Any
           LabeledPoint(label, Vectors.parseNumeric(numeric))
         case other =>
           throw new SparkException(s"Cannot parse $other.")

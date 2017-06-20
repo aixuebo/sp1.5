@@ -107,18 +107,20 @@ private[spark] object DecisionTreeMetadata extends Logging {
       numTrees: Int,
       featureSubsetStrategy: String): DecisionTreeMetadata = {
 
+    //因为元素特征的维度相同,因此获取第一个特征的维度size即可,
+    //即该标签对应的向量有多少个维度
     val numFeatures = input.map(_.features.size).take(1).headOption.getOrElse {
       throw new IllegalArgumentException(s"DecisionTree requires size of input RDD > 0, " +
         s"but was given by empty one.")
     }
-    val numExamples = input.count()
+    val numExamples = input.count()//一共多少条数据
     val numClasses = strategy.algo match {
-      case Classification => strategy.numClasses
+      case Classification => strategy.numClasses //分类数,即分成多少个类
       case Regression => 0
     }
 
     val maxPossibleBins = math.min(strategy.maxBins, numExamples).toInt
-    if (maxPossibleBins < strategy.maxBins) {
+    if (maxPossibleBins < strategy.maxBins) {//打印日志,因为例子numExamples数据太少,因此减少了maxBins的值
       logWarning(s"DecisionTree reducing maxBins from ${strategy.maxBins} to $maxPossibleBins" +
         s" (= number of training instances)")
     }
@@ -127,9 +129,9 @@ private[spark] object DecisionTreeMetadata extends Logging {
     // This needs to be checked here instead of in Strategy since maxPossibleBins can be modified
     // based on the number of training examples.
     if (strategy.categoricalFeaturesInfo.nonEmpty) {
-      val maxCategoriesPerFeature = strategy.categoricalFeaturesInfo.values.max
+      val maxCategoriesPerFeature = strategy.categoricalFeaturesInfo.values.max //获取最大的value
       val maxCategory =
-        strategy.categoricalFeaturesInfo.find(_._2 == maxCategoriesPerFeature).get._1
+        strategy.categoricalFeaturesInfo.find(_._2 == maxCategoriesPerFeature).get._1 //获取最大value对应的key
       require(maxCategoriesPerFeature <= maxPossibleBins,
         s"DecisionTree requires maxBins (= $maxPossibleBins) to be at least as large as the " +
         s"number of values in each categorical feature, but categorical feature $maxCategory " +
@@ -138,7 +140,7 @@ private[spark] object DecisionTreeMetadata extends Logging {
     }
 
     val unorderedFeatures = new mutable.HashSet[Int]()
-    val numBins = Array.fill[Int](numFeatures)(maxPossibleBins)
+    val numBins = Array.fill[Int](numFeatures)(maxPossibleBins) //创建int二维数组
     if (numClasses > 2) {
       // Multiclass classification
       val maxCategoriesForUnorderedFeature =

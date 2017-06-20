@@ -68,8 +68,8 @@ import org.apache.spark.util.random.SamplingUtils
  */
 @Experimental
 private class RandomForest (
-    private val strategy: Strategy,
-    private val numTrees: Int,
+    private val strategy: Strategy,//配置对象
+    private val numTrees: Int,//该森林有多少棵树
     featureSubsetStrategy: String,
     private val seed: Int)
   extends Serializable with Logging {
