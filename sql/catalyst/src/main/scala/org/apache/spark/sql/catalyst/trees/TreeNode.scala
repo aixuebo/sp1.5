@@ -322,13 +322,14 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
    * Must be overridden by child classes that have constructor arguments
    * that are not present in the productIterator.
    * @param newArgs the new product arguments.
+   * 返回一个新的构造函数实例对象
    */
   def makeCopy(newArgs: Array[AnyRef]): BaseType = attachTree(this, "makeCopy") {
-    val ctors = getClass.getConstructors.filter(_.getParameterTypes.size != 0)
+    val ctors = getClass.getConstructors.filter(_.getParameterTypes.size != 0) //返回有参数的构造函数
     if (ctors.isEmpty) {
       sys.error(s"No valid constructor for $nodeName")
     }
-    val defaultCtor = ctors.maxBy(_.getParameterTypes.size)
+    val defaultCtor = ctors.maxBy(_.getParameterTypes.size)//获取最大的一个参数个数的构造函数
 
     try {
       CurrentOrigin.withOrigin(origin) {

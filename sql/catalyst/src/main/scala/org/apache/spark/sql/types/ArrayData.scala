@@ -21,6 +21,7 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
 
+//该对象表示存储的是一个数组,数组的元素类型可以是boolean等等
 abstract class ArrayData extends SpecializedGetters with Serializable {
   def numElements(): Int //数组元素个数
 
@@ -30,7 +31,7 @@ abstract class ArrayData extends SpecializedGetters with Serializable {
     val size = numElements()
     val values = new Array[Boolean](size)
     var i = 0
-    while (i < size) {
+    while (i < size) {//不断获取size个boolean值
       values(i) = getBoolean(i)
       i += 1
     }
@@ -103,6 +104,7 @@ abstract class ArrayData extends SpecializedGetters with Serializable {
     values
   }
 
+  //说明该位置的元素不是基础类型,是什么类型,就在参数配置该类型即可
   def toArray[T: ClassTag](elementType: DataType): Array[T] = {
     val size = numElements()
     val values = new Array[T](size)
@@ -119,6 +121,11 @@ abstract class ArrayData extends SpecializedGetters with Serializable {
   }
 
   // todo: specialize this.
+  /**
+   * 循环每一个元素,元素类型是elementType类型,然后获取的元素index和元素之后调用f函数,该函数没有返回值
+   * @param elementType
+   * @param f
+   */
   def foreach(elementType: DataType, f: (Int, Any) => Unit): Unit = {
     val size = numElements()
     var i = 0

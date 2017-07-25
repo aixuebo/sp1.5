@@ -36,9 +36,9 @@ class DoubleType private() extends FractionalType {
   // Defined with a private constructor so the companion object is the only possible instantiation.
   private[sql] type InternalType = Double
   @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[InternalType] }
-  private[sql] val numeric = implicitly[Numeric[Double]]
-  private[sql] val fractional = implicitly[Fractional[Double]]
-  private[sql] val ordering = new Ordering[Double] {
+  private[sql] val numeric = implicitly[Numeric[Double]] //隐式转换成数字功能的对象
+  private[sql] val fractional = implicitly[Fractional[Double]]//隐式转换成分数功能的对象
+  private[sql] val ordering = new Ordering[Double] {//double类型可以比较
     override def compare(x: Double, y: Double): Int = Utils.nanSafeCompareDoubles(x, y)
   }
   private[sql] val asIntegral = DoubleAsIfIntegral

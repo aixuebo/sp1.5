@@ -48,7 +48,7 @@ object ArrayType extends AbstractDataType {
  * array elements. The field of `containsNull` is used to specify if the array has `null` values.
  *
  * @param elementType The data type of values.
- * @param containsNull Indicates if values have `null` values
+ * @param containsNull Indicates if values have `null` values 是否包含null
  */
 @DeveloperApi
 case class ArrayType(elementType: DataType, containsNull: Boolean) extends DataType {

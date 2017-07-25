@@ -22,9 +22,9 @@ abstract class MapData extends Serializable {
 
   def numElements(): Int
 
-  def keyArray(): ArrayData
+  def keyArray(): ArrayData //key的内容
 
-  def valueArray(): ArrayData
+  def valueArray(): ArrayData //value的内容
 
   def copy(): MapData
 
@@ -35,7 +35,7 @@ abstract class MapData extends Serializable {
     val values = valueArray()
     var i = 0
     while (i < length) {
-      f(keys.get(i, keyType), values.get(i, valueType))
+      f(keys.get(i, keyType), values.get(i, valueType)) //分别获取每一个key和value.调用f函数
       i += 1
     }
   }

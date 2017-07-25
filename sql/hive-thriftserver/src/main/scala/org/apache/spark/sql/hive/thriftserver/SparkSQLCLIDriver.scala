@@ -74,17 +74,17 @@ private[hive] object SparkSQLCLIDriver extends Logging {
   }
 
   def main(args: Array[String]) {
-    val oproc = new OptionsProcessor()
-    if (!oproc.process_stage1(args)) {
+    val oproc = new OptionsProcessor()//初始化hive的命令行cli工具
+    if (!oproc.process_stage1(args)) {//将args中hive的cli命令行进行解析
       System.exit(1)
     }
 
     val cliConf = new HiveConf(classOf[SessionState])
     // Override the location of the metastore since this is only used for local execution.
-    HiveContext.newTemporaryConfiguration().foreach {
-      case (key, value) => cliConf.set(key, value)
+    HiveContext.newTemporaryConfiguration().foreach {//获取spark的配置文件中关于hive的配置
+      case (key, value) => cliConf.set(key, value)//设置hive的配置信息
     }
-    val sessionState = new CliSessionState(cliConf)
+    val sessionState = new CliSessionState(cliConf)//创建hive的session对象
 
     sessionState.in = System.in
     try {

@@ -37,7 +37,7 @@ case class SortBasedAggregate(
     initialInputBufferOffset: Int,
     resultExpressions: Seq[NamedExpression],
     child: SparkPlan)
-  extends UnaryNode {
+  extends UnaryNode {//表示一个子节点的操作
 
   override private[sql] lazy val metrics = Map(
     "numInputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of input rows"),
@@ -73,8 +73,8 @@ case class SortBasedAggregate(
     child.execute().mapPartitions { iter =>
       // Because the constructor of an aggregation iterator will read at least the first row,
       // we need to get the value of iter.hasNext first.
-      val hasInput = iter.hasNext
-      if (!hasInput && groupingExpressions.nonEmpty) {
+      val hasInput = iter.hasNext //是否有数据
+      if (!hasInput && groupingExpressions.nonEmpty) {//说明迭代器没有数据
         // This is a grouped aggregate and the input iterator is empty,
         // so return an empty iterator.
         Iterator[InternalRow]()

@@ -217,7 +217,7 @@ private[sql] object FractionalType {
   def unapply(e: Expression): Boolean = e.dataType.isInstanceOf[FractionalType]
 }
 
-
+//分数类型
 private[sql] abstract class FractionalType extends NumericType {
   private[sql] val fractional: Fractional[InternalType]
   private[sql] val asIntegral: Integral[InternalType]

@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, TreeNode}
 //解析一个sql,返回该sql的逻辑执行计划
 abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
 
-  private var _analyzed: Boolean = false
+  private var _analyzed: Boolean = false //true表示该计划已经被分析过了
 
   /**
    * Marks this plan as already analyzed.  This should only be called by CheckAnalysis.

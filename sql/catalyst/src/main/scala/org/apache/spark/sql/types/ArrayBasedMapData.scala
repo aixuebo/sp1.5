@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.types
 
+//数组的形式实现的map,key和value分别对应一个数组
 class ArrayBasedMapData(val keyArray: ArrayData, val valueArray: ArrayData) extends MapData {
   require(keyArray.numElements() == valueArray.numElements())
 

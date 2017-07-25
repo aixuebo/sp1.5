@@ -225,7 +225,7 @@ private[spark] object Utils extends Logging {
    */
   def createDirectory(root: String, namePrefix: String = "spark"): File = {
     var attempts = 0
-    val maxAttempts = MAX_DIR_CREATION_ATTEMPTS
+    val maxAttempts = MAX_DIR_CREATION_ATTEMPTS //最大尝试次数
     var dir: File = null
     while (dir == null) {
       attempts += 1

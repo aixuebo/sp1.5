@@ -32,6 +32,7 @@ trait HashJoin {
   val left: SparkPlan
   val right: SparkPlan
 
+  //根据buildSide的类型,初始化buildPlan和streamedPlan
   protected lazy val (buildPlan, streamedPlan) = buildSide match {
     case BuildLeft => (left, right)
     case BuildRight => (right, left)

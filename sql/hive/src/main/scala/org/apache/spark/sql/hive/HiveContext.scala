@@ -656,7 +656,9 @@ private[hive] object HiveContext {
     defaultValue = Some(true),
     doc = "TODO")
 
-  /** Constructs a configuration for hive, where the metastore is located in a temp directory. */
+  /** Constructs a configuration for hive, where the metastore is located in a temp directory.
+    * 构建一个配置信息
+    */
   def newTemporaryConfiguration(): Map[String, String] = {
     val tempDir = Utils.createTempDir()
     val localMetastore = new File(tempDir, "metastore")

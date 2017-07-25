@@ -36,6 +36,7 @@ import org.apache.spark.annotation.DeveloperApi
  * [[Metadata.fromJson()]] to create Metadata instances.
  *
  * @param map an immutable map that stores the data
+ * 内部使用一个map,用于存储元数据信息
  */
 @DeveloperApi
 sealed class Metadata private[types] (private[types] val map: Map[String, Any])

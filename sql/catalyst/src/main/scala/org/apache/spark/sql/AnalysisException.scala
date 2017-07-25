@@ -25,17 +25,19 @@ import org.apache.spark.annotation.DeveloperApi
  */
 @DeveloperApi
 class AnalysisException protected[sql] (
-    val message: String,
-    val line: Option[Int] = None,
-    val startPosition: Option[Int] = None)
+    val message: String,//错误信息
+    val line: Option[Int] = None,//第多少行
+    val startPosition: Option[Int] = None)//该行的哪个位置
   extends Exception with Serializable {
 
+  //设置行号以及位置号码
   def withPosition(line: Option[Int], startPosition: Option[Int]): AnalysisException = {
     val newException = new AnalysisException(message, line, startPosition)
     newException.setStackTrace(getStackTrace)
     newException
   }
 
+  //打印错误信息 以及第几行和第几个字节开始出现的错误
   override def getMessage: String = {
     val lineAnnotation = line.map(l => s" line $l").getOrElse("")
     val positionAnnotation = startPosition.map(p => s" pos $p").getOrElse("")

@@ -316,10 +316,12 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   }
 }
 
+//表示是一个叶子节点,没有子节点
 private[sql] trait LeafNode extends SparkPlan {
   override def children: Seq[SparkPlan] = Nil
 }
 
+//一元操作符---一个子节点参数
 private[sql] trait UnaryNode extends SparkPlan {
   def child: SparkPlan
 
@@ -328,6 +330,7 @@ private[sql] trait UnaryNode extends SparkPlan {
   override def outputPartitioning: Partitioning = child.outputPartitioning
 }
 
+//二元操作符---二个子节点
 private[sql] trait BinaryNode extends SparkPlan {
   def left: SparkPlan
   def right: SparkPlan

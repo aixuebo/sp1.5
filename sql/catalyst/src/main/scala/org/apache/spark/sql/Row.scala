@@ -33,19 +33,23 @@ object Row {
    *     key -> value
    * }
    * }}}
+   * 将一行数据组装成一个集合list返回
    */
   def unapplySeq(row: Row): Some[Seq[Any]] = Some(row.toSeq)
 
   /**
    * This method can be used to construct a [[Row]] with the given values.
+   * 将数组转换成一个row对象
    */
   def apply(values: Any*): Row = new GenericRow(values.toArray)
 
   /**
    * This method can be used to construct a [[Row]] from a [[Seq]] of values.
+   * 将数组转换成一个row对象
    */
   def fromSeq(values: Seq[Any]): Row = new GenericRow(values.toArray)
 
+  //将tuple转换成一个row对象
   def fromTuple(tuple: Product): Row = fromSeq(tuple.productIterator.toSeq)
 
   /**
@@ -115,18 +119,19 @@ object Row {
  *     key -> value
  * }
  * }}}
- *
+ * 代表一行数据
  * @group row
  */
 trait Row extends Serializable {
-  /** Number of elements in the Row. */
+  /** Number of elements in the Row. 该行数据有多少列 */
   def size: Int = length
 
-  /** Number of elements in the Row. */
+  /** Number of elements in the Row.该行数据有多少列 */
   def length: Int
 
   /**
    * Schema for the row.
+   * 一行数据的schema
    */
   def schema: StructType = null
 
@@ -152,6 +157,7 @@ trait Row extends Serializable {
    *   MapType -> scala.collection.Map (use getJavaMap for java.util.Map)
    *   StructType -> org.apache.spark.sql.Row
    * }}}
+   * 获取第i个列的元素值
    */
   def apply(i: Int): Any = get(i)
 
@@ -177,6 +183,7 @@ trait Row extends Serializable {
    *   MapType -> scala.collection.Map (use getJavaMap for java.util.Map)
    *   StructType -> org.apache.spark.sql.Row
    * }}}
+   * 获取第i个列的元素值
    */
   def get(i: Int): Any
 
@@ -273,14 +280,14 @@ trait Row extends Serializable {
 
   /**
    * Returns the value at position i of array type as a Scala Seq.
-   *
+   * 说明该列对应的内容是一个list,即可能依然是一个row对象
    * @throws ClassCastException when data type does not match.
    */
   def getSeq[T](i: Int): Seq[T] = getAs[Seq[T]](i)
 
   /**
    * Returns the value at position i of array type as [[java.util.List]].
-   *
+   * 说明该列对应的内容是一个list
    * @throws ClassCastException when data type does not match.
    */
   def getList[T](i: Int): java.util.List[T] = {
@@ -289,14 +296,14 @@ trait Row extends Serializable {
 
   /**
    * Returns the value at position i of map type as a Scala Map.
-   *
+   * 说明该列对应的内容是一个map
    * @throws ClassCastException when data type does not match.
    */
   def getMap[K, V](i: Int): scala.collection.Map[K, V] = getAs[Map[K, V]](i)
 
   /**
    * Returns the value at position i of array type as a [[java.util.Map]].
-   *
+   * 说明该列对应的内容是一个map
    * @throws ClassCastException when data type does not match.
    */
   def getJavaMap[K, V](i: Int): java.util.Map[K, V] = {
@@ -307,6 +314,7 @@ trait Row extends Serializable {
    * Returns the value at position i of struct type as an [[Row]] object.
    *
    * @throws ClassCastException when data type does not match.
+   * 表示该行数据的该列,对应的数据类型依然是一个row对象
    */
   def getStruct(i: Int): Row = getAs[Row](i)
 
@@ -323,6 +331,7 @@ trait Row extends Serializable {
    * @throws UnsupportedOperationException when schema is not defined.
    * @throws IllegalArgumentException when fieldName do not exist.
    * @throws ClassCastException when data type does not match.
+   * 获取该schema对应的列序号
    */
   def getAs[T](fieldName: String): T = getAs[T](fieldIndex(fieldName)) //通过scheme找到对应列的值
 
@@ -343,7 +352,7 @@ trait Row extends Serializable {
    * @throws UnsupportedOperationException when schema is not defined.
    * @throws IllegalArgumentException when fieldName do not exist.
    * @throws ClassCastException when data type does not match.
-   * 可以获取一组列对应的值,用Map作为返回值
+   * 可以获取一组列对应的值,用Map作为返回值,即参数是schema的name,获取一行数据中某几个列的内容,组成Map
    */
   def getValuesMap[T](fieldNames: Seq[String]): Map[String, T] = {
     fieldNames.map { name =>
@@ -351,6 +360,7 @@ trait Row extends Serializable {
     }.toMap
   }
 
+  //一行数据使用逗号拆分成字符串
   override def toString(): String = s"[${this.mkString(",")}]"
 
   /**
@@ -358,7 +368,9 @@ trait Row extends Serializable {
    */
   def copy(): Row
 
-  /** Returns true if there are any NULL values in this row. */
+  /** Returns true if there are any NULL values in this row.
+    * 只要一行数据中有一个值是null,则返回true
+    **/
   def anyNull: Boolean = {
     val len = length
     var i = 0
@@ -431,7 +443,7 @@ trait Row extends Serializable {
 
   /**
    * Return a Scala Seq representing the row. Elements are placed in the same order in the Seq.
-   * 返回一行元素
+   * 如何将一行数据内容转换成一个集合
    */
   def toSeq: Seq[Any] = {
     val n = length
