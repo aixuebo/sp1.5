@@ -24,8 +24,8 @@ import org.apache.spark.sql.types.DataType
 private class MutableInt(var i: Int)
 
 case class Origin(
-  line: Option[Int] = None,
-  startPosition: Option[Int] = None)
+  line: Option[Int] = None,//表示出问题的sql是第几行
+  startPosition: Option[Int] = None)//表示出问题的sql是该行第几个位置
 
 /**
  * Provides a location for TreeNodes to ask about the context of their origin.  For example, which
@@ -252,7 +252,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
    * @param rule the function used to transform this nodes children
    */
   protected def transformChildren(
-      rule: PartialFunction[BaseType, BaseType],
+      rule: PartialFunction[BaseType, BaseType],//偏函数,可以从一个BaseType转换成另外一个BaseType
       nextOperation: (BaseType, PartialFunction[BaseType, BaseType]) => BaseType): BaseType = {
     var changed = false
     val newArgs = productIterator.map {

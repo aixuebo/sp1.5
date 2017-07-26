@@ -27,13 +27,13 @@ import org.apache.spark.util.collection.OpenHashSet
 case class Project(projectList: Seq[NamedExpression], child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = projectList.map(_.toAttribute) //select的属性集合
 
-  override lazy val resolved: Boolean = {
+  override lazy val resolved: Boolean = {//覆盖父类方法,因为要检查是否有窗口函数、聚合函数等操作,理论上没有group by的时候是不能使用聚合函数的
     //true表示存在特殊的表达式,比如窗口表达式,聚类表达式,generator表达式
     val hasSpecialExpressions = projectList.exists ( _.collect { //传入偏函数,
         case agg: AggregateExpression => agg
         case generator: Generator => generator
         case window: WindowExpression => window
-      }.nonEmpty
+      }.nonEmpty //true表示有这三种函数存在,false表示没有这三种函数存在
     )
 
     !expressions.exists(!_.resolved) && childrenResolved && !hasSpecialExpressions //没有特殊的表达式
@@ -92,20 +92,23 @@ case class Filter(condition: Expression, child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
 }
 
+//进行union all操作
 abstract class SetOperation(left: LogicalPlan, right: LogicalPlan) extends BinaryNode {
   // TODO: These aren't really the same attributes as nullability etc might change.
-  final override def output: Seq[Attribute] = left.output
+  final override def output: Seq[Attribute] = left.output //因为左右两边表输出的字段相同,因此考虑左边的输出属性即可
 
+  //重新覆盖父类方法,因为要增加校验左边和右边的字段数量要一致
   final override lazy val resolved: Boolean =
     childrenResolved &&
-      left.output.length == right.output.length &&
-      left.output.zip(right.output).forall { case (l, r) => l.dataType == r.dataType }
+      left.output.length == right.output.length && //校验左边和右边的字段数量要一致
+      left.output.zip(right.output).forall { case (l, r) => l.dataType == r.dataType } //校验左边和右边的字段类型要一致
 }
 
 private[sql] object SetOperation {
   def unapply(p: SetOperation): Option[(LogicalPlan, LogicalPlan)] = Some((p.left, p.right))
 }
 
+//两个select进行union all操作
 case class Union(left: LogicalPlan, right: LogicalPlan) extends SetOperation(left, right) {
 
   override def statistics: Statistics = {
@@ -132,7 +135,7 @@ case class Join(
       case LeftSemi =>
         left.output
       case LeftOuter =>
-        left.output ++ right.output.map(_.withNullability(true))
+        left.output ++ right.output.map(_.withNullability(true))//因为是left join,因此右边的数据是可以为null的
       case RightOuter =>
         left.output.map(_.withNullability(true)) ++ right.output
       case FullOuter =>
@@ -146,9 +149,9 @@ case class Join(
 
   // Joins are only resolved if they don't introduce ambiguous expression ids.
   override lazy val resolved: Boolean = {
-    childrenResolved &&
-      expressions.forall(_.resolved) &&
-      selfJoinResolved &&
+    childrenResolved && //该方法属于LogicalPlan的方法,是父类的方法,因此可以直接调用,属于一个校验的过程,而且是递归校验
+      expressions.forall(_.resolved) && //expressions是QueryPlan类的方法,而LogicalPlan继承了QueryPlan,因此也可以使用该方法,校验自己拥有的表达式的有效性
+      selfJoinResolved && //两个join的表没有公共属性
       condition.forall(_.dataType == BooleanType) //条件表达式是boolean类型的返回值
   }
 }
@@ -174,6 +177,8 @@ case class InsertIntoTable(
   override def output: Seq[Attribute] = Seq.empty //插入数据.不输出属性
 
   assert(overwrite || !ifNotExists)
+
+  //重新覆盖父类方法,因为要确保select中的输出与insert 表中的字段要一对一关联上,并且字段类型也要一致
   override lazy val resolved: Boolean = childrenResolved && child.output.zip(table.output).forall { //select的输出与 insert的输出 一对一关联
     case (childAttr, tableAttr) => //分别表示两个结果集
       DataType.equalsIgnoreCompatibleNullability(childAttr.dataType, tableAttr.dataType) //说明类型是可以相互转换的
@@ -218,7 +223,7 @@ case class Aggregate(
     child: LogicalPlan) //在什么结果集上进行group by聚合操作
   extends UnaryNode {
 
-  override lazy val resolved: Boolean = {
+  override lazy val resolved: Boolean = {//重新覆盖父类方法,因为要检查是否有窗口函数
     //是否有窗口函数
     val hasWindowExpressions = aggregateExpressions.exists ( _.collect {
         case window: WindowExpression => window

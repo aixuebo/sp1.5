@@ -51,7 +51,7 @@ trait ScalaReflection {
   // Since the map values can be mutable, we explicitly import scala.collection.Map at here.
   import scala.collection.Map
 
-  case class Schema(dataType: DataType, nullable: Boolean)
+  case class Schema(dataType: DataType, nullable: Boolean) //表示数据类型以及是否允许为null
 
   /** Returns a Sequence of attributes for the given case class type. */
   def attributesFor[T: TypeTag]: Seq[Attribute] = schemaFor[T] match {
@@ -79,34 +79,34 @@ trait ScalaReflection {
   def schemaFor(tpe: `Type`): Schema = ScalaReflectionLock.synchronized {
     val className: String = tpe.erasure.typeSymbol.asClass.fullName
     tpe match {
-      case t if Utils.classIsLoadable(className) &&
-        Utils.classForName(className).isAnnotationPresent(classOf[SQLUserDefinedType]) =>
+      case t if Utils.classIsLoadable(className) && //true表示参数class是可以被加载的
+        Utils.classForName(className).isAnnotationPresent(classOf[SQLUserDefinedType]) => //true表示class是SQLUserDefinedType的子类,即class是自定义类型
         // Note: We check for classIsLoadable above since Utils.classForName uses Java reflection,
         //       whereas className is from Scala reflection.  This can make it hard to find classes
         //       in some cases, such as when a class is enclosed in an object (in which case
         //       Java appends a '$' to the object name but Scala does not).
         val udt = Utils.classForName(className)
           .getAnnotation(classOf[SQLUserDefinedType]).udt().newInstance()
-        Schema(udt, nullable = true)
+        Schema(udt, nullable = true) //表示一个自定义的数据类型,以及允许该类型为null
       case t if t <:< localTypeOf[Option[_]] =>
         val TypeRef(_, _, Seq(optType)) = t
         Schema(schemaFor(optType).dataType, nullable = true)
       // Need to decide if we actually need a special type here.
-      case t if t <:< localTypeOf[Array[Byte]] => Schema(BinaryType, nullable = true)
-      case t if t <:< localTypeOf[Array[_]] =>
+      case t if t <:< localTypeOf[Array[Byte]] => Schema(BinaryType, nullable = true) //说明是数组类型,并且元素是byte类型
+      case t if t <:< localTypeOf[Array[_]] => //说明是数组类型,但是元素是什么类型,要进一步推测
         val TypeRef(_, _, Seq(elementType)) = t
         val Schema(dataType, nullable) = schemaFor(elementType)
         Schema(ArrayType(dataType, containsNull = nullable), nullable = true)
-      case t if t <:< localTypeOf[Seq[_]] =>
+      case t if t <:< localTypeOf[Seq[_]] => //说明是数组类型,但是元素是什么类型,要进一步推测
         val TypeRef(_, _, Seq(elementType)) = t
         val Schema(dataType, nullable) = schemaFor(elementType)
         Schema(ArrayType(dataType, containsNull = nullable), nullable = true)
-      case t if t <:< localTypeOf[Map[_, _]] =>
+      case t if t <:< localTypeOf[Map[_, _]] => //说明是map类型
         val TypeRef(_, _, Seq(keyType, valueType)) = t
         val Schema(valueDataType, valueNullable) = schemaFor(valueType)
         Schema(MapType(schemaFor(keyType).dataType,
           valueDataType, valueContainsNull = valueNullable), nullable = true)
-      case t if t <:< localTypeOf[Product] =>
+      case t if t <:< localTypeOf[Product] => //说明是StructType类型
         val formalTypeArgs = t.typeSymbol.asClass.typeParams
         val TypeRef(_, _, actualTypeArgs) = t
         val constructorSymbol = t.member(nme.CONSTRUCTOR)
@@ -136,7 +136,7 @@ trait ScalaReflection {
         Schema(DecimalType.SYSTEM_DEFAULT, nullable = true)
       case t if t <:< localTypeOf[Decimal] => Schema(DecimalType.SYSTEM_DEFAULT, nullable = true)
       case t if t <:< localTypeOf[java.lang.Integer] => Schema(IntegerType, nullable = true)
-      case t if t <:< localTypeOf[java.lang.Long] => Schema(LongType, nullable = true)
+      case t if t <:< localTypeOf[java.lang.Long] => Schema(LongType, nullable = true) //说明是包装类型,因此nullable的结果是true
       case t if t <:< localTypeOf[java.lang.Double] => Schema(DoubleType, nullable = true)
       case t if t <:< localTypeOf[java.lang.Float] => Schema(FloatType, nullable = true)
       case t if t <:< localTypeOf[java.lang.Short] => Schema(ShortType, nullable = true)

@@ -37,6 +37,136 @@ import org.apache.spark.unsafe.types.CalendarInterval
  * This is currently included mostly for illustrative purposes.  Users wanting more complete support
  * for a SQL like language should checkout the HiveQL support in the sql/hive sub-project.
  * 默认的解析sql成LogicalPlan对象的实现类,主要入口函数是parse
+ *
+ 总结:
+ 第一种类型sql
+一、from 本身就是一个LogicalPlan
+a.如果是join表,则最终是一个BinaryNode,而BinaryNode继承自LogicalPlan
+输出的字段是根据join类型,产生每一个表的哪些字段作为输出
+
+b.如果是一个子查询,则最终是一个Subquery,而该对象继承UnaryNode,继而继承自LogicalPlan
+//alias 表示子查询别名,child表示子查询的完整逻辑
+case class Subquery(alias: String, child: LogicalPlan) extends UnaryNode {
+  override def output: Seq[Attribute] = child.output.map(_.withQualifiers(alias :: Nil)) //子类的输出属性不会改变,但是名字会改变成别名
+}
+重新定义了输出,输出是子查询中的输出,只是需要对属性设置一下所属表,即所属表已经是子查询对应的别名了
+
+c.直接查询一个表,则输出是UnresolvedRelation,他是继承自LeafNode,继而继承自LogicalPlan
+持有查询的表名以及别名
+case class UnresolvedRelation(
+    tableIdentifier: Seq[String],//表名,可能是数据库.表名,因此是一个集合
+    alias: Option[String] = None) //为表起的别名
+    extends LeafNode {
+
+  def tableName: String = tableIdentifier.mkString(".") //表名全路径
+
+  override def output: Seq[Attribute] = Nil
+
+  override lazy val resolved = false
+}
+
+二、where表达式 对from的LogicalPlan进一步包装成LogicalPlan
+case class Filter(condition: Expression, child: LogicalPlan) extends UnaryNode {
+  override def output: Seq[Attribute] = child.output
+}
+其中参数是where表达式，以及from的LogicalPlan作为子LogicalPlan存在
+因为只是进行where过滤,因此输出依然是from中的输出内容
+
+三、group by操作,产生一个Aggregate对象,该对象也是一个LogicalPlan
+case class Aggregate(
+    groupingExpressions: Seq[Expression],//group by操作的表达式集合
+    aggregateExpressions: Seq[NamedExpression],//select中所有的表达式集合
+    child: LogicalPlan) //在什么结果集上进行group by聚合操作
+  extends UnaryNode {
+1.可以看到该对象包装了group的表达式、select上的表达式、child表示的就是where之后的LogicalPlan
+2.输出就是select中需要的字段内容
+
+四、select distinct 操作,产生Distinct对象,该对象也是一个LogicalPlan
+case class Distinct(child: LogicalPlan) extends UnaryNode {
+  override def output: Seq[Attribute] = child.output //distinct不会改变子类的输出属性
+}
+1.如果有这个操作,则将group by的结果进一步处理,因此child就表示group by的结果集
+2.输出不改变group by的输出字段内容,只是过滤重复的数据,因此输出不变化
+
+五、having操作,产生Filter对象,该对象也是一个LogicalPlan
+case class Filter(condition: Expression, child: LogicalPlan) extends UnaryNode {
+  override def output: Seq[Attribute] = child.output
+}
+其中参数是having表达式，以及group by的结果LogicalPlan作为子LogicalPlan存在
+因为只是进行having过滤,因此输出依然是group by中的输出内容
+
+六、order by操作,产生Sort对象,该对象也是一个LogicalPlan
+case class Sort(
+    order: Seq[SortOrder],//排序的表达式集合
+    global: Boolean,//是否全局排序,即order by 和sort by 区别
+    child: LogicalPlan) extends UnaryNode {
+  override def output: Seq[Attribute] = child.output //因为是排序,不改变属性.因此输出还是子类的输出
+}
+其中参数包含如何排序、全局排序还是局部排序、对group by ...having 后的结果集进行排序
+
+七、limit操作,产生Limit对象,该对象也是一个LogicalPlan
+case class Limit(limitExpr: Expression, child: LogicalPlan) extends UnaryNode {
+  override def output: Seq[Attribute] = child.output //limit不改变输出的字段,因此输出字段还是子类的字段集合
+}
+1.参数表示获取多少个数据,以及最终在什么结果集上进行获取
+2.输出是不需要变化的,limit只是控制数据大小
+
+--------------
+第二种类型sql
+insert OVERWRITE/INTO TABLE biao(或者join的结果集合) select逻辑计划
+case class InsertIntoTable(
+    table: LogicalPlan,//数据插入到哪个表中
+    partition: Map[String, Option[String]],//分区信息
+    child: LogicalPlan,//select查询出来的结果集
+    overwrite: Boolean,//是否覆盖
+    ifNotExists: Boolean) //表是否存在
+  extends LogicalPlan {
+
+  override def children: Seq[LogicalPlan] = child :: Nil
+  override def output: Seq[Attribute] = Seq.empty //插入数据.不输出属性
+
+
+  override lazy val resolved: Boolean = childrenResolved && child.output.zip(table.output).forall { //select的输出与 insert的输出 一对一关联
+    case (childAttr, tableAttr) => //分别表示两个结果集
+      DataType.equalsIgnoreCompatibleNullability(childAttr.dataType, tableAttr.dataType) //说明类型是可以相互转换的
+  }
+}
+1.select 依然是跟第一种sql一样的解析
+2.产生InsertIntoTable对象,该对象也是一个LogicalPlan
+该对象包含以下属性内容:插入到哪个表、插入的分区信息、child为select节点的最终逻辑计划、是否覆盖、是否存在该表
+3.输出没有,因为是插入操作,所以不会对外进行输出
+4.override lazy val resolved
+重新覆盖父类方法,因为要确保select中的输出与insert 表中的字段要一对一关联上,并且字段类型也要一致
+
+--------------
+高级sql
+一、select union all select
+case class Union(left: LogicalPlan, right: LogicalPlan) extends SetOperation(left, right) {
+  override def statistics: Statistics = {
+    val sizeInBytes = left.statistics.sizeInBytes + right.statistics.sizeInBytes
+    Statistics(sizeInBytes = sizeInBytes)
+  }
+}
+1.因为两个select分别对应一个LogicalPlan,因此该表达式最终产生Union操作,该对象也是一个LogicalPlan
+2.输出字段为left表的输出即可,因为左右两边表输出的字段相同,因此考虑左边的输出属性即可
+3.final override lazy val resolved方法,重新覆盖父类方法,因为要增加校验左边和右边的字段数量以及类型要一致
+
+二、select INTERSECT select 获取两个集合的交集
+1.因为两个select分别对应一个LogicalPlan,因此该表达式最终产生Intersect操作,该对象也是一个LogicalPlan
+2.输出字段为left表的输出即可,因为左右两边表输出的字段相同,因此考虑左边的输出属性即可
+3.final override lazy val resolved方法,重新覆盖父类方法,因为要增加校验左边和右边的字段数量以及类型要一致
+
+三、select EXCEPT select 获取两个集合的差集
+1.因为两个select分别对应一个LogicalPlan,因此该表达式最终产生EXCEPT操作,该对象也是一个LogicalPlan
+2.输出字段为left表的输出即可,因为左右两边表输出的字段相同,因此考虑左边的输出属性即可
+3.final override lazy val resolved方法,重新覆盖父类方法,因为要增加校验左边和右边的字段数量以及类型要一致
+
+四、select UNION select 或者  select UNION DISTINCT select
+1.因为是union操作,所以肯定与高级sql的1是一样的
+2.在1的输出结果Union的基础上进一步过滤,增加了Distinct对象,用于过滤重复数据
+case class Distinct(child: LogicalPlan) extends UnaryNode {
+  override def output: Seq[Attribute] = child.output //distinct不会改变子类的输出属性
+}
  */
 class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
 
@@ -44,7 +174,7 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
   def parseExpression(input: String): Expression = {
     // Initialize the Keywords.
     initLexical //语法解析器
-    phrase(projection)(new lexical.Scanner(input)) match {
+    phrase(projection)(new lexical.Scanner(input)) match {//表示从input中去匹配projection正则表达式的内容
       case Success(plan, _) => plan
       case failureOrError => sys.error(failureOrError.toString)
     }
@@ -54,7 +184,7 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
   def parseTableIdentifier(input: String): TableIdentifier = {
     // Initialize the Keywords.
     initLexical
-    phrase(tableIdentifier)(new lexical.Scanner(input)) match {
+    phrase(tableIdentifier)(new lexical.Scanner(input)) match {//表示从input中去匹配tableIdentifier正则表达式的内容
       case Success(ident, _) => ident
       case failureOrError => sys.error(failureOrError.toString)
     }
@@ -121,8 +251,8 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
     (select | ("(" ~> select <~ ")")) * //纯粹的一个完整的sql 或者子查询中完成的sql   *表示若干个
     ( UNION ~ ALL        ^^^ { (q1: LogicalPlan, q2: LogicalPlan) => Union(q1, q2) }//union操作  两个select进行union
     | INTERSECT          ^^^ { (q1: LogicalPlan, q2: LogicalPlan) => Intersect(q1, q2) }//两个集合做交集
-    | EXCEPT             ^^^ { (q1: LogicalPlan, q2: LogicalPlan) => Except(q1, q2)}
-    | UNION ~ DISTINCT.? ^^^ { (q1: LogicalPlan, q2: LogicalPlan) => Distinct(Union(q1, q2)) }//union操作后过滤重复
+    | EXCEPT             ^^^ { (q1: LogicalPlan, q2: LogicalPlan) => Except(q1, q2)} //获取两个集合的差集
+    | UNION ~ DISTINCT.? ^^^ { (q1: LogicalPlan, q2: LogicalPlan) => Distinct(Union(q1, q2)) }//union操作后过滤重复---其中DISTINCT可以不存在
     )
 
   //将select sql 转换成一个逻辑执行计划
@@ -164,7 +294,7 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
 
   //解析表达式  表达式 as 别名
   protected lazy val projection: Parser[Expression] =
-    expression ~ (AS.? ~> ident.?) ^^ {
+    expression ~ (AS.? ~> ident.?) ^^ { //as ident是可以不存在的
       case e ~ a => a.fold(e)(Alias(e, _)()) //a.fold(e) 表示a别名如何为null,没有设置,则使用e表达式就当名字,如果e有设置,则执行(Alias(e, _)()) 即将表达式e 起一个别名为a
     }
 

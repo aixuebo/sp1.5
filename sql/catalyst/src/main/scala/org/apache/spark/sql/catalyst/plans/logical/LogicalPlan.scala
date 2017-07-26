@@ -48,12 +48,12 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
    * unchanged.  This function is similar to `transformUp`, but skips sub-trees that have already
    * been marked as analyzed.
    *
-   * @param rule the function use to transform this nodes children
+   * @param rule the function use to transform this nodes children 参数是一个偏函数,即从一个LogicalPlan转换成一个LogicalPlan的过程
    */
   def resolveOperators(rule: PartialFunction[LogicalPlan, LogicalPlan]): LogicalPlan = {
     if (!analyzed) {//没有分析过,才去分析
       val afterRuleOnChildren = transformChildren(rule, (t, r) => t.resolveOperators(r))
-      if (this fastEquals afterRuleOnChildren) {
+      if (this fastEquals afterRuleOnChildren) {//比较结果是否相同
         CurrentOrigin.withOrigin(origin) {
           rule.applyOrElse(this, identity[LogicalPlan])
         }
@@ -97,13 +97,16 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
    * can override this (e.g.
    * [[org.apache.spark.sql.catalyst.analysis.UnresolvedRelation UnresolvedRelation]]
    * should return `false`).
+   * 校验本身以及所有的子对象
    */
-  lazy val resolved: Boolean = expressions.forall(_.resolved) && childrenResolved
+  lazy val resolved: Boolean = expressions.forall(_.resolved) && childrenResolved //childrenResolved表示继续递归,让子节点的子节点再次执行
 
   override protected def statePrefix = if (!resolved) "'" else super.statePrefix
 
   /**
    * Returns true if all its children of this query plan have been resolved.
+   * true表示所有的子计划已经resolved
+   * 属于一个校验的过程
    */
   def childrenResolved: Boolean = children.forall(_.resolved)
 

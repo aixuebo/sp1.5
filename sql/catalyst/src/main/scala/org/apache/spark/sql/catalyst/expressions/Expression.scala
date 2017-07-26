@@ -123,7 +123,7 @@ abstract class Expression extends TreeNode[Expression] {
    * expression involves more than just the resolution of its children and type checking.
    * true表示表达式以及所有的子表达式都已经校验完成
    */
-  lazy val resolved: Boolean = childrenResolved && checkInputDataTypes().isSuccess
+  lazy val resolved: Boolean = childrenResolved && checkInputDataTypes().isSuccess //childrenResolved作用是递归操作
 
   /**
    * Returns the [[DataType]] of the result of evaluating this expression.  It is

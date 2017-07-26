@@ -107,7 +107,7 @@ class SqlLexical extends StdLexical {
   //返回Token,要么是关键字,要么就是Identifier
   protected override def processIdent(name: String) = {
     val token = normalizeKeyword(name) // 格式化字符串,都变成小写字符
-    if (reserved contains token) Keyword(token) else Identifier(name)
+    if (reserved contains token) Keyword(token) else Identifier(name) //前者说明该字符串是关键字,后者说明该字符串就是一个字符串
   }
 
   override lazy val token: Parser[Token] =
@@ -120,7 +120,7 @@ class SqlLexical extends StdLexical {
         case i ~ Some(d) => FloatLit(i.mkString + "." + d.mkString)
       }
     | '\'' ~> chrExcept('\'', '\n', EofCh).* <~ '\'' ^^
-      { case chars => StringLit(chars mkString "") }
+      { case chars => StringLit(chars mkString "") } //对chars mkString的内容加上""
     | '"' ~> chrExcept('"', '\n', EofCh).* <~ '"' ^^
       { case chars => StringLit(chars mkString "") }
     | '`' ~> chrExcept('`', '\n', EofCh).* <~ '`' ^^

@@ -62,8 +62,8 @@ private [sql] object JavaTypeInference {
       case c: Class[_] if c.isAnnotationPresent(classOf[SQLUserDefinedType]) => //说明是用户自定义类型
         (c.getAnnotation(classOf[SQLUserDefinedType]).udt().newInstance(), true) //返回类型对应的类实例
 
-      case c: Class[_] if c == classOf[java.lang.String] => (StringType, true)
-      case c: Class[_] if c == java.lang.Short.TYPE => (ShortType, false)
+      case c: Class[_] if c == classOf[java.lang.String] => (StringType, true) //String可以为null
+      case c: Class[_] if c == java.lang.Short.TYPE => (ShortType, false) //基本属性.是不能是null的
       case c: Class[_] if c == java.lang.Integer.TYPE => (IntegerType, false)
       case c: Class[_] if c == java.lang.Long.TYPE => (LongType, false)
       case c: Class[_] if c == java.lang.Double.TYPE => (DoubleType, false)
@@ -71,7 +71,7 @@ private [sql] object JavaTypeInference {
       case c: Class[_] if c == java.lang.Float.TYPE => (FloatType, false)
       case c: Class[_] if c == java.lang.Boolean.TYPE => (BooleanType, false)
 
-      case c: Class[_] if c == classOf[java.lang.Short] => (ShortType, true)
+      case c: Class[_] if c == classOf[java.lang.Short] => (ShortType, true) //包装的类型,因此是可以为null的
       case c: Class[_] if c == classOf[java.lang.Integer] => (IntegerType, true)
       case c: Class[_] if c == classOf[java.lang.Long] => (LongType, true)
       case c: Class[_] if c == classOf[java.lang.Double] => (DoubleType, true)
@@ -87,7 +87,7 @@ private [sql] object JavaTypeInference {
         val (dataType, nullable) = inferDataType(typeToken.getComponentType) //通过该方式可以返回数组对应的元素类型,以及是否是null
         (ArrayType(dataType, nullable), true) //组成新的spark对应的数组类型
 
-      case _ if iterableType.isAssignableFrom(typeToken) => //传入的是java的迭代器
+      case _ if iterableType.isAssignableFrom(typeToken) => //传入的是java的迭代器,也转换成kava数组
         val (dataType, nullable) = inferDataType(elementType(typeToken))
         (ArrayType(dataType, nullable), true) //返回一个spark的数组类型
 
@@ -101,7 +101,7 @@ private [sql] object JavaTypeInference {
         (MapType(keyDataType, valueDataType, nullable), true)
 
       case _ =>
-        val beanInfo = Introspector.getBeanInfo(typeToken.getRawType)//java的bean对象
+        val beanInfo = Introspector.getBeanInfo(typeToken.getRawType)//java的bean对象,表示一个Struct的数据结构
         val properties = beanInfo.getPropertyDescriptors.filterNot(_.getName == "class")
         val fields = properties.map { property => //获取bean的所有属性
           val returnType = typeToken.method(property.getReadMethod).getReturnType //属性返回值

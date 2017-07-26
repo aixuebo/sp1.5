@@ -22,7 +22,7 @@ package org.apache.spark.sql.catalyst
  * 表示一个表名字,表名字一定存在,库名字可能存在,因此库名字是Option
  */
 private[sql] case class TableIdentifier(table: String, database: Option[String] = None) {
-  def withDatabase(database: String): TableIdentifier = this.copy(database = Some(database))
+  def withDatabase(database: String): TableIdentifier = this.copy(database = Some(database)) //仅仅赋值给database属性
 
   def toSeq: Seq[String] = database.toSeq :+ table //库+表组成集合
 

@@ -90,9 +90,9 @@ abstract class Attribute extends LeafExpression with NamedExpression {
 
   override def references: AttributeSet = AttributeSet(this)
 
-  def withNullability(newNullability: Boolean): Attribute
-  def withQualifiers(newQualifiers: Seq[String]): Attribute
-  def withName(newName: String): Attribute
+  def withNullability(newNullability: Boolean): Attribute //true表示该属性是可以是null的,用于left join的时候,右边的表字段的值是可以是null的
+  def withQualifiers(newQualifiers: Seq[String]): Attribute //设置别名前缀,即该属性属于哪个别名表的属性
+  def withName(newName: String): Attribute //属性名字
 
   override def toAttribute: Attribute = this
   def newInstance(): Attribute //创建一个属性对象

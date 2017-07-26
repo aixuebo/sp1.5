@@ -145,10 +145,10 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
     * 获取所有的表达式
     **/
   def expressions: Seq[Expression] = {
-    productIterator.flatMap {
+    productIterator.flatMap {//迭代循环每一个元素
       case e: Expression => e :: Nil
       case Some(e: Expression) => e :: Nil
-      case seq: Traversable[_] => seq.flatMap {
+      case seq: Traversable[_] => seq.flatMap {//元素本身又是一个迭代器
         case e: Expression => e :: Nil
         case other => Nil
       }

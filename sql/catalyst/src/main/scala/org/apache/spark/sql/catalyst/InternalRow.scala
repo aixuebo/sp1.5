@@ -70,11 +70,13 @@ abstract class InternalRow extends SpecializedGetters with Serializable {
 object InternalRow {
   /**
    * This method can be used to construct a [[InternalRow]] with the given values.
+   * 一个数组作为参数,表示一行数据
    */
   def apply(values: Any*): InternalRow = new GenericInternalRow(values.toArray)
 
   /**
    * This method can be used to construct a [[InternalRow]] from a [[Seq]] of values.
+   * 一个集合作为参数,表示一行数据
    */
   def fromSeq(values: Seq[Any]): InternalRow = new GenericInternalRow(values.toArray)
 
