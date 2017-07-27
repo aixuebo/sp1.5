@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.rules
 import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.trees.TreeNode
 
+//规则接口--满足规则后,就可以调用apply方法将节点进行替换
 abstract class Rule[TreeType <: TreeNode[_]] extends Logging {
 
   /** Name for this rule, automatically inferred based on class name.
@@ -30,5 +31,5 @@ abstract class Rule[TreeType <: TreeNode[_]] extends Logging {
     if (className endsWith "$") className.dropRight(1) else className
   }
 
-  def apply(plan: TreeType): TreeType
+  def apply(plan: TreeType): TreeType //规则--给定一个节点作为参数,返回值是使用规则转换后的节点
 }

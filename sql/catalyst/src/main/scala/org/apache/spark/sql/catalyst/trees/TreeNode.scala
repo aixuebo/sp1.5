@@ -73,6 +73,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
    * Faster version of equality which short-circuits when two treeNodes are the same instance.
    * We don't just override Object.equals, as doing so prevents the scala compiler from
    * generating case class `equals` methods
+   * 比较两个对象是否相同
    */
   def fastEquals(other: TreeNode[_]): Boolean = {
     this.eq(other) || this == other
@@ -83,6 +84,8 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
    * The condition is recursively applied to this node and all of its children (pre-order).
    * 找第一个符合条件函数的对象,先对比自己,然后对比子类,子类对比也是一个子类递归到底的方式进行对比的
    * f的参数就是本类自己
+   *
+   * 从本节点开始，先序遍历整棵树，返回第一个符合f命题的节点
    */
   def find(f: BaseType => Boolean): Option[BaseType] = f(this) match {
     case true => Some(this)
@@ -124,10 +127,11 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   /**
    * Returns a Seq by applying a function to all nodes in this tree and using the elements of the
    * resulting collections.
+   * 与map函数不同的是,参数的返回值是一个集合,而map的返回值是一个对象.
    */
   def flatMap[A](f: BaseType => TraversableOnce[A]): Seq[A] = {
     val ret = new collection.mutable.ArrayBuffer[A]()
-    foreach(ret ++= f(_))
+    foreach(ret ++= f(_))//因为f返回值是一个集合,因此将集合添加到ret中,因此就是一个整体的集合
     ret
   }
 
@@ -136,10 +140,13 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
    * tree on which the function is defined.
    * 偏函数接收BaseType类型参数,转换成B对象
    * 即收集所有符合偏函数转换的数据
+   *
+   * 即 map的偏函数版
    */
   def collect[B](pf: PartialFunction[BaseType, B]): Seq[B] = {
     val ret = new collection.mutable.ArrayBuffer[B]()
     val lifted = pf.lift
+    //偏函数的结果进行foreach,添加到ret中
     foreach(node => lifted(node).foreach(ret.+=))//本类和子类都调用偏函数,转换成B.然后添加到ret集合里面
     ret
   }
@@ -148,6 +155,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
    * Finds and returns the first [[TreeNode]] of the tree for which the given partial function
    * is defined (pre-order), and applies the partial function to it.
    * 偏函数接收BaseType类型参数,转换成B对象
+   * 先执行本类,然后执行子类,直到第一个结果返回为止
    */
   def collectFirst[B](pf: PartialFunction[BaseType, B]): Option[B] = {
     val lifted = pf.lift //将偏函数转换成正常函数
@@ -219,10 +227,20 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
 
   /**
    * Returns a copy of this node where `rule` has been recursively applied to the tree.
+   * 返回该node的一个copy,基于规则递归应用到所有的node上,然后结果进行copy
    * When `rule` does not apply to a given node it is left unchanged.
+   * 当规则没有适应给定的节点,则该节点保持不变
    * Users should not expect a specific directionality. If a specific directionality is needed,
    * transformDown or transformUp should be used.
-   * @param rule the function use to transform this nodes children
+   * 转换的方向用于不应该去期待,如果需要期待方向行的话,则选择transformDown或者transformUp方法
+   *
+   * @param rule the function use to transform this nodes children 规则的偏函数去转换一些节点
+   * 转换,基于给定的偏函数,符合偏函数规则的node节点,都要进行规则转换,转换成信的node
+   * 比如
+tree.transform {
+case Add(Literal(c1), Literal(c2)) => Literal(c1+c2)
+} 将复杂的加法,转换成简单的加法
+
    */
   def transform(rule: PartialFunction[BaseType, BaseType]): BaseType = {
     transformDown(rule)
@@ -235,36 +253,38 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
    */
   def transformDown(rule: PartialFunction[BaseType, BaseType]): BaseType = {
     val afterRule = CurrentOrigin.withOrigin(origin) {
-      rule.applyOrElse(this, identity[BaseType])
+      rule.applyOrElse(this, identity[BaseType]) //表示将该节点应用该偏函数,只有满足偏函数的才会被转换
     }
 
     // Check if unchanged and then possibly return old copy to avoid gc churn.
-    if (this fastEquals afterRule) {
+    if (this fastEquals afterRule) { //说明没有转换成功,因此继续递归
       transformChildren(rule, (t, r) => t.transformDown(r)) //t表示每一个子对象,即每一个子对象都调用transformDown
     } else {
-      afterRule.transformChildren(rule, (t, r) => t.transformDown(r))
+      afterRule.transformChildren(rule, (t, r) => t.transformDown(r))//使用新的node继续递归
     }
   }
 
   /**
    * Returns a copy of this node where `rule` has been recursively applied to all the children of
    * this node.  When `rule` does not apply to a given node it is left unchanged.
-   * @param rule the function used to transform this nodes children
+   * 让该规则去替换每一个子节点,如果匹配不成功,则不更改
+   * @param rule the function used to transform this nodes children 该规则去替换该节点的所有子节点
    */
   protected def transformChildren(
-      rule: PartialFunction[BaseType, BaseType],//偏函数,可以从一个BaseType转换成另外一个BaseType
-      nextOperation: (BaseType, PartialFunction[BaseType, BaseType]) => BaseType): BaseType = {
+      rule: PartialFunction[BaseType, BaseType],//偏函数,可以从一个BaseType转换成另外一个BaseType,即符合规则的节点node要去变更
+      nextOperation: (BaseType, PartialFunction[BaseType, BaseType]) => BaseType): BaseType = { //参数表示递归调用偏函数,第一个参数表示子节点,第二个参数表示子节点要进行偏函数调用,如果匹配规则,则就可以规则替换了
     var changed = false
-    val newArgs = productIterator.map {
+    //表示对子节点进行按照规则转换
+    val newArgs = productIterator.map {//循环每一个子节点
       case arg: TreeNode[_] if containsChild(arg) => //每一个子对象
-        val newChild = nextOperation(arg.asInstanceOf[BaseType], rule)
-        if (!(newChild fastEquals arg)) {
+        val newChild = nextOperation(arg.asInstanceOf[BaseType], rule) //将arg这个子节点以及偏函数规则作为参数,进行递归调用,产生新的节点
+        if (!(newChild fastEquals arg)) {//说明节点按照规则被替换了
           changed = true
           newChild
         } else {
           arg
         }
-      case Some(arg: TreeNode[_]) if containsChild(arg) =>
+      case Some(arg: TreeNode[_]) if containsChild(arg) => //说明子节点是Option的
         val newChild = nextOperation(arg.asInstanceOf[BaseType], rule)
         if (!(newChild fastEquals arg)) {
           changed = true
@@ -274,9 +294,9 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
         }
       case m: Map[_, _] => m
       case d: DataType => d // Avoid unpacking Structs
-      case args: Traversable[_] => args.map {
+      case args: Traversable[_] => args.map {//说明该子节点是一个迭代器,可能迭代器里面的元素是一个node
         case arg: TreeNode[_] if containsChild(arg) =>
-          val newChild = nextOperation(arg.asInstanceOf[BaseType], rule)
+          val newChild = nextOperation(arg.asInstanceOf[BaseType], rule)//对每一个node再一次进行规则匹配
           if (!(newChild fastEquals arg)) {
             changed = true
             newChild
@@ -288,7 +308,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
       case nonChild: AnyRef => nonChild
       case null => null
     }.toArray
-    if (changed) makeCopy(newArgs) else this
+    if (changed) makeCopy(newArgs) else this //如果有节点被变化了,则将新的子节点集合重新生成新的对象
   }
 
   /**
@@ -362,8 +382,10 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
    */
   protected def stringArgs: Iterator[Any] = productIterator
 
-  /** Returns a string representing the arguments to this node, minus any children */
-  def argString: String = productIterator.flatMap {
+  /** Returns a string representing the arguments to this node, minus any children
+    * 返回一个字符串代表该节点下所有的子节点
+    **/
+  def argString: String = productIterator.flatMap {//循环每一个子节点
     case tn: TreeNode[_] if containsChild(tn) => Nil
     case tn: TreeNode[_] if tn.toString contains "\n" => s"(${tn.simpleString})" :: Nil
     case seq: Seq[BaseType] if seq.toSet.subsetOf(children.toSet) => Nil

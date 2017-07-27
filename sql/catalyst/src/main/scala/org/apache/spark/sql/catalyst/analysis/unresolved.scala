@@ -46,7 +46,7 @@ case class UnresolvedRelation(
 
   override def output: Seq[Attribute] = Nil
 
-  override lazy val resolved = false
+  override lazy val resolved = false //说明不需要去校验有效性
 }
 
 /**

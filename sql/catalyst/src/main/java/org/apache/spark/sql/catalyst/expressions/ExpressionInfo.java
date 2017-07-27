@@ -23,9 +23,9 @@ package org.apache.spark.sql.catalyst.expressions;
  */
 public class ExpressionInfo {
     private String className;//Expression的类全路径
-    private String usage;//Expression的Annotation--->ExpressionDescription.usage
+    private String usage;//Expression的Annotation--->ExpressionDescription.usage 简短的方式描述该函数
     private String name;//别名
-    private String extended;//Expression的Annotation--->ExpressionDescription.extended
+    private String extended;//Expression的Annotation--->ExpressionDescription.extended 复杂的方式描述该函数,或者是该函数的一个demo例子
 
     public String getClassName() {
         return className;

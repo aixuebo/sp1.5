@@ -34,10 +34,11 @@ import java.lang.annotation.RetentionPolicy;
  *
  *  And we can refer the function name by `_FUNC_`, in `usage` and `extended`, as it's
  *  registered in `FunctionRegistry`.
+ *  表示一个函数的描述
  */
 @DeveloperApi
 @Retention(RetentionPolicy.RUNTIME)
 public @interface ExpressionDescription {
-    String usage() default "_FUNC_ is undocumented";
-    String extended() default "No example for _FUNC_.";
+    String usage() default "_FUNC_ is undocumented";//简短的方式描述函数
+    String extended() default "No example for _FUNC_.";//描述函数的一个demo例子,或者很啰嗦的方式描述函数的意义
 }

@@ -38,6 +38,7 @@ class NoSuchDatabaseException extends Exception //没有数据库异常
 /**
  * An interface for looking up relations by name.  Used by an [[Analyzer]].
  * 目录接口,用于查找一个表名对应的逻辑计划
+ * 相当于一个缓存
  */
 trait Catalog {
 
@@ -87,7 +88,7 @@ trait Catalog {
     if (size <= 2) {
       tableIdent.mkString(".")
     } else {
-      tableIdent.slice(size - 2, size).mkString(".")
+      tableIdent.slice(size - 2, size).mkString(".")//只获取最后两个
     }
   }
 
@@ -100,11 +101,10 @@ trait Catalog {
   /**
    * It is not allowed to specifiy database name for tables stored in [[SimpleCatalog]].
    * We use this method to check it.
-   * 不允许指定数据库名字
    * 校验table名字是否合法
    */
   protected def checkTableIdentifier(tableIdentifier: Seq[String]): Unit = {
-    if (tableIdentifier.length > 1) {
+    if (tableIdentifier.length > 1) {//必须要大于1长度,否则是非法的
       throw new AnalysisException("Specifying database name or other qualifiers are not allowed " +
         "for temporary tables. If the table name has dots (.) in it, please quote the " +
         "table name with backticks (`).")
@@ -113,8 +113,9 @@ trait Catalog {
 }
 
 class SimpleCatalog(val conf: CatalystConf) extends Catalog {
-  val tables = new ConcurrentHashMap[String, LogicalPlan]
+  val tables = new ConcurrentHashMap[String, LogicalPlan] //每一个表和该表的逻辑计划映射
 
+  //注册一个表和逻辑计划映射
   override def registerTable(
       tableIdentifier: Seq[String],
       plan: LogicalPlan): Unit = {
@@ -134,6 +135,7 @@ class SimpleCatalog(val conf: CatalystConf) extends Catalog {
     tables.clear()
   }
 
+  //表是否存在
   override def tableExists(tableIdentifier: Seq[String]): Boolean = {
     checkTableIdentifier(tableIdentifier)
     val tableIdent = processTableIdentifier(tableIdentifier) //对表名进行处理,让其都转换成大写
@@ -151,11 +153,11 @@ class SimpleCatalog(val conf: CatalystConf) extends Catalog {
     if (table == null) {
       sys.error(s"Table Not Found: $tableFullName")
     }
-    val tableWithQualifiers = Subquery(tableIdent.last, table) //设置别名和逻辑计划
+    val tableWithQualifiers = Subquery(tableIdent.last, table) //设置别名和逻辑计划,别名默认就是表名
 
     // If an alias was specified by the lookup, wrap the plan in a subquery so that attributes are
     // properly qualified with this alias.
-    alias.map(a => Subquery(a, tableWithQualifiers)).getOrElse(tableWithQualifiers)
+    alias.map(a => Subquery(a, tableWithQualifiers)).getOrElse(tableWithQualifiers) //因为别名存在,则设置别名
   }
 
   //返回在当前数据库下所有table名字和是否是临时表的元组

@@ -35,10 +35,10 @@ object RuleExecutor {
   /** Dump statistics about time spent running specific rules. */
   def dumpTimeSpent(): String = {
     val map = timeMap.asMap().asScala
-    val maxSize = map.keys.map(_.toString.length).max
+    val maxSize = map.keys.map(_.toString.length).max //获取key的String最大的长度,目的是打印的结果有格式化效果,都对齐打印
     map.toSeq.sortBy(_._2).reverseMap { case (k, v) =>
       s"${k.padTo(maxSize, " ").mkString} $v"
-    }.mkString("\n")
+    }.mkString("\n") //按照时间倒排序,获取key和value,然后打印数据
   }
 }
 

@@ -27,9 +27,13 @@ import org.apache.spark.sql.types._
 
 /**
  * A collection of [[Rule Rules]] that can be used to coerce differing types that
- * participate in operations into compatible ones.  Most of these rules are based on Hive semantics,
- * but they do not introduce any dependencies on the hive codebase.  For this reason they remain in
+ * participate in operations into compatible ones.
+ * 一个集合规则类型,能够迫使不同类型的数据参与兼容
+ *
+ * Most of these rules are based on Hive semantics,but they do not introduce any dependencies on the hive codebase.  For this reason they remain in
  * Catalyst until we have a more standard set of coercions.
+ * 大多数规则是基于hive的
+ *
  */
 object HiveTypeCoercion {
 
@@ -239,6 +243,7 @@ object HiveTypeCoercion {
 
   /**
    * Promotes strings that appear in arithmetic expressions.
+   *
    */
   object PromoteStrings extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {

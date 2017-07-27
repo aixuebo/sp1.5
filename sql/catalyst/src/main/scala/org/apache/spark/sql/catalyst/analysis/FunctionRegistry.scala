@@ -269,6 +269,7 @@ object FunctionRegistry {
     expression[InputFileName]("input_file_name")
   )
 
+  //注册内部函数
   val builtin: FunctionRegistry = {
     val fr = new SimpleFunctionRegistry
     expressions.foreach { case (name, (info, builder)) => fr.registerFunction(name, info, builder) }
@@ -277,16 +278,17 @@ object FunctionRegistry {
 
   /** See usage above.
     * 给定参数表达式对象Expression 以及别名name,
-    * 返回一个Map,key是name别名,value是元组(Expression表达式信息对象,表达式T的class实例)
+    * 返回一个Map,key是name别名,value是元组(Expression表达式信息对象,表达式T的class实例,即如何在给定参数的情况下创建一个表达式实例)
     **/
   def expression[T <: Expression](name: String)
-      (implicit tag: ClassTag[T]): (String, (ExpressionInfo, FunctionBuilder)) = {
+      (implicit tag: ClassTag[T]): (String, (ExpressionInfo, FunctionBuilder)) = { //T就是函数的class对象
 
     // See if we can find a constructor that accepts Seq[Expression]
     val varargCtor = Try(tag.runtimeClass.getDeclaredConstructor(classOf[Seq[_]])).toOption //找到接收 Seq[Expression]为参数的构造函数
 
+    //该对象表示当给定参数的时候,如何创建一个函数实例
     val builder = (expressions: Seq[Expression]) => {//builder是一个函数,参数是Seq[Expression]  返回T对应的实例化对象
-      if (varargCtor.isDefined) {
+      if (varargCtor.isDefined) {//说明函数的class中有构造函数
         // If there is an apply method that accepts Seq[Expression], use that one.
         Try(varargCtor.get.newInstance(expressions).asInstanceOf[Expression]) match {//使用expressions去实例化该构造函数
           case Success(e) => e //实例化成功

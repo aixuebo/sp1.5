@@ -88,7 +88,7 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
     if (children.size == 0) {
       throw new UnsupportedOperationException(s"LeafNode $nodeName must implement statistics.")
     }
-    Statistics(sizeInBytes = children.map(_.statistics.sizeInBytes).product)
+    Statistics(sizeInBytes = children.map(_.statistics.sizeInBytes).product) //递归获取所有子对象的输出字节大小
   }
 
   /**

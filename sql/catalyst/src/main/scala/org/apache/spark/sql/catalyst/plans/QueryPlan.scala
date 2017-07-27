@@ -29,6 +29,7 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
 
   /**
    * Returns the set of attributes that are output by this node.
+   * 该节点的输出
    */
   def outputSet: AttributeSet = AttributeSet(output)
 
@@ -78,7 +79,7 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
     var changed = false
 
     @inline def transformExpressionDown(e: Expression): Expression = {
-      val newE = e.transformDown(rule)
+      val newE = e.transformDown(rule)//将该表达式根据规则进行转换
       if (newE.fastEquals(e)) {
         e
       } else {
@@ -87,18 +88,19 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
       }
     }
 
+    //递归的去转换每一个子节点----使用规则
     def recursiveTransform(arg: Any): AnyRef = arg match {
-      case e: Expression => transformExpressionDown(e)
-      case Some(e: Expression) => Some(transformExpressionDown(e))
-      case m: Map[_, _] => m
+      case e: Expression => transformExpressionDown(e)//说明是表达式,则去转换该表达式
+      case Some(e: Expression) => Some(transformExpressionDown(e)) //说明是表达式,则去转换该表达式
+      case m: Map[_, _] => m //不需要转换
       case d: DataType => d // Avoid unpacking Structs
-      case seq: Traversable[_] => seq.map(recursiveTransform)
+      case seq: Traversable[_] => seq.map(recursiveTransform) //每一个元素去递归进行转换
       case other: AnyRef => other
     }
 
     val newArgs = productIterator.map(recursiveTransform).toArray
 
-    if (changed) makeCopy(newArgs).asInstanceOf[this.type] else this
+    if (changed) makeCopy(newArgs).asInstanceOf[this.type] else this //如果表达式规则转换成功,则使用新的转换后的节点
   }
 
   /**
@@ -109,6 +111,7 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
   def transformExpressionsUp(rule: PartialFunction[Expression, Expression]): this.type = {
     var changed = false
 
+    //将参数表达式进行规则rule处理
     @inline def transformExpressionUp(e: Expression): Expression = {
       val newE = e.transformUp(rule)
       if (newE.fastEquals(e)) {

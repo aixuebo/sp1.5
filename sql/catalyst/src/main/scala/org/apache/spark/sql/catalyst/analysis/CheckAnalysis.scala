@@ -24,6 +24,7 @@ import org.apache.spark.sql.types._
 
 /**
  * Throws user facing errors when passed invalid queries that fail to analyze.
+ * 当传递一个非法的查询sql的时候,抛出error
  */
 trait CheckAnalysis {
 
@@ -34,6 +35,7 @@ trait CheckAnalysis {
    */
   val extendedCheckRules: Seq[LogicalPlan => Unit] = Nil
 
+  //校验失败
   protected def failAnalysis(msg: String): Nothing = {
     throw new AnalysisException(msg)
   }
@@ -49,7 +51,7 @@ trait CheckAnalysis {
     // We transform up and order the rules so as to catch the first possible failure instead
     // of the result of cascading resolution failures.
     //执行转换和排序规则,出啊去第一个可能失败的结果
-    plan.foreachUp {//从孙子开始执行函数
+    plan.foreachUp {//从孙子开始执行函数---该函数的目的就是检查
       case p if p.analyzed => // Skip already analyzed sub-plans 跳过已经分析过的节点
 
       case operator: LogicalPlan =>
