@@ -253,9 +253,10 @@ case class Window(
 /**
  * Apply the all of the GroupExpressions to every input row, hence we will get
  * multiple output rows for a input row.
+ * 说明一行数据作为输入,多行数据作为输出的表达式
  * @param bitmasks The bitmask set represents the grouping sets
  * @param groupByExprs The grouping by expressions
- * @param child       Child operator
+ * @param child       Child operator 在什么数据集上进行expand操作
  */
 case class Expand(
     bitmasks: Seq[Int],
@@ -427,7 +428,7 @@ case class Sample(
     child: LogicalPlan) //数据集
     extends UnaryNode {
 
-  override def output: Seq[Attribute] = child.output
+  override def output: Seq[Attribute] = child.output //因为是抽样数据,因此输出还是原来的输出,因此使用子类输出
 }
 
 /**

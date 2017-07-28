@@ -50,6 +50,12 @@ trait Predicate extends Expression {
 
 
 trait PredicateHelper {
+
+  /**
+   * id = 1 and (id = 2 and id = 3)  and (id = 4 and id = 5)
+   * @param condition
+   * @return
+   */
   protected def splitConjunctivePredicates(condition: Expression): Seq[Expression] = {
     condition match {
       case And(cond1, cond2) =>
@@ -58,6 +64,12 @@ trait PredicateHelper {
     }
   }
 
+  /**
+   * id = 1 or (id = 2 and id = 3)  or (id = 4 and id = 5)
+   * 最终被拆分成三部分组成的集合,即使用or拆分
+   * @param condition
+   * @return
+   */
   protected def splitDisjunctivePredicates(condition: Expression): Seq[Expression] = {
     condition match {
       case Or(cond1, cond2) =>
@@ -75,6 +87,7 @@ trait PredicateHelper {
    *
    * `canEvaluate(EqualTo(a,b), R)` returns `true` where as `canEvaluate(EqualTo(a,c), R)` returns
    * `false`.
+   * true表示该表达式 用到的字段都是plan中输出的字段
    */
   protected def canEvaluate(expr: Expression, plan: LogicalPlan): Boolean =
     expr.references.subsetOf(plan.outputSet)
@@ -100,6 +113,8 @@ case class Not(child: Expression)
 /**
  * Evaluates to `true` if `list` contains `value`.
  * 表达式in运算
+ * value表示表达式,后面的list表示符合范围的值,
+ * 比如 id in(1,2,3) ,value就是id,123就是list
  */
 case class In(value: Expression, list: Seq[Expression]) extends Predicate
     with ImplicitCastInputTypes {
@@ -175,6 +190,8 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate
 /**
  * Optimized version of In clause, when all filter values of In clause are
  * static.
+ * 对in操作的优化,优化效果是list结果使用set代替
+ * 比如 id in (1,2,3),child就是id,hset就是1 2 3
  */
 case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with Predicate {
 

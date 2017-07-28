@@ -47,6 +47,7 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
   /**
    * An execution strategy for rules that indicates the maximum number of executions. If the
    * execution reaches fix point (i.e. converge) before maxIterations, it will stop.
+   * 一个规则的执行策略,指示最大的执行次数
    * 执行规则
    */
   abstract class Strategy { def maxIterations: Int }
@@ -57,12 +58,12 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
   case object Once extends Strategy { val maxIterations = 1 }
 
   /** A strategy that runs until fix point or maxIterations times, whichever comes first.
-    * 设置最大值
+    * 设置最大值---设置一个固定值
     **/
   case class FixedPoint(maxIterations: Int) extends Strategy
 
   /** A batch of rules.
-    * 一个批次里面有很多规则
+    * 一个批次里面有很多规则,但是他们都是同一个策略
     * 包含批处理的名字 以及策略,以及处理规则
     **/
   protected case class Batch(name: String, strategy: Strategy, rules: Rule[TreeType]*)
@@ -75,27 +76,32 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
 
   /**
    * Executes the batches of rules defined by the subclass. The batches are executed serially
-   * using the defined execution strategy. Within each batch, rules are also executed serially.
+   * using the defined execution strategy.
+   * 这行每一个批次下的规则集合
+   * Within each batch, rules are also executed serially.
+   * 每一个批次内,规则是连续的被执行的
+   *
+   * 对计划进行更改,按照一定规则进行更改计划
    */
   def execute(plan: TreeType): TreeType = {
     var curPlan = plan
 
     batches.foreach { batch => //循环所有批次
-      val batchStartPlan = curPlan
-      var iteration = 1
-      var lastPlan = curPlan
+      val batchStartPlan = curPlan //该批次开始时候的计划快照
+      var iteration = 1 //迭代次数
+      var lastPlan = curPlan //每一个规则后,最新的计划
       var continue = true
 
       // Run until fix point (or the max number of iterations as specified in the strategy.
       while (continue) {
-        curPlan = batch.rules.foldLeft(curPlan) { //循环一个批次里面的所有规则
-          case (plan, rule) => //合并后的plan计划,以及每一次循环的规则
+        curPlan = batch.rules.foldLeft(curPlan) { //循环一个批次里面的所有规则,让该计划通过每一个规则,转换成新的计划
+          case (plan, rule) => //合并后的新的计划 以及 每一个规则
             val startTime = System.nanoTime()
-            val result = rule(plan)
-            val runTime = System.nanoTime() - startTime
-            RuleExecutor.timeMap.addAndGet(rule.ruleName, runTime)
+            val result = rule(plan) //对该计划使用该规则
+            val runTime = System.nanoTime() - startTime //计算规则的运行时间
+            RuleExecutor.timeMap.addAndGet(rule.ruleName, runTime) //记录该规则的运行时间
 
-            if (!result.fastEquals(plan)) {
+            if (!result.fastEquals(plan)) {//说明计划有变化,即规则产生的效果
               logTrace(
                 s"""
                   |=== Applying Rule ${rule.ruleName} ===
@@ -106,7 +112,7 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
             result
         }
         iteration += 1
-        if (iteration > batch.strategy.maxIterations) {
+        if (iteration > batch.strategy.maxIterations) { //停止迭代,因为迭代次数已经达到上限
           // Only log if this is a rule that is supposed to run more than once.
           if (iteration != 2) {
             logInfo(s"Max iterations (${iteration - 1}) reached for batch ${batch.name}")
@@ -114,7 +120,7 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
           continue = false
         }
 
-        if (curPlan.fastEquals(lastPlan)) {
+        if (curPlan.fastEquals(lastPlan)) {//说明经过该批次的规则后,计划没有变化,一旦计划没有变化,则不需要再次迭代了,即使没有达到最大循环次数也不迭代了
           logTrace(
             s"Fixed point reached for batch ${batch.name} after ${iteration - 1} iterations.")
           continue = false
@@ -122,7 +128,7 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
         lastPlan = curPlan
       }
 
-      if (!batchStartPlan.fastEquals(curPlan)) {
+      if (!batchStartPlan.fastEquals(curPlan)) {//说明这个批次的规则下,是将原始计划有改变的,因此打印日志
         logDebug(
           s"""
           |=== Result of Batch ${batch.name} ===

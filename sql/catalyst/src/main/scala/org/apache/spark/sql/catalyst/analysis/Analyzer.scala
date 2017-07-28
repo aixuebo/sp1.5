@@ -992,6 +992,8 @@ class Analyzer(
 /**
  * Removes [[Subquery]] operators from the plan. Subqueries are only required to provide
  * scoping information for attributes and can be removed once analysis is complete.
+ * 消灭子查询
+ * 从计划中删除子查询的计划
  */
 object EliminateSubQueries extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {

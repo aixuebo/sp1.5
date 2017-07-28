@@ -139,6 +139,7 @@ trait String2StringExpression extends ImplicitCastInputTypes {
 
 /**
  * A function that converts the characters of a string to uppercase.
+ * 对字母进行大写
  */
 @ExpressionDescription(
   usage = "_FUNC_(str) - Returns str with all characters changed to uppercase",
@@ -187,6 +188,7 @@ trait StringPredicate extends Predicate //返回boolean类型
 
 /**
  * A function that returns true if the string `left` contains the string `right`.
+ * 将字符串转换成contains方法
  */
 case class Contains(left: Expression, right: Expression)
     extends BinaryExpression with StringPredicate {
@@ -198,6 +200,7 @@ case class Contains(left: Expression, right: Expression)
 
 /**
  * A function that returns true if the string `left` starts with the string `right`.
+ * 将字符串转换成startsWith方法
  */
 case class StartsWith(left: Expression, right: Expression)
     extends BinaryExpression with StringPredicate {
@@ -209,6 +212,7 @@ case class StartsWith(left: Expression, right: Expression)
 
 /**
  * A function that returns true if the string `left` ends with the string `right`.
+ * 将字符串转换成endsWith方法
  */
 case class EndsWith(left: Expression, right: Expression)
     extends BinaryExpression with StringPredicate {

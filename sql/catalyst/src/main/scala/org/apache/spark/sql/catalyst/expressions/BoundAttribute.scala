@@ -78,22 +78,23 @@ case class BoundReference(ordinal: Int, dataType: DataType, nullable: Boolean) /
   }
 }
 
+//表示select中的一个表达式,因为select中一个表达式可能需要from中多个字段,因此需要引用from表中所有字段的schema集合
 object BindReferences extends Logging {
 
   def bindReference[A <: Expression](
-      expression: A,
-      input: Seq[Attribute],
+      expression: A,//select中的一个表达式
+      input: Seq[Attribute],//表达式依赖的from表的所有字段的schema集合
       allowFailures: Boolean = false): A = {
     expression.transform { case a: AttributeReference =>
       attachTree(a, "Binding attribute") {
-        val ordinal = input.indexWhere(_.exprId == a.exprId)
-        if (ordinal == -1) {
+        val ordinal = input.indexWhere(_.exprId == a.exprId) //找到该属性对应的from表中需要的属性
+        if (ordinal == -1) {//说明不存在
           if (allowFailures) {
             a
           } else {
             sys.error(s"Couldn't find $a in ${input.mkString("[", ",", "]")}")
           }
-        } else {
+        } else {//说明存在
           BoundReference(ordinal, a.dataType, a.nullable)
         }
       }

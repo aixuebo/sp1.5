@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
  * A pattern that matches any number of filter operations on top of another relational operator.
  * Adjacent filter operators are collected and their conditions are broken up and returned as a
  * sequence of conjunctive predicates.
+ * 匹配所有filter操作的表达式
  *
  * @return A tuple containing a sequence of conjunctive predicates that should be used to filter the
  *         output and a relational operator.
@@ -36,12 +37,16 @@ import org.apache.spark.sql.catalyst.plans.logical._
 object FilteredOperation extends PredicateHelper {
   type ReturnType = (Seq[Expression], LogicalPlan)
 
+  //拆分该逻辑计划终的filter表达式集合
   def unapply(plan: LogicalPlan): Option[ReturnType] = Some(collectFilters(Nil, plan))
 
+  //第一个参数是所有的filter条件集合
+  //第二个参数就是计划本身
+  //收集计划中filter条件
   @tailrec
   private def collectFilters(filters: Seq[Expression], plan: LogicalPlan): ReturnType = plan match {
-    case Filter(condition, child) =>
-      collectFilters(filters ++ splitConjunctivePredicates(condition), child)
+    case Filter(condition, child) => //说明该计划是一个filter计划,则提取fileter条件
+      collectFilters(filters ++ splitConjunctivePredicates(condition), child) //递归操作
     case other => (filters, other)
   }
 }
@@ -77,12 +82,12 @@ object PhysicalOperation extends PredicateHelper {
   def collectProjectsAndFilters(plan: LogicalPlan):
       (Option[Seq[NamedExpression]], Seq[Expression], LogicalPlan, Map[Attribute, Expression]) =
     plan match {
-      case Project(fields, child) =>
-        val (_, filters, other, aliases) = collectProjectsAndFilters(child)
+      case Project(fields, child) => //说明是对一个表进行select表达式查询
+        val (_, filters, other, aliases) = collectProjectsAndFilters(child) //递归操作
         val substitutedFields = fields.map(substitute(aliases)).asInstanceOf[Seq[NamedExpression]]
         (Some(substitutedFields), filters, other, collectAliases(substitutedFields))
 
-      case Filter(condition, child) =>
+      case Filter(condition, child) => //说明是where条件 或者having条件
         val (fields, filters, other, aliases) = collectProjectsAndFilters(child)
         val substitutedCondition = substitute(aliases)(condition)
         (fields, filters ++ splitConjunctivePredicates(substitutedCondition), other, aliases)
@@ -120,13 +125,14 @@ object PhysicalOperation extends PredicateHelper {
  *  - Grouping expressions for the partial aggregation.
  *  - Partial aggregate expressions.
  *  - Input to the aggregation.
+ *  对group by的聚合sql进行分析
  */
 object PartialAggregation {
   type ReturnType =
     (Seq[Attribute], Seq[NamedExpression], Seq[Expression], Seq[NamedExpression], LogicalPlan)
 
   def unapply(plan: LogicalPlan): Option[ReturnType] = plan match {
-    case logical.Aggregate(groupingExpressions, aggregateExpressions, child) =>
+    case logical.Aggregate(groupingExpressions, aggregateExpressions, child) => //说明是group by的聚合sql
       // Collect all aggregate expressions.
       val allAggregates =
         aggregateExpressions.flatMap(_ collect { case a: AggregateExpression1 => a})
@@ -135,7 +141,7 @@ object PartialAggregation {
         aggregateExpressions.flatMap(_ collect { case p: PartialAggregate1 => p})
 
       // Only do partial aggregation if supported by all aggregate expressions.
-      if (allAggregates.size == partialAggregates.size) {
+      if (allAggregates.size == partialAggregates.size) {//说明所有的聚合函数都是偏函数
         // Create a map of expressions to their partial evaluations for all aggregate expressions.
         val partialEvaluations: Map[TreeNodeRef, SplitEvaluation] =
           partialAggregates.map(a => (new TreeNodeRef(a), a.asPartial)).toMap
@@ -182,6 +188,7 @@ object PartialAggregation {
 
 /**
  * A pattern that finds joins with equality conditions that can be evaluated using equi-join.
+ * 抽取join中on的表达式,抽取属于左边表和右边表的表达式
  */
 object ExtractEquiJoinKeys extends Logging with PredicateHelper {
   /** (joinType, leftKeys, rightKeys, condition, leftChild, rightChild) */
@@ -189,23 +196,26 @@ object ExtractEquiJoinKeys extends Logging with PredicateHelper {
     (JoinType, Seq[Expression], Seq[Expression], Option[Expression], LogicalPlan, LogicalPlan)
 
   def unapply(plan: LogicalPlan): Option[ReturnType] = plan match {
-    case join @ Join(left, right, joinType, condition) =>
+    case join @ Join(left, right, joinType, condition) => //说明此时是一个join操作
       logDebug(s"Considering join on: $condition")
       // Find equi-join predicates that can be evaluated before the join, and thus can be used
       // as join keys.
+      //joinPredicates 表示属性=属性,这等号两边的属性分别来自于两个表的情况
+      //otherPredicates 表示非来自于两个表的情况,即剩余的情况
       val (joinPredicates, otherPredicates) =
-        condition.map(splitConjunctivePredicates).getOrElse(Nil).partition {
-          case EqualTo(l, r) if (canEvaluate(l, left) && canEvaluate(r, right)) ||
+        condition.map(splitConjunctivePredicates).getOrElse(Nil).partition {//将条件按照and拆分.然后找到a.id=b.id这种带有等号的on表达式
+          case EqualTo(l, r) if (canEvaluate(l, left) && canEvaluate(r, right)) || //true表示该表达式 用到的字段都是plan中输出的字段
             (canEvaluate(l, right) && canEvaluate(r, left)) => true
           case _ => false
         }
 
+      //拆分biao1.name = biao2.name
       val joinKeys = joinPredicates.map {
-        case EqualTo(l, r) if canEvaluate(l, left) && canEvaluate(r, right) => (l, r)
+        case EqualTo(l, r) if canEvaluate(l, left) && canEvaluate(r, right) => (l, r) //找到左边表需要的条件 以及右边表需要的条件
         case EqualTo(l, r) if canEvaluate(l, right) && canEvaluate(r, left) => (r, l)
       }
-      val leftKeys = joinKeys.map(_._1)
-      val rightKeys = joinKeys.map(_._2)
+      val leftKeys = joinKeys.map(_._1) //左边表需要的字段条件集合
+      val rightKeys = joinKeys.map(_._2) //右边表需要的字段条件集合
 
       if (joinKeys.nonEmpty) {
         logDebug(s"leftKeys:$leftKeys | rightKeys:$rightKeys")
@@ -221,11 +231,12 @@ object ExtractEquiJoinKeys extends Logging with PredicateHelper {
  * A pattern that collects all adjacent unions and returns their children as a Seq.
  */
 object Unions {
-  def unapply(plan: LogicalPlan): Option[Seq[LogicalPlan]] = plan match {
+  def unapply(plan: LogicalPlan): Option[Seq[LogicalPlan]] = plan match {//将union的所有select的逻辑计划组装成一个集合返回
     case u: Union => Some(collectUnionChildren(u))
     case _ => None
   }
 
+  //递归的方式获取所有的select对应的逻辑计划
   private def collectUnionChildren(plan: LogicalPlan): Seq[LogicalPlan] = plan match {
     case Union(l, r) => collectUnionChildren(l) ++ collectUnionChildren(r)
     case other => other :: Nil

@@ -32,6 +32,7 @@ import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
  */
 class InterpretedProjection(expressions: Seq[Expression]) extends Projection {
 
+  //第一个参数是select中的表达式,第二个参数是from表内的所有字段的schema
   def this(expressions: Seq[Expression], inputSchema: Seq[Attribute]) = this(expressions.map(BindReferences.bindReference(_, inputSchema)))
 
 
@@ -45,6 +46,7 @@ class InterpretedProjection(expressions: Seq[Expression]) extends Projection {
   //返回表达式数组
   protected val exprArray = if (expressions != null) expressions.toArray else null
 
+  //一行数据过来,如何处理
   def apply(input: InternalRow): InternalRow = {
     val outputArray = new Array[Any](exprArray.length) //每一个表达式的返回值
     var i = 0
@@ -52,7 +54,7 @@ class InterpretedProjection(expressions: Seq[Expression]) extends Projection {
       outputArray(i) = exprArray(i).eval(input)
       i += 1
     }
-    new GenericInternalRow(outputArray)
+    new GenericInternalRow(outputArray) //转换成一行具体的值
   }
 
   override def toString(): String = s"Row => [${exprArray.mkString(",")}]"
