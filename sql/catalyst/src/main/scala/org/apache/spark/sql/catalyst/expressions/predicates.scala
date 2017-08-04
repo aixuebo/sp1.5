@@ -25,17 +25,19 @@ import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
-
+//给定一行数据,返回boolean
+//参数是一个表达式,以及该表达式可能涉及到的from表的所有字段信息,将一行数据传给表达式,返回boolean
 object InterpretedPredicate {
+
   def create(expression: Expression, inputSchema: Seq[Attribute]): (InternalRow => Boolean) =
     create(BindReferences.bindReference(expression, inputSchema))
 
   def create(expression: Expression): (InternalRow => Boolean) = {
     expression.foreach {
-      case n: Nondeterministic => n.setInitialValues()
+      case n: Nondeterministic => n.setInitialValues() //初始化
       case _ =>
     }
-    (r: InternalRow) => expression.eval(r).asInstanceOf[Boolean]
+    (r: InternalRow) => expression.eval(r).asInstanceOf[Boolean] //返回该表达式对应该行数据的返回值
   }
 }
 

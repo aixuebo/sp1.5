@@ -41,6 +41,7 @@ object SparkPlan {
 
 /**
  * :: DeveloperApi ::
+ * spark真正的执行计划,子类需要覆盖execute方法,表示该如何执行计划逻辑
  */
 @DeveloperApi
 abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializable {
@@ -136,8 +137,8 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
         "Operator will receive unsafe rows as input but cannot process unsafe rows")
     }
     RDDOperationScope.withScope(sparkContext, nodeName, false, true) {
-      prepare()
-      doExecute()
+      prepare()//预先执行
+      doExecute()//真正执行
     }
   }
 
@@ -146,7 +147,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    */
   final def prepare(): Unit = {
     if (prepareCalled.compareAndSet(false, true)) {
-      doPrepare()
+      doPrepare() //执行本类以及子子孙孙的预执行方法
       children.foreach(_.prepare())
     }
   }
@@ -158,28 +159,32 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    *
    * Note: the prepare method has already walked down the tree, so the implementation doesn't need
    * to call children's prepare methods.
+   * 子类可以去覆盖,该方法表示预先执行的代码逻辑
    */
   protected def doPrepare(): Unit = {}
 
   /**
    * Overridden by concrete implementations of SparkPlan.
    * Produces the result of the query as an RDD[InternalRow]
+   * 真正执行,由子类去实现
    */
   protected def doExecute(): RDD[InternalRow]
 
   /**
    * Runs this query returning the result as an array.
+   * 执行该查询,并且将执行结果收集到本地
    */
   def executeCollect(): Array[Row] = {
-    execute().mapPartitions { iter =>
+    execute()//该方法执行sql查询
+      .mapPartitions { iter => //该部分是将执行结果在每一个节点进行转换
       val converter = CatalystTypeConverters.createToScalaConverter(schema)
       iter.map(converter(_).asInstanceOf[Row])
-    }.collect()
+    }.collect() //该方法是将最终的结果抓去到本地
   }
 
   /**
    * Runs this query returning the first `n` rows as an array.
-   *
+   * 执行查询,返回前N条数据到本地节点
    * This is modeled after RDD.take but never runs any job locally on the driver.
    */
   def executeTake(n: Int): Array[Row] = {
@@ -187,43 +192,44 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
       return new Array[Row](0)
     }
 
-    val childRDD = execute().map(_.copy())
+    val childRDD = execute().map(_.copy())//执行结果是RDD,即分布式
 
-    val buf = new ArrayBuffer[InternalRow]
-    val totalParts = childRDD.partitions.length
-    var partsScanned = 0
-    while (buf.size < n && partsScanned < totalParts) {
+    val buf = new ArrayBuffer[InternalRow] //本地存储n条数据的结果集
+    val totalParts = childRDD.partitions.length //总partition分区数量
+    var partsScanned = 0 //扫描到第几个partition分区了
+    while (buf.size < n && partsScanned < totalParts) { //只要buf空间还存在空余,则就不断循环抓去数据,同时分区还存在尚未抓去的分区
       // The number of partitions to try in this iteration. It is ok for this number to be
       // greater than totalParts because we actually cap it at totalParts in runJob.
       var numPartsToTry = 1
-      if (partsScanned > 0) {
+      if (partsScanned > 0) {//说明不是扫描第一个分区,因此要设置抓去多少个partition
         // If we didn't find any rows after the first iteration, just try all partitions next.
         // Otherwise, interpolate the number of partitions we need to try, but overestimate it
         // by 50%.
         if (buf.size == 0) {
-          numPartsToTry = totalParts - 1
+          numPartsToTry = totalParts - 1 //抓去到最后一个partition
         } else {
           numPartsToTry = (1.5 * n * partsScanned / buf.size).toInt
         }
       }
       numPartsToTry = math.max(0, numPartsToTry)  // guard against negative num of partitions
 
-      val left = n - buf.size
-      val p = partsScanned until math.min(partsScanned + numPartsToTry, totalParts)
+      val left = n - buf.size //在以下partition上抓去多少条数据
+      val p = partsScanned until math.min(partsScanned + numPartsToTry, totalParts) //设置要抓去的partition区间范围
       val sc = sqlContext.sparkContext
       val res =
-        sc.runJob(childRDD, (it: Iterator[InternalRow]) => it.take(left).toArray, p)
+        sc.runJob(childRDD, (it: Iterator[InternalRow]) => it.take(left).toArray, p) //真正去抓去数据
 
-      res.foreach(buf ++= _.take(n - buf.size))
-      partsScanned += numPartsToTry
+      res.foreach(buf ++= _.take(n - buf.size)) //抓去数据的结果存储到buf中
+      partsScanned += numPartsToTry //更新扫描到第几个partition分区了
     }
 
-    val converter = CatalystTypeConverters.createToScalaConverter(schema)
-    buf.toArray.map(converter(_).asInstanceOf[Row])
+    val converter = CatalystTypeConverters.createToScalaConverter(schema) //设置类型转换器
+    buf.toArray.map(converter(_).asInstanceOf[Row]) //对buf内的数据进行类型转换
   }
 
-  private[this] def isTesting: Boolean = sys.props.contains("spark.testing")
+  private[this] def isTesting: Boolean = sys.props.contains("spark.testing")//是否是测试
 
+  //参数记录select中的表达式集合,以及from表所有的属性集合
   protected def newProjection(
       expressions: Seq[Expression], inputSchema: Seq[Attribute]): Projection = {
     log.debug(
@@ -245,6 +251,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     }
   }
 
+  //易变的project,参数记录select中的表达式集合,以及from表所有的属性集合
   protected def newMutableProjection(
       expressions: Seq[Expression],
       inputSchema: Seq[Attribute]): () => MutableProjection = {
@@ -267,6 +274,8 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     }
   }
 
+  //给定一行数据,返回boolean
+  //参数是一个表达式,以及该表达式可能涉及到的from表的所有字段信息,将一行数据传给表达式,返回boolean
   protected def newPredicate(
       expression: Expression, inputSchema: Seq[Attribute]): (InternalRow) => Boolean = {
     if (codegenEnabled) {
@@ -286,6 +295,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     }
   }
 
+  //如何对一行数据进行排序
   protected def newOrdering(
       order: Seq[SortOrder],
       inputSchema: Seq[Attribute]): Ordering[InternalRow] = {
@@ -307,6 +317,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   }
   /**
    * Creates a row ordering for the given schema, in natural ascending order.
+   * 返回自然排序的结果
    */
   protected def newNaturalAscendingOrdering(dataTypes: Seq[DataType]): Ordering[InternalRow] = {
     val order: Seq[SortOrder] = dataTypes.zipWithIndex.map {

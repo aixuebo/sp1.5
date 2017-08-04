@@ -23,9 +23,12 @@ import org.apache.spark.sql.types._
 
 /**
  * An interpreted row ordering comparator.
+ * 如何对遗憾数据进行排序
+ * 参数是排序的字段规则集合
  */
 class InterpretedOrdering(ordering: Seq[SortOrder]) extends Ordering[InternalRow] {
 
+  //参数inputSchema 表示order可能需要的字段集合.inputSchema的字段来自于from表内所有的字段集合
   def this(ordering: Seq[SortOrder], inputSchema: Seq[Attribute]) =
     this(ordering.map(BindReferences.bindReference(_, inputSchema)))
 

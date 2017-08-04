@@ -150,9 +150,9 @@ class SQLContext(@transient val sparkContext: SparkContext)
   @transient
   protected[sql] lazy val analyzer: Analyzer =
     new Analyzer(catalog, functionRegistry, conf) {
-      override val extendedResolutionRules =
+      override val extendedResolutionRules = //扩展的规则
         ExtractPythonUDFs ::
-        PreInsertCastAndRename ::
+        PreInsertCastAndRename ::  //对insert into语法进行规则校验以及修复
         Nil
 
       override val extendedCheckRules = Seq(
@@ -475,26 +475,29 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
   /**
    * Applies a schema to an RDD of Java Beans.
-   *
+   * 将RDD中的一行数据,转换成java bean需要的数据格式
    * WARNING: Since there is no guaranteed ordering for fields in a Java Bean,
    *          SELECT * queries will return the columns in an undefined order.
+   * 因为不保证java bean中的属性的顺序行,因此select * 查询返回后的列集合是一个不知道顺序的列
    * @group dataframes
    * @since 1.3.0
+   * RDD的对象说明是一个javabean
    */
   def createDataFrame(rdd: RDD[_], beanClass: Class[_]): DataFrame = {
     val attributeSeq = getSchema(beanClass)
     val className = beanClass.getName
     val rowRdd = rdd.mapPartitions { iter =>
       // BeanInfo is not serializable so we must rediscover it remotely for each partition.
-      val localBeanInfo = Introspector.getBeanInfo(Utils.classForName(className))
+      val localBeanInfo = Introspector.getBeanInfo(Utils.classForName(className)) //本地的javabean对象
       val extractors =
-        localBeanInfo.getPropertyDescriptors.filterNot(_.getName == "class").map(_.getReadMethod)
-      val methodsToConverts = extractors.zip(attributeSeq).map { case (e, attr) =>
+        localBeanInfo.getPropertyDescriptors.filterNot(_.getName == "class").map(_.getReadMethod) //获取该bean的所有属性对应的get方法,比如name,获取的是getName对应的method
+      val methodsToConverts = extractors.zip(attributeSeq).map { case (e, attr) => //e表示bean内的方法.比如getName,attr表示的是属性对应的类型
         (e, CatalystTypeConverters.createToCatalystConverter(attr.dataType))
       }
       iter.map { row =>
         new GenericInternalRow(
-          methodsToConverts.map { case (e, convert) => convert(e.invoke(row)) }.toArray[Any]
+         //解释getName的method执行反射的invoke方法,传入一个对象row,此时的row就是一个javabean对象,获取name的真实属性值,然后将该值进行conver类型转换成具体的值
+          methodsToConverts.map { case (e, convert) => convert(e.invoke(row)) }.toArray[Any] //如何将一行数据内容,转暖换成class对应bean对象里面的数据类型
         ): InternalRow
       }
     }
@@ -865,6 +868,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
   /**
    * Prepares a planned SparkPlan for execution by inserting shuffle operations and internal
    * row format conversions as needed.
+   * 预先添加执行计划规则
    */
   @transient
   protected[sql] val prepareForExecution = new RuleExecutor[SparkPlan] {
@@ -912,9 +916,9 @@ class SQLContext(@transient val sparkContext: SparkContext)
    */
   @DeveloperApi
   protected[sql] class QueryExecution(val logical: LogicalPlan) {//参数对应的是逻辑执行计划
-    def assertAnalyzed(): Unit = analyzer.checkAnalysis(analyzed)
+    def assertAnalyzed(): Unit = analyzer.checkAnalysis(analyzed) //先对计划规则进行修改,然后对修改后的逻辑计划进行校验
 
-    lazy val analyzed: LogicalPlan = analyzer.execute(logical)
+    lazy val analyzed: LogicalPlan = analyzer.execute(logical) //对计划进行更改,按照一定规则进行更改计划,返回更改后的逻辑计划
     lazy val withCachedData: LogicalPlan = {
       assertAnalyzed()
       cacheManager.useCachedData(analyzed)
@@ -933,6 +937,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
     /** Internal version of the RDD. Avoids copies and has no schema */
     lazy val toRdd: RDD[InternalRow] = executedPlan.execute()
 
+    //返回String或者异常的String格式信息
     protected def stringOrError[A](f: => A): String =
       try f.toString catch { case e: Throwable => e.toString }
 

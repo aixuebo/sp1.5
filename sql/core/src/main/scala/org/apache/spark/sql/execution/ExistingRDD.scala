@@ -75,8 +75,8 @@ object RDDConversions {
 
 /** Logical plan node for scanning data from an RDD. */
 private[sql] case class LogicalRDD(
-    output: Seq[Attribute],
-    rdd: RDD[InternalRow])(sqlContext: SQLContext)
+    output: Seq[Attribute],//输出属性
+    rdd: RDD[InternalRow])(sqlContext: SQLContext) //RDD的一行一行数据,这数据可能是其他方式转换后的,总之就是一个一行一行的数据内容
   extends LogicalPlan with MultiInstanceRelation {
 
   override def children: Seq[LogicalPlan] = Nil

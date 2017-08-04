@@ -70,6 +70,7 @@ case class CreateTableUsing(
  * This node is a [[UnaryNode]] instead of a [[Command]] because we want the analyzer
  * can analyze the logical plan that will be used to populate the table.
  * So, [[PreWriteCheck]] can detect cases that are not allowed.
+ * CTAS方式创建的insert into sql,暂时不学习该方式
  */
 // TODO: Use TableIdentifier instead of String for tableName (SPARK-10104).
 case class CreateTableUsingAsSelect(

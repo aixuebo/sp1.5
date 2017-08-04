@@ -175,16 +175,17 @@ object Partitioning {
   //是否所有的Partitioning集合都是兼容的,true表示兼容
   def allCompatible(partitionings: Seq[Partitioning]): Boolean = {
     // Note: this assumes transitivity
-    partitionings.sliding(2).map {
-      case Seq(a) => true
-      case Seq(a, b) =>
+    //demo val nums = List(1,1,2,2,3,3,4,4)  输出nums.sliding(2).toList //List(List(1,1),List(1,2),List(2,2),List(2,3),List(3,3),List(3,4),List(4,4))
+    partitionings.sliding(2).map { //两个两个一组
+      case Seq(a) => true //说明partitionings集合只有一个元素
+      case Seq(a, b) => //说明partitionings集合有多余两个元素
         if (a.numPartitions != b.numPartitions) {//数量不同.一定返回false
           assert(!a.compatibleWith(b) && !b.compatibleWith(a))
           false
         } else {//数量相同也可以兼容
           a.compatibleWith(b) && b.compatibleWith(a)
         }
-    }.forall(_ == true)
+    }.forall(_ == true) //必须全都是true
   }
 }
 
@@ -213,6 +214,7 @@ case object SinglePartition extends Partitioning {
  * Represents a partitioning where rows are split up across partitions based on the hash
  * of `expressions`.  All rows where `expressions` evaluate to the same values are guaranteed to be
  * in the same partition.
+ * hash分区
  */
 case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
   extends Expression with Partitioning with Unevaluable {

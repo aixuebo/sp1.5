@@ -46,6 +46,7 @@ import org.apache.spark.sql.types.{StringType, IntegralType}
  * - always extend from the previous version unless really not possible
  * - initialize methods in lazy vals, both for quicker access for multiple invocations, and to
  *   avoid runtime errors due to the above guideline.
+ *   定义调用hive的class,获取hive元数据的接口Shim,以及每一个hive版本对应的实现类
  */
 private[client] sealed abstract class Shim {
 
@@ -103,6 +104,7 @@ private[client] sealed abstract class Shim {
 
   def dropIndex(hive: Hive, dbName: String, tableName: String, indexName: String): Unit
 
+  //说明调用的name一定是静态方法
   protected def findStaticMethod(klass: Class[_], name: String, args: Class[_]*): Method = {
     val method = findMethod(klass, name, args: _*)
     require(Modifier.isStatic(method.getModifiers()),
@@ -110,6 +112,7 @@ private[client] sealed abstract class Shim {
     method
   }
 
+  //找到class的一个方法,该方法有若干个参数,返回反射的该方法对象
   protected def findMethod(klass: Class[_], name: String, args: Class[_]*): Method = {
     klass.getMethod(name, args: _*)
   }
@@ -118,12 +121,13 @@ private[client] sealed abstract class Shim {
 
 private[client] class Shim_v0_12 extends Shim with Logging {
 
+  //找到start静态方法
   private lazy val startMethod =
     findStaticMethod(
       classOf[SessionState],
       "start",
       classOf[SessionState])
-  private lazy val getDataLocationMethod = findMethod(classOf[Table], "getDataLocation")
+  private lazy val getDataLocationMethod = findMethod(classOf[Table], "getDataLocation") //找到getDataLocation方法
   private lazy val setDataLocationMethod =
     findMethod(
       classOf[Table],
@@ -217,6 +221,7 @@ private[client] class Shim_v0_12 extends Shim with Logging {
   override def getCommandProcessor(token: String, conf: HiveConf): CommandProcessor =
     getCommandProcessorMethod.invoke(null, token, conf).asInstanceOf[CommandProcessor]
 
+  //获取driver的结果集
   override def getDriverResults(driver: Driver): Seq[String] = {
     val res = new JArrayList[String]()
     getDriverResultsMethod.invoke(driver, res)

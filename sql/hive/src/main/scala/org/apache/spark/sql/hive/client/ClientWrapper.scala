@@ -56,11 +56,12 @@ import org.apache.spark.util.{CircularBuffer, Utils}
  *                opening the hive client.
  * @param initClassLoader the classloader used when creating the `state` field of
  *                        this ClientWrapper.
+ * hive接口的一个实现类,可以获取hive的元数据信息
  */
 private[hive] class ClientWrapper(
-    override val version: HiveVersion,
-    config: Map[String, String],
-    initClassLoader: ClassLoader)
+    override val version: HiveVersion,//此时使用的hive版本
+    config: Map[String, String],//要覆盖hive的conf的配置信息集合
+    initClassLoader: ClassLoader)//加载的classLoader
   extends ClientInterface
   with Logging {
 
@@ -70,7 +71,7 @@ private[hive] class ClientWrapper(
   //
   // Internally, Hive `ShimLoader` tries to load different versions of Hadoop shims by checking
   // major version number gathered from Hadoop jar files:
-  //
+  // 内部,hive尝试加载不同的hadoop版本的shims接口,hadoop1使用Hadoop20SShims,hadoop2使用Hadoop23Shims
   // - For major version number 1, load `Hadoop20SShims`, where "20S" stands for Hadoop 0.20 with
   //   security.
   // - For major version number 2, load `Hadoop23Shims`, where "23" stands for Hadoop 0.23.
@@ -78,17 +79,19 @@ private[hive] class ClientWrapper(
   // However, APIs in Hadoop 2.0.x and 2.1.x versions were in flux due to historical reasons. It
   // turns out that Hadoop 2.0.x versions should also be used together with `Hadoop20SShims`, but
   // `Hadoop23Shims` is chosen because the major version number here is 2.
+  //因为历史原因,hadoop的2.0与2.1还不一样,2.0是与hadoop1的接口相似,因此如果是2.0的时候,我们要使用hadoop1
   //
   // To fix this issue, we try to inspect Hadoop version via `org.apache.hadoop.utils.VersionInfo`
   // and load `Hadoop20SShims` for Hadoop 1.x and 2.0.x versions.  If Hadoop version information is
   // not available, we decide whether to override the shims or not by checking for existence of a
   // probe method which doesn't exist in Hadoop 1.x or 2.0.x versions.
   private def overrideHadoopShims(): Unit = {
-    val hadoopVersion = VersionInfo.getVersion
+    val hadoopVersion = VersionInfo.getVersion //使用hadoop的版本
     val VersionPattern = """(\d+)\.(\d+).*""".r
 
+    //通过获取hadoop的版本去创建hadoop的api
     hadoopVersion match {
-      case null =>
+      case null => //说明没有hadoop版本信息
         logError("Failed to inspect Hadoop version")
 
         // Using "Path.getPathWithoutSchemeAndAuthority" as the probe method.
@@ -100,12 +103,12 @@ private[hive] class ClientWrapper(
           loadHadoop20SShims()
         }
 
-      case VersionPattern(majorVersion, minorVersion) =>
+      case VersionPattern(majorVersion, minorVersion) => //说明有hadoop版本信息
         logInfo(s"Inspected Hadoop version: $hadoopVersion")
 
         // Loads Hadoop20SShims for 1.x and 2.0.x versions
         val (major, minor) = (majorVersion.toInt, minorVersion.toInt)
-        if (major < 2 || (major == 2 && minor == 0)) {
+        if (major < 2 || (major == 2 && minor == 0)) {//因为历史原因,hadoop的2.0与2.1还不一样,2.0是与hadoop1的接口相似,因此如果是2.0的时候,我们要使用hadoop1
           loadHadoop20SShims()
         }
     }
@@ -115,6 +118,7 @@ private[hive] class ClientWrapper(
     logInfo(s"Loaded $loadedShimsClassName for Hadoop version $hadoopVersion")
   }
 
+  //hadoop1的接口
   private def loadHadoop20SShims(): Unit = {
     val hadoop20SShimsClassName = "org.apache.hadoop.hive.shims.Hadoop20SShims"
     logInfo(s"Loading Hadoop shims $hadoop20SShimsClassName")
@@ -133,8 +137,9 @@ private[hive] class ClientWrapper(
   }
 
   // Circular buffer to hold what hive prints to STDOUT and ERR.  Only printed when failures occur.
-  private val outputBuffer = new CircularBuffer()
+  private val outputBuffer = new CircularBuffer() //循环的buffer缓冲区
 
+  //根据hive版本,找到hive的元数据接口实现类,即如何知道hive如何获取元数据内容的
   private val shim = version match {
     case hive.v12 => new Shim_v0_12()
     case hive.v13 => new Shim_v0_13()
@@ -145,6 +150,7 @@ private[hive] class ClientWrapper(
   }
 
   // Create an internal session state for this ClientWrapper.
+  //创建一个SessionState对象
   val state = {
     val original = Thread.currentThread().getContextClassLoader
     // Switch to the initClassLoader.
@@ -159,7 +165,7 @@ private[hive] class ClientWrapper(
         // We call initialConf.setClassLoader(initClassLoader) at here to make
         // this action explicit.
         initialConf.setClassLoader(initClassLoader)
-        config.foreach { case (k, v) =>
+        config.foreach { case (k, v) => //覆盖配置信息
           if (k.toLowerCase.contains("password")) {
             logDebug(s"Hive Config: $k=xxx")
           } else {
@@ -182,8 +188,9 @@ private[hive] class ClientWrapper(
   }
 
   /** Returns the configuration for the current session. */
-  def conf: HiveConf = SessionState.get().getConf
+  def conf: HiveConf = SessionState.get().getConf //hive的SessionState对象
 
+  //获取hive的配置信息
   override def getConf(key: String, defaultValue: String): String = {
     conf.get(key, defaultValue)
   }
@@ -194,21 +201,22 @@ private[hive] class ClientWrapper(
   private var client = Hive.get(conf)
 
   // We use hive's conf for compatibility.
-  private val retryLimit = conf.getIntVar(HiveConf.ConfVars.METASTORETHRIFTFAILURERETRIES)
-  private val retryDelayMillis = shim.getMetastoreClientConnectRetryDelayMillis(conf)
+  private val retryLimit = conf.getIntVar(HiveConf.ConfVars.METASTORETHRIFTFAILURERETRIES) //尝试次数
+  private val retryDelayMillis = shim.getMetastoreClientConnectRetryDelayMillis(conf) //尝试时间间隔
 
   /**
    * Runs `f` with multiple retries in case the hive metastore is temporarily unreachable.
+   * 执行该f函数
    */
   private def retryLocked[A](f: => A): A = synchronized {
     // Hive sometimes retries internally, so set a deadline to avoid compounding delays.
-    val deadline = System.nanoTime + (retryLimit * retryDelayMillis * 1e6).toLong
-    var numTries = 0
+    val deadline = System.nanoTime + (retryLimit * retryDelayMillis * 1e6).toLong //最后时间点,到了该时间点,一定要结束
+    var numTries = 0 //尝试次数
     var caughtException: Exception = null
     do {
       numTries += 1
       try {
-        return f
+        return f //执行f函数
       } catch {
         case e: Exception if causedByThrift(e) =>
           caughtException = e
@@ -230,6 +238,7 @@ private[hive] class ClientWrapper(
     throw caughtException
   }
 
+  //产生thrift异常了
   private def causedByThrift(e: Throwable): Boolean = {
     var target = e
     while (target != null) {
@@ -244,9 +253,10 @@ private[hive] class ClientWrapper(
 
   /**
    * Runs `f` with ThreadLocal session state and classloaders configured for this version of hive.
+   * 执行f函数
    */
   private def withHiveState[A](f: => A): A = retryLocked {
-    val original = Thread.currentThread().getContextClassLoader
+    val original = Thread.currentThread().getContextClassLoader //原始的先保存
     // Set the thread local metastore client to the client associated with this ClientWrapper.
     Hive.set(client)
     // setCurrentSessionState will use the classLoader associated
@@ -259,6 +269,7 @@ private[hive] class ClientWrapper(
     ret
   }
 
+  //设置输出流
   def setOut(stream: PrintStream): Unit = withHiveState {
     state.out = stream
   }
@@ -285,6 +296,7 @@ private[hive] class ClientWrapper(
         true)
   }
 
+  //获取hive的元数据
   override def getDatabaseOption(name: String): Option[HiveDatabase] = withHiveState {
     Option(client.getDatabase(name)).map { d =>
       HiveDatabase(
@@ -407,7 +419,7 @@ private[hive] class ClientWrapper(
     val maxResults = 100000
     val results = runHive(sql, maxResults)
     // It is very confusing when you only get back some of the results...
-    if (results.size == maxResults) sys.error("RESULTS POSSIBLY TRUNCATED")
+    if (results.size == maxResults) sys.error("RESULTS POSSIBLY TRUNCATED") //说明数据行数可能被截断了
     results
   }
 
@@ -417,16 +429,16 @@ private[hive] class ClientWrapper(
    */
   protected def runHive(cmd: String, maxRows: Int = 1000): Seq[String] = withHiveState {
     logDebug(s"Running hiveql '$cmd'")
-    if (cmd.toLowerCase.startsWith("set")) { logDebug(s"Changing config: $cmd") }
+    if (cmd.toLowerCase.startsWith("set")) { logDebug(s"Changing config: $cmd") }//说明是set命令,打印日志
     try {
       val cmd_trimmed: String = cmd.trim()
-      val tokens: Array[String] = cmd_trimmed.split("\\s+")
+      val tokens: Array[String] = cmd_trimmed.split("\\s+") //按照空格拆分
       // The remainder of the command.
-      val cmd_1: String = cmd_trimmed.substring(tokens(0).length()).trim()
-      val proc = shim.getCommandProcessor(tokens(0), conf)
+      val cmd_1: String = cmd_trimmed.substring(tokens(0).length()).trim() //除了第0个命令外,剩余的命令
+      val proc = shim.getCommandProcessor(tokens(0), conf) //根据命令,返回hive的CommandProcessor对象
       proc match {
-        case driver: Driver =>
-          val response: CommandProcessorResponse = driver.run(cmd)
+        case driver: Driver => //说明是driver
+          val response: CommandProcessorResponse = driver.run(cmd) //执行sql,返回response
           // Throw an exception if there is an error in query processing.
           if (response.getResponseCode != 0) {
             driver.close()
@@ -444,7 +456,7 @@ private[hive] class ClientWrapper(
             state.out.println(tokens(0) + " " + cmd_1)
             // scalastyle:on println
           }
-          Seq(proc.run(cmd_1).getResponseCode.toString)
+          Seq(proc.run(cmd_1).getResponseCode.toString) //执行剩余的命令
       }
     } catch {
       case e: Exception =>
@@ -462,6 +474,7 @@ private[hive] class ClientWrapper(
     }
   }
 
+  //将本地的数据load到hive
   def loadPartition(
       loadPath: String,
       tableName: String,

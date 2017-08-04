@@ -34,20 +34,23 @@ import org.apache.spark.util.Utils
 import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.hive.HiveContext
 
-/** Factory for `IsolatedClientLoader` with specific versions of hive. */
+/** Factory for `IsolatedClientLoader` with specific versions of hive.
+  * 为给定的hive版本号,创建一个IsolatedClientLoader
+  **/
 private[hive] object IsolatedClientLoader {
   /**
    * Creates isolated Hive client loaders by downloading the requested version from maven.
+   * 从maven上下载一些jar包
    */
   def forVersion(
-      version: String,
-      config: Map[String, String] = Map.empty,
-      ivyPath: Option[String] = None,
+      version: String,//hive的版本号
+      config: Map[String, String] = Map.empty,//需要的配置信息
+      ivyPath: Option[String] = None,//本地maven仓库的资源位置
       sharedPrefixes: Seq[String] = Seq.empty,
       barrierPrefixes: Seq[String] = Seq.empty): IsolatedClientLoader = synchronized {
     val resolvedVersion = hiveVersion(version)
     val files = resolvedVersions.getOrElseUpdate(resolvedVersion,
-      downloadVersion(resolvedVersion, ivyPath))
+      downloadVersion(resolvedVersion, ivyPath)) //从缓存中获取该版本对应要加载的jar的url集合,如果第一次出现该hive版本,则下载jar包到本地,并且返回本地路径集合
     new IsolatedClientLoader(
       version = hiveVersion(version),
       execJars = files,
@@ -56,6 +59,7 @@ private[hive] object IsolatedClientLoader {
       barrierPrefixes = barrierPrefixes)
   }
 
+  //通过hive的版本字符串,转换成hive版本对象
   def hiveVersion(version: String): HiveVersion = version match {
     case "12" | "0.12" | "0.12.0" => hive.v12
     case "13" | "0.13" | "0.13.0" | "0.13.1" => hive.v13
@@ -65,28 +69,31 @@ private[hive] object IsolatedClientLoader {
     case "1.2" | "1.2.0" | "1.2.1" => hive.v1_2
   }
 
+  //下载hive版本需要的jar包---返回的就是下载到本地的jar包文件集合
   private def downloadVersion(version: HiveVersion, ivyPath: Option[String]): Seq[URL] = {
     val hiveArtifacts = version.extraDeps ++
       Seq("hive-metastore", "hive-exec", "hive-common", "hive-serde")
-        .map(a => s"org.apache.hive:$a:${version.fullVersion}") ++
+        .map(a => s"org.apache.hive:$a:${version.fullVersion}") ++ //追加hive的若干个需要的jar包,因为版本号也是已知的,因此可以有maven全路径
       Seq("com.google.guava:guava:14.0.1",
-        "org.apache.hadoop:hadoop-client:2.4.0")
+        "org.apache.hadoop:hadoop-client:2.4.0") //追加hadoop和google的包
 
+    //真正从maven上去下载jar包到本地
     val classpath = quietly {
       SparkSubmitUtils.resolveMavenCoordinates(
         hiveArtifacts.mkString(","),
         Some("http://www.datanucleus.org/downloads/maven2"),
         ivyPath,
-        exclusions = version.exclusions)
+        exclusions = version.exclusions)//不下载该jar包
     }
-    val allFiles = classpath.split(",").map(new File(_)).toSet
+    val allFiles = classpath.split(",").map(new File(_)).toSet //获取所有的文件集合
 
     // TODO: Remove copy logic.
-    val tempDir = Utils.createTempDir(namePrefix = s"hive-${version}")
-    allFiles.foreach(f => FileUtils.copyFileToDirectory(f, tempDir))
-    tempDir.listFiles().map(_.toURI.toURL)
+    val tempDir = Utils.createTempDir(namePrefix = s"hive-${version}")//为hive的版本号创建一个临时文件夹
+    allFiles.foreach(f => FileUtils.copyFileToDirectory(f, tempDir))//将maven下载的所有文件copy到该临时文件夹下
+    tempDir.listFiles().map(_.toURI.toURL) //返回本地的临时文件的内容集合
   }
 
+  //缓存,为每一个hive的版本,缓存要从maven上加载哪些jar集合
   private def resolvedVersions = new scala.collection.mutable.HashMap[HiveVersion, Seq[URL]]
 }
 
@@ -103,17 +110,18 @@ private[hive] object IsolatedClientLoader {
  *
  * @param version The version of hive on the classpath.  used to pick specific function signatures
  *                that are not compatible across versions.
- * @param execJars A collection of jar files that must include hive and hadoop.
- * @param config   A set of options that will be added to the HiveConf of the constructed client.
+ * @param execJars A collection of jar files that must include hive and hadoop. 执行hive的jar包集合
+ * @param config   A set of options that will be added to the HiveConf of the constructed client.将要添加到HiveConf上的配置信息
  * @param isolationOn When true, custom versions of barrier classes will be constructed.  Must be
  *                    true unless loading the version of hive that is on Sparks classloader.
  * @param rootClassLoader The system root classloader. Must not know about Hive classes.
  * @param baseClassLoader The spark classloader that is used to load shared classes.
+ * 为不同版本创建一个hive的实例对象
  */
 private[hive] class IsolatedClientLoader(
-    val version: HiveVersion,
-    val execJars: Seq[URL] = Seq.empty,
-    val config: Map[String, String] = Map.empty,
+    val version: HiveVersion,//当前使用的hive的版本号
+    val execJars: Seq[URL] = Seq.empty,//执行hive的jar包集合
+    val config: Map[String, String] = Map.empty,//将要添加到HiveConf上的配置信息
     val isolationOn: Boolean = true,
     val rootClassLoader: ClassLoader = ClassLoader.getSystemClassLoader.getParent.getParent,
     val baseClassLoader: ClassLoader = Thread.currentThread().getContextClassLoader,
@@ -121,7 +129,7 @@ private[hive] class IsolatedClientLoader(
     val barrierPrefixes: Seq[String] = Seq.empty)
   extends Logging {
 
-  // Check to make sure that the root classloader does not know about Hive.
+  // Check to make sure that the root classloader does not know about Hive.必须确保root不能知道hive
   assert(Try(rootClassLoader.loadClass("org.apache.hadoop.hive.conf.HiveConf")).isFailure)
 
   /** All jars used by the hive specific classloader. */
@@ -147,7 +155,7 @@ private[hive] class IsolatedClientLoader(
     name.replaceAll("\\.", "/") + ".class"
 
   /** The classloader that is used to load an isolated version of Hive. */
-  protected val classLoader: ClassLoader = new URLClassLoader(allJars, rootClassLoader) {
+  protected val classLoader: ClassLoader = new URLClassLoader(allJars, rootClassLoader) {//使用rootClassLoader类加载器加载这些jar文件
     override def loadClass(name: String, resolve: Boolean): Class[_] = {
       val loaded = findLoadedClass(name)
       if (loaded == null) doLoadClass(name, resolve) else loaded
@@ -179,7 +187,7 @@ private[hive] class IsolatedClientLoader(
   val client: ClientInterface = try {
     classLoader
       .loadClass(classOf[ClientWrapper].getName)
-      .getConstructors.head
+      .getConstructors.head //找到第一个构造函数
       .newInstance(version, config, classLoader)
       .asInstanceOf[ClientInterface]
   } catch {
