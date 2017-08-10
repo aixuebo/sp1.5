@@ -33,14 +33,14 @@ import org.apache.spark.sql.{Row, SQLContext}
 @DeveloperApi
 object RDDConversions {
   def productToRowRdd[A <: Product](data: RDD[A], outputTypes: Seq[DataType]): RDD[InternalRow] = {
-    data.mapPartitions { iterator =>
-      val numColumns = outputTypes.length
-      val mutableRow = new GenericMutableRow(numColumns)
-      val converters = outputTypes.map(CatalystTypeConverters.createToCatalystConverter)
-      iterator.map { r =>
+    data.mapPartitions { iterator => //循环每一个RDD的分区
+      val numColumns = outputTypes.length //rdd的列的schema集合
+      val mutableRow = new GenericMutableRow(numColumns) //每一行需要有这些个参数
+      val converters = outputTypes.map(CatalystTypeConverters.createToCatalystConverter) //如何转换每一个输出的schema值
+      iterator.map { r => //循环rdd的每一行数据
         var i = 0
         while (i < numColumns) {
-          mutableRow(i) = converters(i)(r.productElement(i))
+          mutableRow(i) = converters(i)(r.productElement(i)) //获取每一列的属性值
           i += 1
         }
 
@@ -73,7 +73,9 @@ object RDDConversions {
   }
 }
 
-/** Logical plan node for scanning data from an RDD. */
+/** Logical plan node for scanning data from an RDD.
+  * 该逻辑计划是扫描一个RDD对象
+  **/
 private[sql] case class LogicalRDD(
     output: Seq[Attribute],//输出属性
     rdd: RDD[InternalRow])(sqlContext: SQLContext) //RDD的一行一行数据,这数据可能是其他方式转换后的,总之就是一个一行一行的数据内容

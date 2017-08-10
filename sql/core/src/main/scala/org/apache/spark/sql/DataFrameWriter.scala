@@ -32,9 +32,13 @@ import org.apache.spark.sql.sources.HadoopFsRelation
  * :: Experimental ::
  * Interface used to write a [[DataFrame]] to external storage systems (e.g. file systems,
  * key-value stores, etc). Use [[DataFrame.write]] to access this.
- *
+ * 一个接口,将DataFrame的数据内容,输出到外部存储系统中
  * @since 1.4.0
  * 内部维护了一个DF,说明该类是针对一个DF进一步的处理,主要用于写数据的处理
+ *
+ * 1.写出方式:追加还是覆盖等
+ * 2.最终文件的输出格式,json还是orc还是parquet等
+ * 3.一个map表示需要配置的额外属性key=value,比如path 即输出的文件路径
  */
 @Experimental
 final class DataFrameWriter private[sql](df: DataFrame) {
@@ -76,7 +80,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
 
   /**
    * Specifies the underlying output data source. Built-in options include "parquet", "json", etc.
-   *
+   * 最终文件的输出格式,json还是orc还是parquet等
    * @since 1.4.0
    */
   def format(source: String): DataFrameWriter = {
@@ -130,7 +134,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
 
   /**
    * Saves the content of the [[DataFrame]] at the specified path.
-   *
+   * 将数据保存在path下
    * @since 1.4.0
    */
   def save(path: String): Unit = {

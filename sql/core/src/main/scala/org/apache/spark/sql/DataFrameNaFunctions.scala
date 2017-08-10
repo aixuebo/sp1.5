@@ -132,7 +132,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
     // only keep the row if it has at least `minNonNulls` non-null and non-NaN values.
     //创建过滤的表达式,表达式至少有多少个非null,非Nan的数据,我们就要这行数据
     val predicate = AtLeastNNonNulls(minNonNulls, cols.map(name => df.resolve(name)))
-    df.filter(Column(predicate)) //对原有数据进行过滤
+    df.filter(Column(predicate)) //对原有数据进行过滤,filter要求的是列中的表达式是boolean返回值的即可
   }
 
   /**

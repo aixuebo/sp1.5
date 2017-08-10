@@ -869,6 +869,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    *
    * @group expr_ops
    * @since 1.3.0
+   * 对表达式进行排序操作
    */
   def desc: Column = SortOrder(expr, Descending)
 
@@ -884,6 +885,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    *
    * @group expr_ops
    * @since 1.3.0
+   * 对表达式进行排序操作
    */
   def asc: Column = SortOrder(expr, Ascending)
 

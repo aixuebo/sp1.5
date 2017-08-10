@@ -280,6 +280,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) with Logging {
     super.parseSql(substitutor.substitute(hiveconf, sql))
   }
 
+  //真正执行一个计划
   override protected[sql] def executePlan(plan: LogicalPlan): this.QueryExecution =
     new this.QueryExecution(plan)
 

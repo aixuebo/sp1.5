@@ -200,6 +200,7 @@ private[hive] object HiveQl extends Logging {
 
     /**
      * Returns a scala.Seq equivalent to [s] or Nil if [s] is null.
+     * 将java的List转换成scala的Seq,如果s是null,则返回scala的Nil,他也是一个Seq
      */
     private def nilIfEmpty[A](s: java.util.List[A]): Seq[A] =
       Option(s).map(_.toSeq).getOrElse(Nil)

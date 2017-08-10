@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.CatalystConf
 
 private[spark] object SQLConf {
 
+  //多线程共享一个map,key就是正常的SQLConfEntry中的key属性,value是SQLConfEntry对象
   private val sqlConfEntries = java.util.Collections.synchronizedMap(
     new java.util.HashMap[String, SQLConfEntry[_]]())
 
@@ -61,15 +62,16 @@ private[spark] object SQLConf {
       val doc: String,
       val isPublic: Boolean) {
 
-    def defaultValueString: String = defaultValue.map(stringConverter).getOrElse("<undefined>")
+    def defaultValueString: String = defaultValue.map(stringConverter).getOrElse("<undefined>") //如何酱默认值T对象转换成字符串
 
-    override def toString: String = {
+    override def toString: String = {//默认值相同就可以
       s"SQLConfEntry(key = $key, defaultValue=$defaultValueString, doc=$doc, isPublic = $isPublic)"
     }
   }
 
   private[sql] object SQLConfEntry {
 
+    //转换成一个实体对象
     private def apply[T](
           key: String,
           defaultValue: Option[T],
@@ -78,7 +80,7 @@ private[spark] object SQLConf {
           doc: String,
           isPublic: Boolean): SQLConfEntry[T] =
       sqlConfEntries.synchronized {
-        if (sqlConfEntries.containsKey(key)) {
+        if (sqlConfEntries.containsKey(key)) {//说明已经存在了
           throw new IllegalArgumentException(s"Duplicate SQLConfEntry. $key has been registered")
         }
         val entry =
@@ -87,17 +89,18 @@ private[spark] object SQLConf {
         entry
       }
 
+    //转换成一个int对象
     def intConf(
           key: String,
-          defaultValue: Option[Int] = None,
-          doc: String = "",
+          defaultValue: Option[Int] = None,//int的默认值
+          doc: String = "",//文档说明
           isPublic: Boolean = true): SQLConfEntry[Int] =
-      SQLConfEntry(key, defaultValue, { v =>
+      SQLConfEntry(key, defaultValue, { v => //说明如何将一个字符串转换成int
         try {
           v.toInt
         } catch {
           case _: NumberFormatException =>
-            throw new IllegalArgumentException(s"$key should be int, but was $v")
+            throw new IllegalArgumentException(s"$key should be int, but was $v") //说明转换失败
         }
       }, _.toString, doc, isPublic)
 
@@ -143,45 +146,52 @@ private[spark] object SQLConf {
         }
       }, _.toString, doc, isPublic)
 
+    //存储的本身就是String
     def stringConf(
         key: String,
         defaultValue: Option[String] = None,
         doc: String = "",
         isPublic: Boolean = true): SQLConfEntry[String] =
-      SQLConfEntry(key, defaultValue, v => v, v => v, doc, isPublic)
+      SQLConfEntry(key, defaultValue, v => v, v => v, doc, isPublic) //因为存储的就是String,因此无论怎么转换都是v=>v
 
+    //存储一个枚举类型
     def enumConf[T](
         key: String,
-        valueConverter: String => T,
-        validValues: Set[T],
-        defaultValue: Option[T] = None,
+        valueConverter: String => T,//如何将一个字符串转换成枚举类型
+        validValues: Set[T],//有效的枚举类型集合
+        defaultValue: Option[T] = None,//默认的枚举类型
         doc: String = "",
         isPublic: Boolean = true): SQLConfEntry[T] =
-      SQLConfEntry(key, defaultValue, v => {
-        val _v = valueConverter(v)
-        if (!validValues.contains(_v)) {
+      SQLConfEntry(key, defaultValue, v => {//字符串如何转换成枚举对象
+        val _v = valueConverter(v)//先进行转换
+        if (!validValues.contains(_v)) {//校验合法性
           throw new IllegalArgumentException(
             s"The value of $key should be one of ${validValues.mkString(", ")}, but was $v")
         }
         _v
-      }, _.toString, doc, isPublic)
+      }, _.toString,//枚举类型如何转换成String
+        doc, isPublic)
 
+    //value是一个List<T>类型的数据,字符串的集合使用逗号作为拆分符号
     def seqConf[T](
         key: String,
-        valueConverter: String => T,
+        valueConverter: String => T,//如何将String转换成T---即如何将一个字符串转换成T对象,而T就是List中的一个元素
         defaultValue: Option[Seq[T]] = None,
         doc: String = "",
         isPublic: Boolean = true): SQLConfEntry[Seq[T]] = {
       SQLConfEntry(
-        key, defaultValue, _.split(",").map(valueConverter), _.mkString(","), doc, isPublic)
+        key, defaultValue, _.split(",").map(valueConverter),//将内容按照逗号拆分成数组,.然后每一个字符串如何转换成T,因此就是List<T>
+        _.mkString(","), doc, isPublic)
     }
 
+    //value是一个List<String>
     def stringSeqConf(
         key: String,
         defaultValue: Option[Seq[String]] = None,
         doc: String = "",
         isPublic: Boolean = true): SQLConfEntry[Seq[String]] = {
-      seqConf(key, s => s, defaultValue, doc, isPublic)
+      seqConf(key, s => s,//如何将字符串转换成字符串
+        defaultValue, doc, isPublic)
     }
   }
 
@@ -532,7 +542,9 @@ private[sql] class SQLConf extends Serializable with CatalystConf {
 
   /** ********************** SQLConf functionality methods ************ */
 
-  /** Set Spark SQL configuration properties. */
+  /** Set Spark SQL configuration properties.
+    * 将参数Properties中的配置信息,设置到全局内存中
+    **/
   def setConf(props: Properties): Unit = settings.synchronized {
     props.foreach { case (k, v) => setConfString(k, v) }
   }
@@ -616,14 +628,17 @@ private[sql] class SQLConf extends Serializable with CatalystConf {
     }.toSeq
   }
 
+  //删除一个属性
   private[spark] def unsetConf(key: String): Unit = {
     settings -= key
   }
 
+  //删除一个属性
   private[spark] def unsetConf(entry: SQLConfEntry[_]): Unit = {
     settings -= entry.key
   }
 
+  //清空所有属性
   private[spark] def clear(): Unit = {
     settings.clear()
   }

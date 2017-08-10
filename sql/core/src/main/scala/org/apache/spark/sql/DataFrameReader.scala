@@ -36,8 +36,15 @@ import org.apache.spark.{Logging, Partition}
  * :: Experimental ::
  * Interface used to load a [[DataFrame]] from external storage systems (e.g. file systems,
  * key-value stores, etc). Use [[SQLContext.read]] to access this.
- *
+ * 一个接口,可以从外部存储系统中读取DataFrame的数据,
  * @since 1.4.0
+ *
+ * 需要条件
+ * 1.数据类型格式,是json还是orc等
+ * 2.每行数据存储的schema,即字段name以及数据类型
+ * 3.一个map,存储额外的配置key=value的信息,比如文件存储路径path
+ * 4.load方法去真正加载该数据,变成DataFrame
+ *   jdbc查询数据库,创建DataFrame
  */
 @Experimental
 class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
@@ -111,6 +118,7 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    * key-value stores).
    * 加载数据,比如加载json数据
    * @since 1.4.0
+   * load方法去真正加载该数据,变成DataFrame
    */
   def load(): DataFrame = {
     val resolved = ResolvedDataSource(

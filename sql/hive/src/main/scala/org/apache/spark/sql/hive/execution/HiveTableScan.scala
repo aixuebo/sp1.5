@@ -35,21 +35,21 @@ import org.apache.spark.sql.types.{BooleanType, DataType}
 
 /**
  * The Hive table scan operator.  Column and partition pruning are both handled.
- *
- * @param requestedAttributes Attributes to be fetched from the Hive table.
- * @param relation The Hive table be be scanned.
- * @param partitionPruningPred An optional partition pruning predicate for partitioned table.
+ * 扫描hive的一个表操作
+ * @param requestedAttributes Attributes to be fetched from the Hive table.从hive表中要抓去哪些属性集合
+ * @param relation The Hive table be be scanned.要扫描的hive表对象
+ * @param partitionPruningPred An optional partition pruning predicate for partitioned table.分区信息
  */
 private[hive]
 case class HiveTableScan(
-    requestedAttributes: Seq[Attribute],
-    relation: MetastoreRelation,
-    partitionPruningPred: Seq[Expression])(
+    requestedAttributes: Seq[Attribute],//要输出的属性集合
+    relation: MetastoreRelation,//该对象有hive的table元数据信息
+    partitionPruningPred: Seq[Expression])(//要扫描的分区表达式
     @transient val context: HiveContext)
   extends LeafNode {
 
-  require(partitionPruningPred.isEmpty || relation.hiveQlTable.isPartitioned,
-    "Partition pruning predicates only supported for partitioned tables.")
+  require(partitionPruningPred.isEmpty || relation.hiveQlTable.isPartitioned,//说明该table在hive中是分区表
+    "Partition pruning predicates only supported for partitioned tables.") //说明如果分区表属性有内容,则该表一定是分区表
 
   // Retrieve the original attributes based on expression ID so that capitalization matches.
   val attributes = requestedAttributes.map(relation.attributeMap)
@@ -66,6 +66,7 @@ case class HiveTableScan(
 
   // Create a local copy of hiveconf,so that scan specific modifications should not impact
   // other queries
+  //配置hive的配置文件
   @transient
   private[this] val hiveExtraConf = new HiveConf(context.hiveconf)
 

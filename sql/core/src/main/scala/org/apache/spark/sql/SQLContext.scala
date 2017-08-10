@@ -357,11 +357,12 @@ class SQLContext(@transient val sparkContext: SparkContext)
    *
    * @group dataframes
    * @since 1.3.0
+   * 逻辑计划就是RDD
    */
   @Experimental
   def createDataFrame[A <: Product : TypeTag](rdd: RDD[A]): DataFrame = {
     SparkPlan.currentContext.set(self)
-    val schema = ScalaReflection.schemaFor[A].dataType.asInstanceOf[StructType]
+    val schema = ScalaReflection.schemaFor[A].dataType.asInstanceOf[StructType] //schema就是反射A对象的属性
     val attributeSeq = schema.toAttributes
     val rowRDD = RDDConversions.productToRowRdd(rdd, schema.map(_.dataType))
     DataFrame(self, LogicalRDD(attributeSeq, rowRDD)(self))
@@ -373,6 +374,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    *
    * @group dataframes
    * @since 1.3.0
+   * 逻辑计划就是静态的集合数据
    */
   @Experimental
   def createDataFrame[A <: Product : TypeTag](data: Seq[A]): DataFrame = {
@@ -450,6 +452,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
   /**
    * Creates a DataFrame from an RDD[Row]. User can specify whether the input rows should be
    * converted to Catalyst rows.
+   * 记录该RDD以及 RDD对应的列的类型,创建一个DataFrame对象
    */
   private[sql]
   def internalCreateDataFrame(catalystRows: RDD[InternalRow], schema: StructType) = {

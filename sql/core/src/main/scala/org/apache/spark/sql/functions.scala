@@ -182,7 +182,7 @@ object functions {
   def count(e: Column): Column = e.expr match {
     // Turn count(*) into count(1)
     case s: Star => Count(Literal(1))
-    case _ => Count(e.expr)
+    case _ => Count(e.expr)//表达式可以是distinct表达式
   }
 
   /**
