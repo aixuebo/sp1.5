@@ -347,6 +347,7 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
    * and convert them.
    */
   protected[sql] def selectFilters(filters: Seq[Expression]) = {
+    //每一个表达式如何处理
     def translate(predicate: Expression): Option[Filter] = predicate match {
       case expressions.EqualTo(a: Attribute, Literal(v, t)) =>
         Some(sources.EqualTo(a.name, convertToScala(v, t)))
