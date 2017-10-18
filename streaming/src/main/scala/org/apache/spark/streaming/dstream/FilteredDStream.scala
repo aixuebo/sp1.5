@@ -21,10 +21,11 @@ import org.apache.spark.streaming.{Duration, Time}
 import org.apache.spark.rdd.RDD
 import scala.reflect.ClassTag
 
+//过滤器流,在父类的stream执行后,对结果进一步过滤,只要满足过滤结果的数据
 private[streaming]
 class FilteredDStream[T: ClassTag](
     parent: DStream[T],
-    filterFunc: T => Boolean
+    filterFunc: T => Boolean //过滤方法
   ) extends DStream[T](parent.ssc) {
 
   override def dependencies: List[DStream[_]] = List(parent)
@@ -32,7 +33,8 @@ class FilteredDStream[T: ClassTag](
   override def slideDuration: Duration = parent.slideDuration
 
   override def compute(validTime: Time): Option[RDD[T]] = {
-    parent.getOrCompute(validTime).map(_.filter(filterFunc))
+    parent.getOrCompute(validTime)//执行父类本应该执行的流
+      .map(_.filter(filterFunc))//对流进一步过滤
   }
 }
 

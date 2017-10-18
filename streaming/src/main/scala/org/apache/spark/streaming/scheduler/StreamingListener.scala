@@ -25,6 +25,7 @@ import org.apache.spark.annotation.DeveloperApi
 /**
  * :: DeveloperApi ::
  * Base trait for events related to StreamingListener
+ * 定义事件
  */
 @DeveloperApi
 sealed trait StreamingListenerEvent
@@ -54,6 +55,7 @@ case class StreamingListenerReceiverError(receiverInfo: ReceiverInfo)
  * :: DeveloperApi ::
  * A listener interface for receiving information about an ongoing streaming
  * computation.
+ * 定义监听过程,当特定事件发生的时候,调用不同的过程
  */
 @DeveloperApi
 trait StreamingListener {
@@ -82,6 +84,7 @@ trait StreamingListener {
  * :: DeveloperApi ::
  * A simple StreamingListener that logs summary statistics across Spark Streaming batches
  * @param numBatchInfos Number of last batches to consider for generating statistics (default: 10)
+ * 简单的实现,记录一些统计信息
  */
 @DeveloperApi
 class StatsReportListener(numBatchInfos: Int = 10) extends StreamingListener {

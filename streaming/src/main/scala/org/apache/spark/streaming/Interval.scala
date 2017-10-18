@@ -17,11 +17,12 @@
 
 package org.apache.spark.streaming
 
+//参数表示开始--结束时间
 private[streaming]
 class Interval(val beginTime: Time, val endTime: Time) {
   def this(beginMs: Long, endMs: Long) = this(new Time(beginMs), new Time(endMs))
 
-  def duration(): Duration = endTime - beginTime
+  def duration(): Duration = endTime - beginTime //时间间隔
 
   def + (time: Duration): Interval = {
     new Interval(beginTime + time, endTime + time)

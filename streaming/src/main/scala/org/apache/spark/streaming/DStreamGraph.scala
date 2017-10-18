@@ -66,6 +66,7 @@ final private[streaming] class DStreamGraph extends Serializable with Logging {
     }
   }
 
+  //设置周期
   def setBatchDuration(duration: Duration) {
     this.synchronized {
       if (batchDuration != null) {

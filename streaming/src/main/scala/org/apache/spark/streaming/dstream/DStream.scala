@@ -67,13 +67,13 @@ abstract class DStream[T: ClassTag] ( //T可以是元组(KEY,VALUE)   简单的�
   // Methods that should be implemented by subclasses of DStream
   // =======================================================================
 
-  /** Time interval after which the DStream generates a RDD */
+  /** Time interval after which the DStream generates a RDD 多久产生一个RDD*/
   def slideDuration: Duration
 
-  /** List of parent DStreams on which this DStream depends on */
+  /** List of parent DStreams on which this DStream depends on 该Stream依赖哪些Stream*/
   def dependencies: List[DStream[_]]
 
-  /** Method that generates a RDD for the given time */
+  /** Method that generates a RDD for the given time 真正去计算产生一个RDD*/
   def compute(validTime: Time): Option[RDD[T]]
 
   // =======================================================================
@@ -89,7 +89,7 @@ abstract class DStream[T: ClassTag] ( //T可以是元组(KEY,VALUE)   简单的�
   private[streaming] var zeroTime: Time = null
 
   // Duration for which the DStream will remember each RDD created
-  //记忆周期,保留这些周期内的数据
+  //记忆周期,保留这些周期内的数据--即周期内的RDD是被保留的
   private[streaming] var rememberDuration: Duration = null
 
   // Storage level of the RDDs in the stream
@@ -340,6 +340,7 @@ abstract class DStream[T: ClassTag] ( //T可以是元组(KEY,VALUE)   简单的�
   /**
    * Get the RDD corresponding to the given time; either retrieve it from cache
    * or compute-and-cache it.
+   * 为给定时间创建一个RDD,或者返回以前存在的RDD
    */
   private[streaming] final def getOrCompute(time: Time): Option[RDD[T]] = {
     // If RDD was already generated, then retrieve it from HashMap,
@@ -351,13 +352,13 @@ abstract class DStream[T: ClassTag] ( //T可以是元组(KEY,VALUE)   简单的�
       //如果此时时间点是有效的(即时间点是周期的整数倍),则计算RDD
       if (isTimeValid(time)) {//说明时间有效
 
-        val rddOption = createRDDWithLocalProperties(time) {
+        val rddOption = createRDDWithLocalProperties(time) {//在scope范围内执行body内容
           // Disable checks for existing output directories in jobs launched by the streaming
           // scheduler, since we may need to write output to an existing directory during checkpoint
           // recovery; see SPARK-4835 for more details. We need to have this call here because
           // compute() might cause Spark jobs to be launched.
           PairRDDFunctions.disableOutputSpecValidation.withValue(true) {
-            compute(time)
+            compute(time)//返回compute方法的结果集
           }
         }
 
@@ -366,7 +367,7 @@ abstract class DStream[T: ClassTag] ( //T可以是元组(KEY,VALUE)   简单的�
           // Register the generated RDD for caching and checkpointing
           if (storageLevel != StorageLevel.NONE) {
             newRDD.persist(storageLevel)
-            logDebug(s"Persisting RDD ${newRDD.id} for time $time to $storageLevel")
+            logDebug(s"Persisting RDD ${newRDD.id} for time $time to $storageLevel")//记录结果已经被persist成功处理
           }
           if (checkpointDuration != null && (time - zeroTime).isMultipleOf(checkpointDuration)) {//说明此时是checkpoint的周期的倍数,则进行checkpoint操作
             newRDD.checkpoint()
@@ -426,6 +427,7 @@ abstract class DStream[T: ClassTag] ( //T可以是元组(KEY,VALUE)   简单的�
    * 创建一个给定时间点的job任务,这个是内部方法,属于默认的实现,因此是空实现,没有什么意义,有意义的需要被子类去实现该generateJob方法,比如ForEachDStream
    */
   private[streaming] def generateJob(time: Time): Option[Job] = {
+    //执行compute方法
     getOrCompute(time) match { //虽然什么都不做默认,但是getOrCompute方法会收集RDD,并且存储在内部中,所谓的什么都不做,只是说此时不对RDD进行任何处理而已
       case Some(rdd) => {//说明有RDD存在
         val jobFunc = () => {
@@ -451,7 +453,7 @@ abstract class DStream[T: ClassTag] ( //T可以是元组(KEY,VALUE)   简单的�
     logDebug("Clearing references to old RDDs: [" +
       oldRDDs.map(x => s"${x._1} -> ${x._2.id}").mkString(", ") + "]") //打印日志.说明要清理的是哪个时间点产生的哪个RDD
     generatedRDDs --= oldRDDs.keys //内存移除这些老的RDD映射关系
-    if (unpersistData) {
+    if (unpersistData) {//说明删除磁盘上的数据
       logDebug("Unpersisting old RDDs: " + oldRDDs.values.map(_.id).mkString(", "))
       //对每一个老的RDD也要删除
       oldRDDs.values.foreach { rdd =>
@@ -467,7 +469,7 @@ abstract class DStream[T: ClassTag] ( //T可以是元组(KEY,VALUE)   简单的�
     }
     logDebug("Cleared " + oldRDDs.size + " RDDs that were older than " +
       (time - rememberDuration) + ": " + oldRDDs.keys.mkString(", "))
-    dependencies.foreach(_.clearMetadata(time))
+    dependencies.foreach(_.clearMetadata(time))//对依赖的RDD进一步清理
   }
 
   /**
@@ -476,6 +478,7 @@ abstract class DStream[T: ClassTag] ( //T可以是元组(KEY,VALUE)   简单的�
    * a default implementation that saves only the file names of the checkpointed RDDs to
    * checkpointData. Subclasses of DStream (especially those of InputDStream) may override
    * this method to save custom checkpoint data.
+   * 做一个快照
    */
   private[streaming] def updateCheckpointData(currentTime: Time) {
     logDebug("Updating checkpoint data for time " + currentTime)
@@ -496,6 +499,7 @@ abstract class DStream[T: ClassTag] ( //T可以是元组(KEY,VALUE)   简单的�
    * that should not be called directly. This is a default implementation that recreates RDDs
    * from the checkpoint file names stored in checkpointData. Subclasses of DStream that
    * override the updateCheckpointData() method would also need to override this method.
+   * 从快照中还原数据
    */
   private[streaming] def restoreCheckpointData() {
     // Create RDDs from the checkpoint data

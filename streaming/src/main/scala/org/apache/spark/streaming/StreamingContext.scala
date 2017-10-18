@@ -169,6 +169,7 @@ class StreamingContext private[streaming] (
 
   private val nextInputStreamId = new AtomicInteger(0) //数据流的序号
 
+  //返回checkpoint的目录
   private[streaming] var checkpointDir: String = {
     if (isCheckpointPresent) {//已经存在checkpoint点
       sc.setCheckpointDir(cp_.checkpointDir)
@@ -850,6 +851,7 @@ object StreamingContext extends Logging {
   /**
    * Find the JAR from which a given class was loaded, to make it easy for users to pass
    * their JARs to StreamingContext.
+   * 从给定的class找到对应的jar包
    */
   def jarOfClass(cls: Class[_]): Option[String] = SparkContext.jarOfClass(cls)
 

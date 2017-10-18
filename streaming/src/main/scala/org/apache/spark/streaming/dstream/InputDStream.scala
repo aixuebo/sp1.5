@@ -46,18 +46,20 @@ import org.apache.spark.util.Utils
  * 实现input streams运行在work节点,则使用ReceiverInputDStream类
  *
  * @param ssc_ Streaming context that will execute this input stream
+ *
+ * 泛型T可以是元组(K,V)形式
  */
 abstract class InputDStream[T: ClassTag] (@transient ssc_ : StreamingContext)
   extends DStream[T](ssc_) {
 
   private[streaming] var lastValidTime: Time = null
 
-  ssc.graph.addInputStream(this)
+  ssc.graph.addInputStream(this) //将该stream添加到上下文里面
 
-  /** This is an unique identifier for the input stream. */
+  /** This is an unique identifier for the input stream. 产生一个唯一的ID的stream流*/
   val id = ssc.getNewInputStreamId()
 
-  // Keep track of the freshest rate for this stream using the rateEstimator
+  // Keep track of the freshest rate for this stream using the rateEstimator 流量控制器
   protected[streaming] val rateController: Option[RateController] = None
 
   /** A human-readable name of this InputDStream
@@ -95,9 +97,11 @@ abstract class InputDStream[T: ClassTag] (@transient ssc_ : StreamingContext)
    * times.
    */
   override private[streaming] def isTimeValid(time: Time): Boolean = {
-    if (!super.isTimeValid(time)) {
+    if (!super.isTimeValid(time)) {//说明没有效
       false // Time not valid
     } else {
+      //此时说明父类对时间是有效的
+      //但是我们也要进步一校验
       // Time is valid, but check it it is more than lastValidTime
       if (lastValidTime != null && time < lastValidTime) {
         logWarning("isTimeValid called with " + time + " where as last valid time is " +
@@ -108,6 +112,7 @@ abstract class InputDStream[T: ClassTag] (@transient ssc_ : StreamingContext)
     }
   }
 
+  //依赖哪些Stream
   override def dependencies: List[DStream[_]] = List()
 
   //多久返回一个job任务集合

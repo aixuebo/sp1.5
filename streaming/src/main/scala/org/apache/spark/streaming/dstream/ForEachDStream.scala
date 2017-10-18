@@ -22,6 +22,7 @@ import org.apache.spark.streaming.{Duration, Time}
 import org.apache.spark.streaming.scheduler.Job
 import scala.reflect.ClassTag
 
+//对RDD的结果进一步foreach处理
 private[streaming]
 class ForEachDStream[T: ClassTag] (
     parent: DStream[T],
@@ -38,9 +39,9 @@ class ForEachDStream[T: ClassTag] (
   override def generateJob(time: Time): Option[Job] = {
     parent.getOrCompute(time) match {
       case Some(rdd) =>
-        val jobFunc = () => createRDDWithLocalProperties(time) {
+        val jobFunc = () => createRDDWithLocalProperties(time) {//执行body的代码
           ssc.sparkContext.setCallSite(creationSite)
-          foreachFunc(rdd, time)
+          foreachFunc(rdd, time)//如何循环打印该RDD内容,参数time表示执行该任务的时间点
         }
         Some(new Job(time, jobFunc))
       case None => None

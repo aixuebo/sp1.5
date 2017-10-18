@@ -21,10 +21,11 @@ import org.apache.spark.streaming.{Duration, Time}
 import org.apache.spark.rdd.RDD
 import scala.reflect.ClassTag
 
+//对正常的stream 进一步处理,每一行对象转换成一个集合
 private[streaming]
 class FlatMappedDStream[T: ClassTag, U: ClassTag](
     parent: DStream[T],
-    flatMapFunc: T => Traversable[U]
+    flatMapFunc: T => Traversable[U] //将父类执行后的RDD[T] 进一步转换,每一个T对象可以转换成一个List[U]对象,
   ) extends DStream[U](parent.ssc) {
 
   override def dependencies: List[DStream[_]] = List(parent)

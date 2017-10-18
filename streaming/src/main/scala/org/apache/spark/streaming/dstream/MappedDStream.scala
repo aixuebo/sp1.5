@@ -21,6 +21,7 @@ import org.apache.spark.streaming.{Duration, Time}
 import org.apache.spark.rdd.RDD
 import scala.reflect.ClassTag
 
+//对父RDD的对象进一步map函数处理
 private[streaming]
 class MappedDStream[T: ClassTag, U: ClassTag] (
     parent: DStream[T],

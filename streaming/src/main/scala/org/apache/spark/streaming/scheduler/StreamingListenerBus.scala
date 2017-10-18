@@ -29,9 +29,10 @@ private[spark] class StreamingListenerBus
 
   private val logDroppedEvent = new AtomicBoolean(false)
 
+  //定义监听过程,当特定事件发生的时候,调用不同的过程
   override def onPostEvent(listener: StreamingListener, event: StreamingListenerEvent): Unit = {
     event match {
-      case receiverStarted: StreamingListenerReceiverStarted =>
+      case receiverStarted: StreamingListenerReceiverStarted => //当receiver成功开启后,处理该事件
         listener.onReceiverStarted(receiverStarted)
       case receiverError: StreamingListenerReceiverError =>
         listener.onReceiverError(receiverError)

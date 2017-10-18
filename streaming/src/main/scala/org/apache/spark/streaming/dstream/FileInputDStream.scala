@@ -41,6 +41,7 @@ import org.apache.spark.util.{SerializableConfiguration, TimeStampedHashMap, Uti
  * with the fact that files may become visible after they are created. For this purpose, this
  * class remembers the information about the files selected in past batches for
  * a certain duration (say, "remember window") as shown in the figure below.
+ * 在每一个批处理时间内,去查找文件符合该批次下的文件集合
  *
  *                      |<----- remember window ----->|
  * ignore threshold --->|                             |<--- current batch time
@@ -67,12 +68,14 @@ import org.apache.spark.util.{SerializableConfiguration, TimeStampedHashMap, Uti
  *   selected as the mod time will be less than the ignore threshold when it becomes visible.
  * - Once a file is visible, the mod time cannot change. If it does due to appends, then the
  *   processing semantics are undefined.
- *   读取hdfs上的一个文件
+ *   读取hdfs上的一个文件目录
+ *
+ *   根据目录参数,不断的找到该目录下以前没有加入的文件,将其转换成RDD,即读取文件产生RDD
  */
 private[streaming]
 class FileInputDStream[K, V, F <: NewInputFormat[K, V]]( //K和V表示hdfs上存储的key和value的类型,F是如何读取该文件的格式,比如TextInputFormat
     @transient ssc_ : StreamingContext,
-    directory: String,//要加载的path路径
+    directory: String,//要加载的path路径,该path是一个目录
     filter: Path => Boolean = FileInputDStream.defaultFilter, //true表示要该path,false表示该路径非法
     newFilesOnly: Boolean = true,
     conf: Option[Configuration] = None)
@@ -127,7 +130,7 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]]( //K和V表示hdfs上存
   // Timestamp of the last round of finding files
   @transient private var lastNewFileFindingTime = 0L
 
-  @transient private var path_ : Path = null
+  @transient private var path_ : Path = null //目录
   @transient private var fs_ : FileSystem = null
 
   override def start() { }
@@ -154,7 +157,7 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]]( //K和V表示hdfs上存
     val metadata = Map(
       "files" -> newFiles.toList,
       StreamInputInfo.METADATA_KEY_DESCRIPTION -> newFiles.mkString("\n"))
-    val inputInfo = StreamInputInfo(id, 0, metadata)
+    val inputInfo = StreamInputInfo(id, 0, metadata)//文件描述,描述这次处理的是哪些文件集合
     ssc.scheduler.inputInfoTracker.reportInfo(validTime, inputInfo)
     rdds
   }
@@ -179,13 +182,13 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]]( //K和V表示hdfs上存
    * the current batch time and the ignore threshold. The ignore threshold is the max of
    * initial ignore threshold and the trailing end of the remember window (that is, which ever
    * is later in time).
-   * 去找新文件
+   * 去找新文件---找到currentTime前产生的文件
    */
   private def findNewFiles(currentTime: Long): Array[String] = {
     try {
       lastNewFileFindingTime = clock.getTimeMillis()
 
-      // Calculate ignore threshold
+      // Calculate ignore threshold 因为currentTime前有很多文件,因此要进一步过滤,比如durationToRemember周期内可能文件正在创作中,因此不去加载
       val modTimeIgnoreThreshold = math.max(
         initialModTimeIgnoreThreshold,   // initial threshold based on newFilesOnly setting
         currentTime - durationToRemember.milliseconds  // trailing end of the remember window
@@ -282,7 +285,7 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]]( //K和V表示hdfs上存
   }
 
   /** Generate one RDD from an array of files
-    * 参数file表示文件路径集合
+    * 参数file表示文件路径集合,将文件集合组装成一个RDD
     **/
   private def filesToRDD(files: Seq[String]): RDD[(K, V)] = {
     //获取文件的RDD集合
@@ -314,6 +317,7 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]]( //K和V表示hdfs上存
     fileToModTime.getOrElseUpdate(path.toString, fs.getFileStatus(path).getModificationTime())
   }
 
+  //获取目录
   private def directoryPath: Path = {
     if (path_ == null) path_ = new Path(directory)
     path_
@@ -355,6 +359,7 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]]( //K和V表示hdfs上存
 
     override def cleanup(time: Time) { }
 
+    //还原数据
     override def restore() {
       hadoopFiles.toSeq.sortBy(_._1)(Time.ordering).foreach {
         case (t, f) => {
@@ -377,7 +382,7 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]]( //K和V表示hdfs上存
 
 private[streaming]
 object FileInputDStream {
-
+  //默认文件过滤器
   def defaultFilter(path: Path): Boolean = !path.getName().startsWith(".")
 
   /**
