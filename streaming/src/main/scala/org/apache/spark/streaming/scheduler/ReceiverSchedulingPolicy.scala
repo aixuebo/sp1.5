@@ -74,7 +74,7 @@ private[streaming] class ReceiverSchedulingPolicy {
     * 参数receivers 表示所有的接受者
     * 参数executors 表示可以运行该接受者的节点host集合
     *
-    *  返回值表示每一个streaming 运行在哪些host节点集合上
+    *  返回值表示每一个streamingId 运行在哪些host节点集合上
    */
   def scheduleReceivers(
       receivers: Seq[Receiver[_]], executors: Seq[String]): Map[Int, Seq[String]] = {
@@ -82,7 +82,7 @@ private[streaming] class ReceiverSchedulingPolicy {
       return Map.empty
     }
 
-    if (executors.isEmpty) {
+    if (executors.isEmpty) {//没有executors节点,则每一个receiver在空host集合上节点运行
       return receivers.map(_.streamId -> Seq.empty).toMap
     }
 
@@ -91,9 +91,9 @@ private[streaming] class ReceiverSchedulingPolicy {
     //设置第i个receiver在哪个host上执行
     val scheduledExecutors = Array.fill(receivers.length)(new mutable.ArrayBuffer[String]) //二维数组,每一个receiver一个数组,存储该receivers的host集合
 
-    val numReceiversOnExecutor = mutable.HashMap[String, Int]()//每一个host上有多少个receiver,初始值都是0
+    val numReceiversOnExecutor = mutable.HashMap[String, Int]()//每一个host:port上有多少个receiver,初始值都是0
     // Set the initial value to 0 设置初始值都是0
-    executors.foreach(e => numReceiversOnExecutor(e) = 0)
+    executors.foreach(e => numReceiversOnExecutor(e) = 0)//为每一个receiver所在的host,都设置为0
 
     // Firstly, we need to respect "preferredLocation". So if a receiver has "preferredLocation",
     // we need to make sure the "preferredLocation" is in the candidate scheduled executor list.
@@ -181,8 +181,8 @@ private[streaming] class ReceiverSchedulingPolicy {
     }
 
     // Always try to schedule to the preferred locations
-    val scheduledExecutors = mutable.Set[String]()
-    scheduledExecutors ++= preferredLocation
+    val scheduledExecutors = mutable.Set[String]() //调度集合
+    scheduledExecutors ++= preferredLocation //先添加优先的节点
 
     val executorWeights = receiverTrackingInfoMap.values.flatMap { receiverTrackingInfo =>
       receiverTrackingInfo.state match {

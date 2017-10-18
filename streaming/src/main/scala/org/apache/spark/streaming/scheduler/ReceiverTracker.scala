@@ -101,13 +101,13 @@ private[streaming] case class UpdateReceiverRateLimit(streamUID: Int, newRate: L
  * this class must be created after all input streams have been added and StreamingContext.start()
  * has been called because it needs the final set of input streams at the time of instantiation.
  *
- * @param skipReceiverLaunch Do not launch the receiver. This is useful for testing.
+ * @param skipReceiverLaunch Do not launch the receiver. This is useful for testing.用于测试,true表示不启动receiver
  */
 private[streaming]
 class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false) extends Logging {
 
-  private val receiverInputStreams = ssc.graph.getReceiverInputStreams()
-  private val receiverInputStreamIds = receiverInputStreams.map { _.id }
+  private val receiverInputStreams = ssc.graph.getReceiverInputStreams() //获取全部的receiver接收流
+  private val receiverInputStreamIds = receiverInputStreams.map { _.id } //接收流的id集合
 
   //该对象用于当接收到数据块的时候,向该对象添加以及定期管理数据块
   private val receivedBlockTracker = new ReceivedBlockTracker(
@@ -168,7 +168,7 @@ b.launchReceivers() 启动该driver管理的所有receiver
     if (!receiverInputStreams.isEmpty) {
       endpoint = ssc.env.rpcEnv.setupEndpoint(
         "ReceiverTracker", new ReceiverTrackerEndpoint(ssc.env.rpcEnv))
-      if (!skipReceiverLaunch) launchReceivers()
+      if (!skipReceiverLaunch) launchReceivers()//开启receiver节点
       logInfo("ReceiverTracker started")
       trackerState = Started
     }
@@ -435,9 +435,10 @@ b.launchReceivers() 启动该driver管理的所有receiver
   /**
    * Get the receivers from the ReceiverInputDStreams, distributes them to the
    * worker nodes as a parallel collection, and runs them.
+   * 开启receiver节点
    */
   private def launchReceivers(): Unit = {
-    val receivers = receiverInputStreams.map(nis => {
+    val receivers = receiverInputStreams.map(nis => {//循环每一个receiver流,设置唯一ID
       val rcvr = nis.getReceiver()
       rcvr.setReceiverId(nis.id) //设置DStream的ID,表示该DStream属于第几个receiver
       rcvr
@@ -446,7 +447,7 @@ b.launchReceivers() 启动该driver管理的所有receiver
     runDummySparkJob()
 
     logInfo("Starting " + receivers.length + " receivers")
-    endpoint.send(StartAllReceivers(receivers))
+    endpoint.send(StartAllReceivers(receivers))//开启所有的receiver节点
   }
 
   /** Check if tracker has been marked for starting */
@@ -458,7 +459,7 @@ b.launchReceivers() 启动该driver管理的所有receiver
   /** Check if tracker has been marked for stopped */
   private def isTrackerStopped: Boolean = trackerState == Stopped
 
-  /** RpcEndpoint to receive messages from the receivers. */
+  /** RpcEndpoint to receive messages from the receivers. driver端的服务.接收receiver的信息*/
   private class ReceiverTrackerEndpoint(override val rpcEnv: RpcEnv) extends ThreadSafeRpcEndpoint {
 
     // TODO Remove this thread pool after https://github.com/apache/spark/issues/7385 is merged

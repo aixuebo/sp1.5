@@ -42,7 +42,7 @@ case class StreamInputInfo(
   require(numRecords >= 0, "numRecords must not be negative")
 
   def metadataDescription: Option[String] =
-    metadata.get(StreamInputInfo.METADATA_KEY_DESCRIPTION).map(_.toString)
+    metadata.get(StreamInputInfo.METADATA_KEY_DESCRIPTION).map(_.toString) //获取描述信息
 }
 
 @DeveloperApi

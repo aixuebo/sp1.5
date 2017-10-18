@@ -107,7 +107,9 @@ abstract class Receiver[T](val storageLevel: StorageLevel) extends Serializable 
    */
   def onStop()
 
-  /** Override this to specify a preferred location (hostname). */
+  /** Override this to specify a preferred location (hostname).
+    * 该receiver建议在哪些节点上运行,比如在kafka的leader节点上运行
+    **/
   def preferredLocation : Option[String] = None
 
   /**

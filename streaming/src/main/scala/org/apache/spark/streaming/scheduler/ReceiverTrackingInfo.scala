@@ -20,12 +20,13 @@ package org.apache.spark.streaming.scheduler
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.streaming.scheduler.ReceiverState._
 
+//receiver发送过来的错误信息
 private[streaming] case class ReceiverErrorInfo(
     lastErrorMessage: String = "", lastError: String = "", lastErrorTime: Long = -1L)
 
 /**
  * Class having information about a receiver.
- * 对一个receriver的描述
+ * 在driver端 对一个receriver的描述
  * @param receiverId the unique receiver id
  * @param state the current Receiver state
  * @param scheduledExecutors the scheduled executors provided by ReceiverSchedulingPolicy
@@ -37,8 +38,8 @@ private[streaming] case class ReceiverErrorInfo(
   而该receiver是在其他executor上执行的,因此driver上要为每一个receiver保持一个对象在内存中,该对象即ReceiverTrackingInfo
  */
 private[streaming] case class ReceiverTrackingInfo(
-    receiverId: Int,
-    state: ReceiverState,
+    receiverId: Int,//表示哪一个receiver
+    state: ReceiverState,//receiver此时的状态
     scheduledExecutors: Option[Seq[String]],//该receiver在哪些host上可以去被调度
     runningExecutor: Option[String],//真正在哪个host上运行的该receiver,去接收streamid对应的流信息
     name: Option[String] = None,
