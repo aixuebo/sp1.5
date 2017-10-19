@@ -36,7 +36,7 @@ import org.apache.spark.streaming.{Time, StreamingContext}
  */
 @DeveloperApi
 case class StreamInputInfo(
-    inputStreamId: Int,
+    inputStreamId: Int,//一个批处理中的第几个流
     numRecords: Long,//包含的记录条数
     metadata: Map[String, Any] = Map.empty) {//记录一些元数据内容,比如该批次如果是文件集合的RDD,那么包含了哪些文件
   require(numRecords >= 0, "numRecords must not be negative")

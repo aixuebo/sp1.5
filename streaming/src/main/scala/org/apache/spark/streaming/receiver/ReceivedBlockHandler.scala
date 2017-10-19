@@ -35,7 +35,7 @@ import org.apache.spark.{Logging, SparkConf, SparkException}
   **/
 private[streaming] trait ReceivedBlockStoreResult {
   // Any implementation of this trait will store a block id 去存储该数据块
-  def blockId: StreamBlockId
+  def blockId: StreamBlockId //存储的数据块ID
   // Any implementation of this trait will have to return the number of records 存储的数据块有多少条记录
   def numRecords: Option[Long]
 }

@@ -25,7 +25,7 @@ import org.apache.spark.streaming.Time
  * Class having information on completed batches.
   * 关于一个jobSet进行批处理batch的信息,表示一组批处理
  * @param batchTime   Time of the batch 批处理JobSet的创建时间
- * @param streamIdToInputInfo A map of input stream id to its input info
+ * @param streamIdToInputInfo A map of input stream id to its input info 记录每一个任务的记录数
  * @param submissionTime  Clock time of when jobs of this batch was submitted to
  *                        the streaming scheduler queue 提交时间
  * @param processingStartTime Clock time of when the first job of this batch started processing 第一个job开始处理的时间

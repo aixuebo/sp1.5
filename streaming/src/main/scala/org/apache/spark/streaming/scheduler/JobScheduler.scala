@@ -51,9 +51,9 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
   private val numConcurrentJobs = ssc.conf.getInt("spark.streaming.concurrentJobs", 1) //多少个job任务可以并发执行
   private val jobExecutor = ThreadUtils.newDaemonFixedThreadPool(numConcurrentJobs, "streaming-job-executor") //job任务的线程池
 
-  private val jobGenerator = new JobGenerator(this) //该对象会告诉我们如何产生job任务
+  private val jobGenerator = new JobGenerator(this) //该对象会告诉我们如何定期的产生job任务
   val clock = jobGenerator.clock
-  val listenerBus = new StreamingListenerBus()
+  val listenerBus = new StreamingListenerBus()//事件监听器
 
   // These two are created only when scheduler starts.
   // eventLoop not being null means the scheduler has been started and not stopped
@@ -127,7 +127,7 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
     if (jobSet.jobs.isEmpty) {
       logInfo("No jobs added for time " + jobSet.time)
     } else {
-      listenerBus.post(StreamingListenerBatchSubmitted(jobSet.toBatchInfo))
+      listenerBus.post(StreamingListenerBatchSubmitted(jobSet.toBatchInfo))//调度器通知该批次已经提交给job调度器了
       jobSets.put(jobSet.time, jobSet)
       jobSet.jobs.foreach(job => jobExecutor.execute(new JobHandler(job))) //线程池去调用每一个job任务
       logInfo("Added jobs for time " + jobSet.time)
@@ -147,7 +147,7 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
     eventLoop != null
   }
 
-  //处理job的事件
+  //处理job的事件---开始、完成、失败
   private def processEvent(event: JobSchedulerEvent) {
     try {
       event match {
@@ -188,7 +188,7 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
             jobSet.totalDelay / 1000.0, jobSet.time.toString,
             jobSet.processingDelay / 1000.0
           )) //打印日志
-          listenerBus.post(StreamingListenerBatchCompleted(jobSet.toBatchInfo))
+          listenerBus.post(StreamingListenerBatchCompleted(jobSet.toBatchInfo))//通知调度器,全部完成了job
         }
       case Failure(e) =>
         reportError("Error running job " + job, e)
@@ -203,6 +203,7 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
   //处理每一个Job,线程池去调用该任务
   private class JobHandler(job: Job) extends Runnable with Logging {
     def run() {
+      //设置线程级别的属性信息
       ssc.sc.setLocalProperty(JobScheduler.BATCH_TIME_PROPERTY_KEY, job.time.milliseconds.toString) //该jobset的创建时间
       ssc.sc.setLocalProperty(JobScheduler.OUTPUT_OP_ID_PROPERTY_KEY, job.outputOpId.toString) //属于jobset中第几个任务
       try {
@@ -216,7 +217,7 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
           // scheduler, since we may need to write output to an existing directory during checkpoint
           // recovery; see SPARK-4835 for more details.
           PairRDDFunctions.disableOutputSpecValidation.withValue(true) {
-            job.run()
+            job.run() //执行这个RDD
           }
           _eventLoop = eventLoop
           if (_eventLoop != null) {
@@ -235,5 +236,5 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
 
 private[streaming] object JobScheduler {
   val BATCH_TIME_PROPERTY_KEY = "spark.streaming.internal.batchTime" //该jobset的创建时间
-  val OUTPUT_OP_ID_PROPERTY_KEY = "spark.streaming.internal.outputOpId" //该jobset的创建时间
+  val OUTPUT_OP_ID_PROPERTY_KEY = "spark.streaming.internal.outputOpId" //属于jobset中第几个任务
 }

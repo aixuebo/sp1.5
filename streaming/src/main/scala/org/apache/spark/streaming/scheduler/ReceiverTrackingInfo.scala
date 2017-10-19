@@ -22,7 +22,9 @@ import org.apache.spark.streaming.scheduler.ReceiverState._
 
 //receiver发送过来的错误信息
 private[streaming] case class ReceiverErrorInfo(
-    lastErrorMessage: String = "", lastError: String = "", lastErrorTime: Long = -1L)
+    lastErrorMessage: String = "",//message正常信息
+    lastError: String = "", //error打印的异常信息堆栈
+    lastErrorTime: Long = -1L)//最后更新时间
 
 /**
  * Class having information about a receiver.
@@ -43,7 +45,7 @@ private[streaming] case class ReceiverTrackingInfo(
     scheduledExecutors: Option[Seq[String]],//该receiver在哪些host上可以去被调度
     runningExecutor: Option[String],//真正在哪个host上运行的该receiver,去接收streamid对应的流信息
     name: Option[String] = None,
-    endpoint: Option[RpcEndpointRef] = None,//如果与receiver与交互的socket
+    endpoint: Option[RpcEndpointRef] = None,//如果与receiver与交互的socket,即receiver端的服务器地址
     errorInfo: Option[ReceiverErrorInfo] = None) { //错误信息对象
 
   def toReceiverInfo: ReceiverInfo = ReceiverInfo(

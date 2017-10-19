@@ -51,6 +51,7 @@ import org.apache.spark.streaming.receiver.Receiver
  *
  * In conclusion, we should make a global schedule, try to achieve that exactly as long as possible,
  * otherwise do local scheduling.
+ * 如何为receiver分配executor节点
  */
 private[streaming] class ReceiverSchedulingPolicy {
 

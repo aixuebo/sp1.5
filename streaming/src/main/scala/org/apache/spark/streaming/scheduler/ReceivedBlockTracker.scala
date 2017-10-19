@@ -44,7 +44,7 @@ private[streaming] case class BatchCleanupEvent(times: Seq[Time]) //清理此时
 
 
 /** Class representing the blocks of all the streams allocated to a batch
-  * 该类表示一个批处理
+  * 该类表示一个批处理---分配了哪些数据块,这些数据块都来自于哪个receiver
   **/
 private[streaming]
 case class AllocatedBlocks(streamIdToAllocatedBlocks: Map[Int, Seq[ReceivedBlockInfo]]) {//参数是该批处理包含的每一个streaming对应的接收到的数据信息

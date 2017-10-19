@@ -206,7 +206,7 @@ class DirectKafkaInputDStream[
 
   private[streaming]
   class DirectKafkaInputDStreamCheckpointData extends DStreamCheckpointData(this) {
-    def batchForTime: mutable.HashMap[Time, Array[(String, Int, Long, Long)]] = {
+    def batchForTime: mutable.HashMap[Time, Array[(String, Int, Long, Long)]] = {//value表示topic-partition-开始offset-util的offset
       data.asInstanceOf[mutable.HashMap[Time, Array[OffsetRange.OffsetRangeTuple]]]
     }
 

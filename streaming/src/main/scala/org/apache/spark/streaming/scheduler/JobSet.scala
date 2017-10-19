@@ -23,13 +23,11 @@ import org.apache.spark.streaming.Time
 
 /** Class representing a set of Jobs
   * belong to the same batch.
-  * driver需要从多个streaming中获取数据源,因此对应多个streaming,每一个streaming的一次任务就是一个job,
-  * 因此该对象表示所有的streaming中job集合
   */
 private[streaming]
 case class JobSet(
     time: Time,//什么时间点产生的job集合
-    jobs: Seq[Job],//每一个streaming对应一个job对象
+    jobs: Seq[Job],//每一个streaming对应一个job对象,因为有多个foreach的RDD被调用
     streamIdToInputInfo: Map[Int, StreamInputInfo] = Map.empty) {
 
   private val incompleteJobs = new HashSet[Job]() //未完成的job集合
@@ -38,7 +36,7 @@ case class JobSet(
   private var processingEndTime = -1L // when the last job of this jobset finished processing 最后一个job处理完成的时间
 
   jobs.zipWithIndex.foreach { case (job, i) => job.setOutputOpId(i) } //为该jobSet中的job分配唯一的ID
-  incompleteJobs ++= jobs
+  incompleteJobs ++= jobs //开始全部加入到未完成里面
 
   def handleJobStart(job: Job) {//每个job启动的时候都处理该方法,但是只有第一个job才会真正意义上修改时间
     if (processingStartTime < 0) processingStartTime = System.currentTimeMillis()

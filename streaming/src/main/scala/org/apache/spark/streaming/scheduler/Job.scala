@@ -26,6 +26,8 @@ import scala.util.Try
  * 因此该对象表示针对一个streaming的job
  *
  * 该对象与JobSet进行对比.由Job对象组成的JobSet集合
+ *
+ * 该对象记录一个时间点--启动了一个任务,任务执行的function逻辑
  */
 private[streaming]
 class Job(val time: Time, func: () => _) {//什么时间点产生的job,该job要做的任务是什么,func表示任务是不接收任何参数,无返回值的函数

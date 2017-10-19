@@ -58,7 +58,7 @@ class KafkaRDD[
   R: ClassTag] private[spark] ( //R是最终RDD的元素,当然R也可以是元组
     sc: SparkContext,
     kafkaParams: Map[String, String],//kafka需要的参数
-    val offsetRanges: Array[OffsetRange],//读取每一个partition的范围
+    val offsetRanges: Array[OffsetRange],//读取每一个partition的范围---是实现了HasOffsetRanges的trait属性
     leaders: Map[TopicAndPartition, (String, Int)],//每一个partition的leader节点
     messageHandler: MessageAndMetadata[K, V] => R //应该如何处理一个kafka获取到的key-value信息,将其转换成R对象
   ) extends RDD[R](sc, Nil) with Logging with HasOffsetRanges {

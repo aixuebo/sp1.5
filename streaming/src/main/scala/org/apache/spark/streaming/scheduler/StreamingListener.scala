@@ -89,14 +89,16 @@ trait StreamingListener {
 @DeveloperApi
 class StatsReportListener(numBatchInfos: Int = 10) extends StreamingListener {
   // Queue containing latest completed batches
-  val batchInfos = new Queue[BatchInfo]()
+  val batchInfos = new Queue[BatchInfo]()//包含最近完成的批处理任务的统计信息
 
+  //完成的时候调用
   override def onBatchCompleted(batchStarted: StreamingListenerBatchCompleted) {
     batchInfos.enqueue(batchStarted.batchInfo)
-    if (batchInfos.size > numBatchInfos) batchInfos.dequeue()
+    if (batchInfos.size > numBatchInfos) batchInfos.dequeue() //说明超过范围了,让一些数据出队列
     printStats()
   }
 
+  //打印总消耗时间和deley消耗时间
   def printStats() {
     showMillisDistribution("Total delay: ", _.totalDelay)
     showMillisDistribution("Processing time: ", _.processingDelay)

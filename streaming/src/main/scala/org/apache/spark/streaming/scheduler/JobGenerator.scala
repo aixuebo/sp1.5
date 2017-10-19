@@ -63,6 +63,7 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
   // in the context and the generator has been started.
   private lazy val shouldCheckpoint = ssc.checkpointDuration != null && ssc.checkpointDir != null
 
+  //如何写入checkpoint文件
   private lazy val checkpointWriter = if (shouldCheckpoint) {
     new CheckpointWriter(this, ssc.conf, ssc.checkpointDir, ssc.sparkContext.hadoopConfiguration)
   } else {
@@ -83,6 +84,7 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
 
     // Call checkpointWriter here to initialize it before eventLoop uses it to avoid a deadlock.
     // See SPARK-10125
+    //初始化一个checkpoint对象
     checkpointWriter
 
     eventLoop = new EventLoop[JobGeneratorEvent]("JobGenerator") {

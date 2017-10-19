@@ -117,11 +117,11 @@ final private[streaming] class DStreamGraph extends Serializable with Logging {
     inputStreams.find(_.id == streamId).map(_.name)
   }
 
-  //每一个stream产生一个Job对象
+  //每一个stream产生一个Job对象集合
   def generateJobs(time: Time): Seq[Job] = {
     logDebug("Generating jobs for time " + time)
     val jobs = this.synchronized {
-      outputStreams.flatMap(outputStream => outputStream.generateJob(time))
+      outputStreams.flatMap(outputStream => outputStream.generateJob(time))//调用每一个输出对象的generateJob方法
     }
     logDebug("Generated " + jobs.length + " jobs for time " + time)
     jobs

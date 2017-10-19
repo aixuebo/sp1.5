@@ -134,12 +134,14 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
 
   // endpoint is created when generator starts.
   // This not being null means the tracker has been started and not stopped
-  private var endpoint: RpcEndpointRef = null
+  private var endpoint: RpcEndpointRef = null//driver端开启的服务
 
+  //如何为receiver提供executor节点的选择
   private val schedulingPolicy = new ReceiverSchedulingPolicy()
 
   // Track the active receiver job number. When a receiver job exits ultimately, countDown will
   // be called.
+  //所有的reeiver都退出了才能结束driver程序
   private val receiverJobExitLatch = new CountDownLatch(receiverInputStreams.size)
 
   /**
@@ -153,6 +155,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
    * Store all preferred locations for all receivers. We need this information to schedule
    * receivers. It's only accessed in ReceiverTrackerEndpoint.
     * 记录该receiver建议在哪些host上去执行
+   * key是receiver的ID,value是建议去哪个host上执行,理论上kafka的建议去leader节点执行
    */
   private val receiverPreferredLocations = new HashMap[Int, Option[String]]
 
@@ -523,7 +526,7 @@ b.launchReceivers() 启动该driver管理的所有receiver
         context.reply(true)
       // Local messages
       case AllReceiverIds =>
-        context.reply(receiverTrackingInfos.filter(_._2.state != ReceiverState.INACTIVE).keys.toSeq)
+        context.reply(receiverTrackingInfos.filter(_._2.state != ReceiverState.INACTIVE).keys.toSeq) //恢复给receiver现在活跃的recieverId集合
       case StopAllReceivers =>
         assert(isTrackerStopping || isTrackerStopped)
         stopReceivers() //让每一个receiver去停止
@@ -573,8 +576,9 @@ b.launchReceivers() 启动该driver管理的所有receiver
         new SerializableConfiguration(ssc.sparkContext.hadoopConfiguration)
 
       // Function to start the receiver on the worker node
+      //如何处理RDD数据
       val startReceiverFunc: Iterator[Receiver[_]] => Unit =
-        (iterator: Iterator[Receiver[_]]) => {
+        (iterator: Iterator[Receiver[_]]) => { //迭代器参数
           if (!iterator.hasNext) {
             throw new SparkException(
               "Could not start receiver as object not found.")
@@ -583,7 +587,7 @@ b.launchReceivers() 启动该driver管理的所有receiver
             val receiver = iterator.next()
             assert(iterator.hasNext == false)
             val supervisor = new ReceiverSupervisorImpl(
-              receiver, SparkEnv.get, serializableHadoopConf.value, checkpointDirOption)
+              receiver, SparkEnv.get, serializableHadoopConf.value, checkpointDirOption) //开启一个receiver服务
             supervisor.start()
             supervisor.awaitTermination()
           } else {
@@ -594,7 +598,7 @@ b.launchReceivers() 启动该driver管理的所有receiver
       // Create the RDD using the scheduledExecutors to run the receiver in a Spark job
       val receiverRDD: RDD[Receiver[_]] =
         if (scheduledExecutors.isEmpty) {
-          ssc.sc.makeRDD(Seq(receiver), 1)
+          ssc.sc.makeRDD(Seq(receiver), 1)//产生一个固定的RDD,即自己new一个list维护的RDD
         } else {
           ssc.sc.makeRDD(Seq(receiver -> scheduledExecutors))
         }
@@ -607,7 +611,7 @@ b.launchReceivers() 启动该driver管理的所有receiver
       future.onComplete {//该receiver会一直运行,直到停止为止,但是停止是否是因为节点失败或者其他原因影响的不得而知,因此要再一次重新启动该receiver的可能
         case Success(_) =>
           if (!shouldStartReceiver) {
-            onReceiverJobFinish(receiverId)
+            onReceiverJobFinish(receiverId)//正常结束
           } else {
             logInfo(s"Restarting Receiver $receiverId")
             self.send(RestartReceiver(receiver))
@@ -633,10 +637,10 @@ b.launchReceivers() 启动该driver管理的所有receiver
      * 当一个receiver终止的时候被调用该方法,意味着我们不需要重新启动这个spark了
      */
     private def onReceiverJobFinish(receiverId: Int): Unit = {
-      receiverJobExitLatch.countDown()
+      receiverJobExitLatch.countDown()//减少一个.,说明该receiver已经结束了
       receiverTrackingInfos.remove(receiverId).foreach { receiverTrackingInfo =>
         if (receiverTrackingInfo.state == ReceiverState.ACTIVE) {
-          logWarning(s"Receiver $receiverId exited but didn't deregister")
+          logWarning(s"Receiver $receiverId exited but didn't deregister") //打印说明该节点已经停止了,但是他还显示活跃状态
         }
       }
     }
@@ -645,7 +649,7 @@ b.launchReceivers() 启动该driver管理的所有receiver
       * 让每一个receiver去停止
       **/
     private def stopReceivers() {
-      receiverTrackingInfos.values.flatMap(_.endpoint).foreach { _.send(StopReceiver) }
+      receiverTrackingInfos.values.flatMap(_.endpoint).foreach { _.send(StopReceiver) }//向receiver端发送停止需求
       logInfo("Sent stop signal to all " + receiverTrackingInfos.size + " receivers")
     }
   }

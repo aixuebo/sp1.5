@@ -29,7 +29,7 @@ import org.apache.spark.util.Utils
 private[streaming]
 class DStreamCheckpointData[T: ClassTag] (dstream: DStream[T])
   extends Serializable with Logging {
-  protected val data = new HashMap[Time, AnyRef]()
+  protected val data = new HashMap[Time, AnyRef]()//只是实例化这个对象
 
   // Mapping of the batch time to the checkpointed RDD file of that time
   //记录所有的每个时间点RDD对应的CheckpointFile文件映射,是currentCheckpointFiles的结果集
