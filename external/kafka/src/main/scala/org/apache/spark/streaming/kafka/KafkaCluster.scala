@@ -75,10 +75,10 @@ class KafkaCluster(val kafkaParams: Map[String, String]) //参数是kafka的参�
     withBrokers(Random.shuffle(config.seedBrokers), errs) { consumer => //表示连接的一个hsot:port之后产生的消费者
       val resp: TopicMetadataResponse = consumer.send(req) //发送请求
       resp.topicsMetadata.find(_.topic == topic).flatMap { tm: TopicMetadata =>
-        tm.partitionsMetadata.find(_.partitionId == partition)
+        tm.partitionsMetadata.find(_.partitionId == partition)//说明请求该broker后已经知道了该topic-partition对应的leader是哪个元数据了
       }.foreach { pm: PartitionMetadata =>
         pm.leader.foreach { leader =>
-          return Right((leader.host, leader.port))
+          return Right((leader.host, leader.port))//返回leader的元数据节点
         }
       }
     }
@@ -190,6 +190,7 @@ class KafkaCluster(val kafkaParams: Map[String, String]) //参数是kafka的参�
       before: Long,
       maxNumOffsets: Int
     ): Either[Err, Map[TopicAndPartition, Seq[LeaderOffset]]] = {
+    //flatMap说明返回的结果是一个list集合--传入的参数是一个topic-partition对应的leader节点的host、port
     findLeaders(topicAndPartitions).right.flatMap { tpToLeader => //每一个topic-partition的leader 所在host和port 以及topic-partition对象
       //key是host-port,这个是partition的leader节点  value是该host-port上topic-partition集合
       val leaderToTp: Map[(String, Int), Seq[TopicAndPartition]] = flip(tpToLeader) //每一个host上有哪些topic-partition

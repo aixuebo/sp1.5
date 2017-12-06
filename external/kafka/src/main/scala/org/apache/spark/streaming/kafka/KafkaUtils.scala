@@ -432,7 +432,7 @@ object KafkaUtils {
   ): InputDStream[(K, V)] = {//K和V表示提供的返回值类型
     val messageHandler = (mmd: MessageAndMetadata[K, V]) => (mmd.key, mmd.message) //如何处理接收到的kafka信息,他将其转换成key,value的元组
     val kc = new KafkaCluster(kafkaParams)
-    val reset = kafkaParams.get("auto.offset.reset").map(_.toLowerCase)
+    val reset = kafkaParams.get("auto.offset.reset").map(_.toLowerCase)//设置从哪里开始读取kafka数据
 
     val result = for {
       topicPartitions <- kc.getPartitions(topics).right //获取topic集合对应的partition集合
@@ -444,7 +444,7 @@ object KafkaUtils {
     } yield {
       val fromOffsets = leaderOffsets.map { case (tp, lo) =>
           (tp, lo.offset)
-      }
+      }//从最新的节点位置开始读取数据
       new DirectKafkaInputDStream[K, V, KD, VD, (K, V)](
         ssc, kafkaParams, fromOffsets, messageHandler)
     }

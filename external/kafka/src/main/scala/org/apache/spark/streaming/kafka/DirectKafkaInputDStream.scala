@@ -164,7 +164,7 @@ class DirectKafkaInputDStream[
   }
 
   override def compute(validTime: Time): Option[KafkaRDD[K, V, U, T, R]] = {
-    val untilOffsets = clamp(latestLeaderOffsets(maxRetries)) //设置上限
+    val untilOffsets = clamp(latestLeaderOffsets(maxRetries)) //设置上限---最多读取到哪个位置
     val rdd = KafkaRDD[K, V, U, T, R](
       context.sparkContext, kafkaParams, currentOffsets, untilOffsets, messageHandler)
 
