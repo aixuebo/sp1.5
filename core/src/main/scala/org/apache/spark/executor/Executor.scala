@@ -37,14 +37,14 @@ import org.apache.spark.util._
 
 /**
  * Spark executor, backed by a threadpool to run tasks.
- *
+ * spark的executor,背后是通过线程池运行若干个task的
  * This can be used with Mesos, YARN, and the standalone scheduler.
  * An internal RPC interface (at the moment Akka) is used for communication with the driver,
  * except in the case of Mesos fine-grained mode.
  */
 private[spark] class Executor(
-    executorId: String,
-    executorHostname: String,
+    executorId: String,//唯一的Id
+    executorHostname: String,//executor所运行的节点,仅仅是host,不能有port
     env: SparkEnv,
     userClassPath: Seq[URL] = Nil,
     isLocal: Boolean = false)

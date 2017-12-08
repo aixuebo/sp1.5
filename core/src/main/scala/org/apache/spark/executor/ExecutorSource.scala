@@ -26,6 +26,7 @@ import org.apache.hadoop.fs.FileSystem
 
 import org.apache.spark.metrics.source.Source
 
+//一个executor对应一个线程池和唯一ID
 private[spark]
 class ExecutorSource(threadPool: ThreadPoolExecutor, executorId: String) extends Source {
 
