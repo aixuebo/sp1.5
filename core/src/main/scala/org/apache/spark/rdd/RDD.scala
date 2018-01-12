@@ -252,7 +252,7 @@ abstract class RDD[T: ClassTag](
    */
   def unpersist(blocking: Boolean = true): this.type = {
     logInfo("Removing RDD " + id + " from persistence list")
-    sc.unpersistRDD(id, blocking)
+    sc.unpersistRDD(id, blocking) //取消注册rdd的实例化
     storageLevel = StorageLevel.NONE //存储级别为NOE
     this
   }
@@ -1335,6 +1335,8 @@ res4: Int = 55
 
   /**
    * Return the number of elements in the RDD.
+   * 第二个参数是func: Iterator[T] => U,即给定一个分区的话,如何趋合理这一个分区,并且返回一个具体的对象U,而不是迭代器
+   * 而Utils.getIteratorSize方法的参数就是Iterator[T],返回值是Long
    */
   def count(): Long = sc.runJob(this, Utils.getIteratorSize _).sum
 
@@ -1504,6 +1506,8 @@ print Map(5 -> 1, 1 -> 4, 6 -> 1, 9 -> 1, 2 -> 2, 3 -> 1)
    * @note due to complications in the internal implementation, this method will raise
    * an exception if called on an RDD of `Nothing` or `Null`.
    * 获取前num个元素,这些元素是从第0个partition开始获取,一直获取到num数量为止,获取的数据跟排序没关系
+   *
+   * 从分区中获取多个数据,因此返回的是数组,此时数组要是返回很大的话确实是有问题的
    */
   def take(num: Int): Array[T] = withScope {
     if (num == 0) {
@@ -1537,7 +1541,7 @@ c: scala.collection.immutable.Range = Range(3, 4, 5, 6, 7)
          */
         val p = partsScanned until math.min(partsScanned + numPartsToTry, totalParts)//从当前partition开始 获取N个接下来的partition
         val res = sc.runJob(this, (it: Iterator[T]) => it.take(left).toArray, p)//从p的一组partition中以此获取数据,每一个partition最多获取left个数据
-
+        //sc.runJob返回值是Array[U],但是每一个U又是一个数组,因为it.take(left).toArray
         res.foreach(buf ++= _.take(num - buf.size))//不断的把每一个partition获取的元素拿去出来,直到拿完为止,就还下一个partition
         partsScanned += numPartsToTry
       }
@@ -1552,7 +1556,7 @@ c: scala.collection.immutable.Range = Range(3, 4, 5, 6, 7)
    */
   def first(): T = withScope {
     take(1) match {
-      case Array(t) => t
+      case Array(t) => t //因为就take了1条数据,因此Array里面就一个元素,即t就是最终返回的值
       case _ => throw new UnsupportedOperationException("empty collection")
     }
   }
@@ -1615,7 +1619,7 @@ c: scala.collection.immutable.Range = Range(3, 4, 5, 6, 7)
       } else {//合并队列,每一个队列的所有元素进行合并,组成大队列,由于每一个队列都是有上限的,因此最终合并后的队列也是有上限的,就是num个元素,然后排序
         mapRDDs.reduce { (queue1, queue2) =>
           queue1 ++= queue2
-          queue1
+          queue1 //返回的queue1依然是一个优先队列.因此两个队列merge后的数量不会累加,排序低的就会被抛弃掉了
         }.toArray.sorted(ord) //对优先队列的数据进行排序
       }
     }
@@ -1755,8 +1759,8 @@ res80: Array[(Int, String)] = Array((3,dog), (6,salmon), (6,salmon), (3,rat), (8
     // we should revisit this consideration.
     if (context.checkpointDir.isEmpty) {
       throw new SparkException("Checkpoint directory has not been set in the SparkContext")
-    } else if (checkpointData.isEmpty) {
-      checkpointData = Some(new ReliableRDDCheckpointData(this))
+    } else if (checkpointData.isEmpty) {//说明此时没有进行checkPoint
+      checkpointData = Some(new ReliableRDDCheckpointData(this))//因此对该rdd进行checkPoint备份到磁盘上,该备份不会随着系统删除而备份清理
     }
   }
 

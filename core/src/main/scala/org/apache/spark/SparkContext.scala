@@ -2892,8 +2892,8 @@ object WritableConverter {
  * The Writable class will be used in `SequenceFileRDDFunctions`.
  */
 private[spark] class WritableFactory[T](
-    val writableClass: ClassTag[T] => Class[_ <: Writable],
-    val convert: T => Writable) extends Serializable
+    val writableClass: ClassTag[T] => Class[_ <: Writable],//如何对T这个class参数转换成Writable的子类
+    val convert: T => Writable) extends Serializable //如何将T一个实例对象转换成Writable对象
 
 object WritableFactory {
 

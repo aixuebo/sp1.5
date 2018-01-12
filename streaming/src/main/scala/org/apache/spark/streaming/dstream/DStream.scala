@@ -352,7 +352,7 @@ abstract class DStream[T: ClassTag] ( //T可以是元组(KEY,VALUE)   简单的�
       //如果此时时间点是有效的(即时间点是周期的整数倍),则计算RDD
       if (isTimeValid(time)) {//说明时间有效
 
-        val rddOption = createRDDWithLocalProperties(time) {//在scope范围内执行body内容
+        val rddOption = createRDDWithLocalProperties(time) {//在scope范围内执行body内容--返回值是compute(time)返回的 Option[RDD[T]]对象
           // Disable checks for existing output directories in jobs launched by the streaming
           // scheduler, since we may need to write output to an existing directory during checkpoint
           // recovery; see SPARK-4835 for more details. We need to have this call here because
@@ -363,7 +363,7 @@ abstract class DStream[T: ClassTag] ( //T可以是元组(KEY,VALUE)   简单的�
         }
 
 	//对处理后的RDD进行persist存储以及checkpoint存储,以及缓存已经计算好的RDD
-        rddOption.foreach { case newRDD =>
+        rddOption.foreach { case newRDD => //参数就是RDD对象本身
           // Register the generated RDD for caching and checkpointing
           if (storageLevel != StorageLevel.NONE) {
             newRDD.persist(storageLevel)
