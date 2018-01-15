@@ -1736,7 +1736,7 @@ res80: Array[(Int, String)] = Array((3,dog), (6,salmon), (6,salmon), (3,rat), (8
    */
   def keyBy[K](f: T => K): RDD[(K, T)] = withScope {
     val cleanedF = sc.clean(f)
-    map(x => (cleanedF(x), x))
+    map(x => (cleanedF(x), x))//该方法没有经过shuffler操作,不耗费性能,只是转换成<K,V>结果,K是v通过f函数转变的
   }
 
   /** A private method for tests, to look at the contents of each partition
