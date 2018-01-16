@@ -364,7 +364,7 @@ res7: Array[(Int, Int)] = Array((1,2), (3,10))
        * 如果key不存在,则将ket-value添加到Map中
        * 如果key存在,则将存在的value值以及新的value值分别为两个函数,调用f,返回新的值
        */
-      iter.foreach { pair =>
+      iter.foreach { pair => //此时是懒加载方式
         val old = map.get(pair._1)//查找key对应的value
         map.put(pair._1, if (old == null) pair._2 else cleanedF(old, pair._2))//如果value已经存在,则要新老value进行运算
       }
@@ -377,7 +377,7 @@ res7: Array[(Int, Int)] = Array((1,2), (3,10))
        * 如果key存在,则将存在的value值以及新的value值分别为两个函数,调用f,返回新的值
        */
     val mergeMaps = (m1: JHashMap[K, V], m2: JHashMap[K, V]) => {
-      m2.foreach { pair =>
+      m2.foreach { pair => //懒加载模式merge若干个partition的结果集
         val old = m1.get(pair._1)
         m1.put(pair._1, if (old == null) pair._2 else cleanedF(old, pair._2))
       }
@@ -399,8 +399,8 @@ res7: Array[(Int, Int)] = Array((1,2), (3,10))
 
   /**
    * Count the number of elements for each key, collecting the results to a local Map.
-   *
-   * Note that this method should only be used if the resulting map is expected to be small, as
+   * 注意他是一个action行为,因为调用了collect,会将所有的而结果存储到本地的map中,每一个key出现的次数,因此内存要求较高,最好不经常使用
+   * Note that this method should only be used if the resulting map is expected to be small, as 此时时候的时候仅仅是结果集很小的时候才允许使用
    * the whole thing is loaded into the driver's memory.
    * To handle very large results, consider using rdd.mapValues(_ => 1L).reduceByKey(_ + _), which
    * returns an RDD[T, Long] instead of a map.

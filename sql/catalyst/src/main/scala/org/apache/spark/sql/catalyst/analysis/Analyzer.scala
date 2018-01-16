@@ -165,7 +165,7 @@ class Analyzer(
     }
 
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-      case Aggregate(groups, aggs, child)
+      case Aggregate(groups, aggs, child) //此时是group by的聚合函数语法
         if child.resolved && aggs.exists(_.isInstanceOf[UnresolvedAlias]) =>
         Aggregate(groups, assignAliases(aggs), child)
 
