@@ -85,6 +85,7 @@ class UnionRDD[T: ClassTag](
     deps
   }
 
+  //读取某一个父rdd的partition的内容
   override def compute(s: Partition, context: TaskContext): Iterator[T] = {
     val part = s.asInstanceOf[UnionPartition[T]]
     //parent[T](part.parentRddIndex)表示查找哪一个父RDD

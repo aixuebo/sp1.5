@@ -27,7 +27,7 @@ import org.apache.spark.{Partition, Partitioner, TaskContext}
  * additionally allows the user to prepare each partition before computing the parent partition.
  * 该map将T转换成U对象,再转换过程中涉及到M参数
  *
- * 该函数网络上没发现有使用的,因此可能涌出不是很大,我也没想到什么时候会使用该函数
+ * 该函数网络上没发现有使用的,因此可能用处不是很大,我也没想到什么时候会使用该函数
  */
 private[spark] class MapPartitionsWithPreparationRDD[U: ClassTag, T: ClassTag, M: ClassTag](
     prev: RDD[T],

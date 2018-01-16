@@ -68,8 +68,8 @@ class ZippedWithIndexRDD[T: ClassTag](@transient prev: RDD[T]) extends RDD[(T, L
     firstParent[T].preferredLocations(split.asInstanceOf[ZippedWithIndexRDDPartition].prev)
 
   override def compute(splitIn: Partition, context: TaskContext): Iterator[(T, Long)] = {
-    val split = splitIn.asInstanceOf[ZippedWithIndexRDDPartition]
-    firstParent[T].iterator(split.prev, context).zipWithIndex.map { x =>
+    val split = splitIn.asInstanceOf[ZippedWithIndexRDDPartition] //分区的数据块一定是ZippedWithIndexRDDPartition类型的数据块,因为里面包含了该分区从哪个序号开始计数
+    firstParent[T].iterator(split.prev, context).zipWithIndex.map { x => //zipWithIndex方法会为每一个迭代器分配唯一的一个序号
       (x._1, split.startIndex + x._2) //序号是开始序号位置+在该partition的序号,因此一定是序号唯一的
     }
   }

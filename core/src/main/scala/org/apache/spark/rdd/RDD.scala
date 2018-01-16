@@ -1488,12 +1488,14 @@ print Map(5 -> 1, 1 -> 4, 6 -> 1, 9 -> 1, 2 -> 2, 3 -> 1)
    * 因此第一个partition的序号是0*3+0  1*3+0  2*3+0 即0 3 6
    *
    * 以此类推,第二个partition产生的序号是0*3+1  1*3+1  2*3+1 即1 4 7
+   *
+   * 即算法的核心逻辑是,有多少个分区,就让每一个分区的数字空出来,让其他分区添进来,这样速度上比上一个方法要快很多
    */
   def zipWithUniqueId(): RDD[(T, Long)] = withScope {
     val n = this.partitions.length.toLong
     this.mapPartitionsWithIndex { case (k, iter) =>
-      iter.zipWithIndex.map { case (item, i) =>
-        (item, i * n + k)
+      iter.zipWithIndex.map { case (item, i) => //迭代器的zipWithIndex为每一个元素分配一个唯一的ID
+        (item, i * n + k) //i*n表示该迭代器的序号*总分区数量,即在所有分区中应该排列第几,比如第2个元素,总分区为10,那么第2个元素就应该从20开始计数,那么他准确的值是多少呢,即+分区ID
       }
     }
   }

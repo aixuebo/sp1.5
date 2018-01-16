@@ -149,14 +149,14 @@ class AppendOnlyMap[K, V](initialCapacity: Int = 64)
     while (true) {
       val curKey = data(2 * pos) //获取该key的值
       if (k.eq(curKey) || k.equals(curKey)) { //如果就是参数对应的key,传入true,和老的value值
-        val newValue = updateFunc(true, data(2 * pos + 1).asInstanceOf[V])
-        data(2 * pos + 1) = newValue.asInstanceOf[AnyRef]
+        val newValue = updateFunc(true, data(2 * pos + 1).asInstanceOf[V]) //使用老值更换成最新的值
+        data(2 * pos + 1) = newValue.asInstanceOf[AnyRef] //替换成最新的值
         return newValue
       } else if (curKey.eq(null)) {//说明该key不存在
         val newValue = updateFunc(false, null.asInstanceOf[V]) //传入false,null来更新最新值
-        data(2 * pos) = k
-        data(2 * pos + 1) = newValue.asInstanceOf[AnyRef]
-        incrementSize()
+        data(2 * pos) = k //追加key
+        data(2 * pos + 1) = newValue.asInstanceOf[AnyRef] //追加value
+        incrementSize() //记录存储了多少个key信息
         return newValue
       } else { //解决冲突
         val delta = i

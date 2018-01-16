@@ -35,6 +35,7 @@ class PartitionerAwareUnionRDDPartition(
   ) extends Partition {
 
   //该rdd的partition依赖父RDD中每一个RDD相对应的partition位置
+  //循环每一个rdd,找到该rdd的第idx个partition,然后组成一个集合,即有多少个rdd,最终就有多少个partition集合
   var parents = rdds.map(_.partitions(idx)).toArray //该partition需要父RDD的partition集合
 
   override val index = idx
@@ -74,7 +75,7 @@ class PartitionerAwareUnionRDD[T: ClassTag](
   override def getPartitions: Array[Partition] = {
     val numPartitions = partitioner.get.numPartitions //一共多少个partition
     (0 until numPartitions).map(index => {
-      new PartitionerAwareUnionRDDPartition(rdds, index)
+      new PartitionerAwareUnionRDDPartition(rdds, index) //每一个新的partition要分别读取若干个RDD数据源的内容
     }).toArray
   }
 
@@ -85,8 +86,9 @@ class PartitionerAwareUnionRDD[T: ClassTag](
     val parentPartitions = s.asInstanceOf[PartitionerAwareUnionRDDPartition].parents //找到需要的父RDD的partition集合
 
     //返回多个RDD对应的所有host集合,同一个host可以存在多个
-    val locations = rdds.zip(parentPartitions).flatMap {
-      case (rdd, part) => {
+    //rdds.zip(parentPartitions)的结果是<RDD,Partition>元组,即每一个RDD去读哪个分区
+    val locations = rdds.zip(parentPartitions).flatMap {//计算所有的分区所在的host集合
+      case (rdd, part) => {//rdd与要读取的partition分区
         val parentLocations = currPrefLocs(rdd, part) //获取某一个rdd的某一个partition所在节点host集合
         logDebug("Location of " + rdd + " partition " + part.index + " = " + parentLocations)
         parentLocations
@@ -96,15 +98,22 @@ class PartitionerAwareUnionRDD[T: ClassTag](
       None
     } else {//按照host排序,获取host最多出现的节点上
       // Find the location that maximum number of parent partitions prefer
+      //locations.groupBy(x => x) 表示按照x进行分组,返回值是Map<X,List<分组相同的元素集合>>
+      //然后maxBy()是让List.length进行排序,返回值依然是元组<X,List<分组相同的元素集合>>,最后只要x即可
       Some(locations.groupBy(x => x).maxBy(_._2.length)._1)
     }
     logDebug("Selected location for " + this + ", partition " + s.index + " = " + location)
     location.toSeq
   }
 
+  //计算某一个分区
   override def compute(s: Partition, context: TaskContext): Iterator[T] = {
     val parentPartitions = s.asInstanceOf[PartitionerAwareUnionRDDPartition].parents //找到需要的父RDD的partition集合
-    rdds.zip(parentPartitions).iterator.flatMap {
+    //<RDD,Partition>组成元组,即每一个rdd要读取哪个分区,然后将其转换成迭代器去循环
+
+    //该方法的返回值是迭代器读取一行一行数据,只是这个数据内容是从多个rdd中读取的,要一个一个rdd进行读取数据
+    rdds.zip(parentPartitions).iterator.flatMap {//flatMap说明返回的是一个迭代器,因为compute方法返回值就要求是一个迭代器
+      //迭代器的内容就是每一个元素都是读取一个rdd的一个分区内容
       case (rdd, p) => rdd.iterator(p, context) //对每一个rdd的partition进行遍历计算
     }
   }

@@ -53,7 +53,7 @@ import org.apache.spark.util.random.StratifiedSamplingUtils
  * 
  * 
  * 1.reduceByKey 其实真正执行的逻辑就是combineByKey,只是特别的是reduce进行merge合并操作的时候,产生的结果依然是K-V中的V
- * 2.combineByKey 是原始输入K-V,返回值是K-U,会变换返回值
+ * 2.combineByKey 是原始输入K-V,返回值是K-U,会变换返回值---该方法仅是对同一分区内的数据进行合并
  * 3.lookup(key: K): Seq[V] 返回该key对应的所有value值的集合,返回值是ArrayBuffer[V]
  * 4.mapValues[U](f: V => U): RDD[(K, U)],将RDD[K-V]转换成RDD[k,f[V=>U]] = RDD[k,U]操作,相当于对value进行Map操作
  * 5.saveAsHadoopFile 将RDD的内容保存在HDFS上
@@ -96,6 +96,8 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * 2.合并过程,让每一个key-c进行合并,最终生成key-C对象
    *
    * 即对key相同的数据进行合并,产生一个新的对象C,最终返回key-c,每一个partition仅有一个key-c对象
+   *
+   * 该方法的意义就仅是对同一个分区内的数据进行merge,即相同的key进行合并操作
    */
   def combineByKey[C](createCombiner: V => C,//可以value转换成C的函数
       mergeValue: (C, V) => C,//对每一个C与V交互生成C的函数
@@ -120,9 +122,10 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       self.context.clean(mergeCombiners))
 
 
-    if (self.partitioner == Some(partitioner)) {
+    if (self.partitioner == Some(partitioner)) {//该阶段不需要shuffle处理
       self.mapPartitions(iter => {
         val context = TaskContext.get()
+        //注意aggregator.combineValuesByKey方法会立刻参与计算,他不是懒加载的
         new InterruptibleIterator(context, aggregator.combineValuesByKey(iter, context))//对每一个partition进行合并,生成key-c对象
       }, preservesPartitioning = true)
     } else {
@@ -161,7 +164,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
     zeroBuffer.get(zeroArray)
 
     lazy val cachedSerializer = SparkEnv.get.serializer.newInstance()
-    val createZero = () => cachedSerializer.deserialize[U](ByteBuffer.wrap(zeroArray))
+    val createZero = () => cachedSerializer.deserialize[U](ByteBuffer.wrap(zeroArray)) //初始化的数据如何反序列化
 
     // We will clean the combiner closure later in `combineByKey`
     val cleanedSeqOp = self.context.clean(seqOp)

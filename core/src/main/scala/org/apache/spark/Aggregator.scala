@@ -37,9 +37,9 @@ import org.apache.spark.util.collection.{AppendOnlyMap, ExternalAppendOnlyMap}
  */
 @DeveloperApi
 case class Aggregator[K, V, C] (
-    createCombiner: V => C,//将value转换成一个C对象,当key不存在的时候,则创建key对应的value转换成C,根key-value管理
-    mergeValue: (C, V) => C, //如果key存在对应的value,则将存在的value即c,与新的value v进行合并,产生新的c
-    mergeCombiners: (C, C) => C) {//对C与C进行合并
+    createCombiner: V => C,//key第一次出现的时候,如何将v转换成c
+    mergeValue: (C, V) => C, //如果key已经存在了,则如何将已经计算好的C与此时的V进行合并,产生新的C
+    mergeCombiners: (C, C) => C) {//对C与C进行合并,用于merge 分区的时候
 
   // When spilling is enabled sorting will happen externally, but not necessarily with an
   // ExternalSorter.
@@ -52,17 +52,20 @@ case class Aggregator[K, V, C] (
   //相当于map-reduce的combine过程,将map产生的key-value作为参数,相同key的进行合并,产生C对象
     //循环每一个key-value,返回key,c的迭代器,c是相同的key对应的value的合并后的值
     //通过key进行合并所有的value
+
+  //经过这一步的计算,已经将同一个partition的数据按照相同的key进行merge
   def combineValuesByKey(iter: Iterator[_ <: Product2[K, V]],
                          context: TaskContext): Iterator[(K, C)] = {
     if (!isSpillEnabled) {//都要在内存中运算
       val combiners = new AppendOnlyMap[K, C] //类似hash table的实现
       var kv: Product2[K, V] = null //每一个key-value
       
-      //参数hadValue表示combiners存在该key,oldValue表示该key存储的值是什么
+      //参数hadValue表示combiners时候是否已经存在该key,true表示已经存在该key,false表示第一次发现该key
+      // oldValue表示该key存储的值是什么,如果hadValue是true,则oldValue就是以前存储的值,如果hadValue是false,则oldValue是null
       val update = (hadValue: Boolean, oldValue: C) => { //返回值就是对key更新的值
-        if (hadValue){
+        if (hadValue){//说明是要更新
           mergeValue(oldValue, kv._2)  //如果该key在combiners中存在,则将老value与新的value进行合并,将合并后的值存储在key上
-        } else {
+        } else {//说明是第一次
          createCombiner(kv._2) //说明该key在combiners中不存在,则将该value存储在key中
         }
       }
@@ -71,7 +74,7 @@ case class Aggregator[K, V, C] (
         combiners.changeValue(kv._1, update) //对key进行更新
       }
       combiners.iterator //返回合并后的迭代器,key还是以前的key,value是合并后的value
-    } else {
+    } else {//外部存储去计算
       val combiners = new ExternalAppendOnlyMap[K, V, C](createCombiner, mergeValue, mergeCombiners) //使用额外存储做merge
       combiners.insertAll(iter)
       updateMetrics(context, combiners)
@@ -84,15 +87,16 @@ case class Aggregator[K, V, C] (
   def combineCombinersByKey(iter: Iterator[_ <: Product2[K, C]]) : Iterator[(K, C)] =
     combineCombinersByKey(iter, null)
 
-    //迭代iter,合并每一个K-C
+    //该方法用于merge所有分区数据
   def combineCombinersByKey(iter: Iterator[_ <: Product2[K, C]], context: TaskContext)
     : Iterator[(K, C)] =
   {
     if (!isSpillEnabled) {//只能在内存中操作
       val combiners = new AppendOnlyMap[K, C]
       var kc: Product2[K, C] = null //迭代iter返回的key-value
-      
-      //参数hadValue表示combiners存在该key,oldValue表示该key存储的值是什么
+
+      //参数hadValue表示combiners时候是否已经存在该key,true表示已经存在该key,false表示第一次发现该key
+      // oldValue表示该key存储的值是什么,如果hadValue是true,则oldValue就是以前存储的值,如果hadValue是false,则oldValue是null
       val update = (hadValue: Boolean, oldValue: C) => {
         if (hadValue) { //如果key存在,则合并老的value和新的value
          mergeCombiners(oldValue, kc._2) 
