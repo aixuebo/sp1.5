@@ -64,11 +64,11 @@ private[spark] class HashShuffleWriter[K, V](
       if (dep.mapSideCombine) {//支持map端合并,相当于进行combiner操作,然后再进行分发到reduce中
         dep.aggregator.get.combineValuesByKey(records, context)
       } else {
-        records
+        records //懒加载模式
       }
     } else {
       require(!dep.mapSideCombine, "Map-side combine without Aggregator specified!")
-      records
+      records //懒加载模式
     }
 
     for (elem <- iter) {//循环每一个元素

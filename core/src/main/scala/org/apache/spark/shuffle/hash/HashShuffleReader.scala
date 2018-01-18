@@ -46,7 +46,7 @@ private[spark] class HashShuffleReader[K, C](
     * 读取一个shuffle的结果,返回key-value的键值对元组迭代器
     **/
   override def read(): Iterator[Product2[K, C]] = {
-    val blockFetcherItr = new ShuffleBlockFetcherIterator(
+    val blockFetcherItr = new ShuffleBlockFetcherIterator(//该迭代器表示如何从网络上抓去数据块回来
       context,
       blockManager.shuffleClient,
       blockManager,
@@ -56,8 +56,9 @@ private[spark] class HashShuffleReader[K, C](
 
     // Wrap the streams for compression based on configuration 如果数据是压缩的,对数据解压缩
     //对每一个数据块转换成解压缩后的数据流
+    //该流返回的是每一个block数据块的集合
     val wrappedStreams = blockFetcherItr.map { case (blockId, inputStream) =>
-      blockManager.wrapForCompression(blockId, inputStream)
+      blockManager.wrapForCompression(blockId, inputStream) //如果数据块是压缩的,要对其解压缩
     }
 
     //实例化一个反序列化对象
@@ -66,11 +67,11 @@ private[spark] class HashShuffleReader[K, C](
 
     // Create a key/value iterator for each stream 对每一个流创建key-value元组对象的迭代器
     //对解压缩后的数据流进行反序列化,得到反序列化后的key-value信息
-    val recordIter = wrappedStreams.flatMap { wrappedStream =>
+    val recordIter = wrappedStreams.flatMap { wrappedStream => //循环每一个数据块
       // Note: the asKeyValueIterator below wraps a key/value iterator inside of a
       // NextIterator. The NextIterator makes sure that close() is called on the
       // underlying InputStream when all records have been read.
-      serializerInstance.deserializeStream(wrappedStream).asKeyValueIterator //反序列化
+      serializerInstance.deserializeStream(wrappedStream).asKeyValueIterator //反序列化---将一个数据块反序列化成kv的数据流迭代器
     }
 
     // Update the context task metrics for each record read.
@@ -89,7 +90,7 @@ private[spark] class HashShuffleReader[K, C](
       if (dep.mapSideCombine) {//map端combine
         // We are reading values that are already combined
         val combinedKeyValuesIterator = interruptibleIter.asInstanceOf[Iterator[(K, C)]]
-        dep.aggregator.get.combineCombinersByKey(combinedKeyValuesIterator, context)
+        dep.aggregator.get.combineCombinersByKey(combinedKeyValuesIterator, context) //对收取到的map的数据进行先聚合merge操作
       } else {
         // We don't know the value type, but also don't care -- the dependency *should*
         // have made sure its compatible w/ this aggregator, which will convert the value

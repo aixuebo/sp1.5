@@ -34,6 +34,7 @@ import org.apache.spark.util.Utils
  * reopened again.
  *
  * 将key-value的信息被序列化后写入到压缩的输出流compressStream中,该输出流最终会被写入到file文件中
+ * 该文件存储的内容是一个partition的结果,比如5个reduce,即5个partition,因此每一个map都要输出5个DiskBlockObjectWriter对象
  */
 private[spark] class DiskBlockObjectWriter(
     val blockId: BlockId,

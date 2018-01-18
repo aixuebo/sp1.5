@@ -66,8 +66,8 @@ class BlockManagerId private (
 
   //是否是driver或者<driver>
   def isDriver: Boolean = {
-    executorId == SparkContext.DRIVER_IDENTIFIER ||
-      executorId == SparkContext.LEGACY_DRIVER_IDENTIFIER
+    executorId == SparkContext.DRIVER_IDENTIFIER || //driver
+      executorId == SparkContext.LEGACY_DRIVER_IDENTIFIER //<driver>
   }
 
   override def writeExternal(out: ObjectOutput): Unit = Utils.tryOrIOException {
@@ -97,7 +97,7 @@ class BlockManagerId private (
   }
 }
 
-
+//每一个BlockManager都对应一个该对象,表示该BlockManager所在的节点信息,方便远程请求该节点获取信息
 private[spark] object BlockManagerId {
 
   /**
@@ -118,6 +118,7 @@ private[spark] object BlockManagerId {
   }
 
   //静态方法,获取唯一的BlockManagerId对象
+  //缓存集群中所有的BlockManager信息
   val blockManagerIdCache = new ConcurrentHashMap[BlockManagerId, BlockManagerId]()
 
   //返回缓存过得BlockManagerId对象

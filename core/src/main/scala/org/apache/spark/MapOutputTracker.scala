@@ -146,6 +146,7 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
    * @return A sequence of 2-item tuples, where the first item in the tuple is a BlockManagerId,
    *         and the second item is a sequence of (shuffle block id, shuffle block size) tuples
    *         describing the shuffle blocks that are stored at that block manager.
+   *  找到该shuffle的某一个reduce节点需要抓去的数据块集合
    */
   def getMapSizesByExecutorId(shuffleId: Int, reduceId: Int)
   : Seq[(BlockManagerId, Seq[(BlockId, Long)])] = {
