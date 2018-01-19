@@ -51,7 +51,7 @@ private[spark] object BlockManagerMessages {
 
   //在executor节点注册了一个BlockManagerId,最多允许使用maxMemSize内存
   case class RegisterBlockManager(
-      blockManagerId: BlockManagerId,
+      blockManagerId: BlockManagerId,//sender对应的host和port
       maxMemSize: Long,
       sender: RpcEndpointRef) //该executor节点通信对象
     extends ToBlockManagerMaster

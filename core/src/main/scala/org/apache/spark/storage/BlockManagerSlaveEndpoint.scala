@@ -27,11 +27,12 @@ import org.apache.spark.storage.BlockManagerMessages._
 /**
  * An RpcEndpoint to take commands from the master to execute options. For example,
  * this is used to remove blocks from the slave's BlockManager.
+ * 该服务是slave节点要实现的服务,即master作为客户端,需要请求slave上服务去删除数据块
  */
 private[storage]
 class BlockManagerSlaveEndpoint(
-    override val rpcEnv: RpcEnv,
-    blockManager: BlockManager,
+    override val rpcEnv: RpcEnv,//slave节点的服务引用
+    blockManager: BlockManager,//本地的数据块管理器,用于管理数据块的删除
     mapOutputTracker: MapOutputTracker)
   extends RpcEndpoint with Logging {
 
@@ -66,7 +67,7 @@ class BlockManagerSlaveEndpoint(
         blockManager.removeBroadcast(broadcastId, tellMaster = true)
       }
 
-    case GetBlockStatus(blockId, _) =>
+    case GetBlockStatus(blockId, _) => //获取某一个数据块在该节点的状态
       context.reply(blockManager.getStatus(blockId))
 
     case GetMatchingBlockIds(filter, _) =>

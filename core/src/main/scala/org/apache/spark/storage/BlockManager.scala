@@ -333,6 +333,7 @@ private[spark] class BlockManager(
   /**
    * Get the BlockStatus for the block identified by the given ID, if it exists.
    * NOTE: This is mainly for testing, and it doesn't fetch information from external block store.
+   * 获取某一个数据块在该节点的状态
    */
   def getStatus(blockId: BlockId): Option[BlockStatus] = {
     blockInfo.get(blockId).map { info =>

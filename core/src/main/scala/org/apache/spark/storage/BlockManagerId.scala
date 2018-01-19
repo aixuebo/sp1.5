@@ -37,8 +37,8 @@ import org.apache.spark.util.Utils
  */
 @DeveloperApi
 class BlockManagerId private (
-    private var executorId_ : String,//该值为<driver>或者driver时,表示是driver
-    private var host_ : String,
+    private var executorId_ : String,//该值为<driver>或者driver时,表示是driver,executor是一个字符串,表示为每一个executor分配唯一的字符串ID
+    private var host_ : String,//以下是该executor所在的节点host和port.因为一个host上可能有多个executor,因此才必须有一个唯一的executor名字作为区分,才有了上面的定义executorId_的意义
     private var port_ : Int)
   extends Externalizable {
 
