@@ -28,10 +28,11 @@ import org.apache.spark.util.{ThreadUtils, RpcUtils}
 
 /**
  * 该类表示driver的一个客户端节点,该节点可以向driver发送请求
+ * 该类是一个客户端,在driver端或者executor上都可以持有该客户端,然后该客户端与对应的接口产生访问请求
  */
 private[spark]
 class BlockManagerMaster(
-    var driverEndpoint: RpcEndpointRef,//如果该节点是driver,则该对象是dirver节点上的BlockManagerMasterEndpoint引用     如果该节点是executor,则该对象是driver的RpcEndpointRef引用
+    var driverEndpoint: RpcEndpointRef,//该节点一定是driver提供服务的节点
     conf: SparkConf,
     isDriver: Boolean)
   extends Logging {

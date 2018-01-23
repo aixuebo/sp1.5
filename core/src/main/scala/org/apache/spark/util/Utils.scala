@@ -740,6 +740,7 @@ private[spark] object Utils extends Logging {
    * Shuffle the elements of a collection into a random order, returning the
    * result in a new collection. Unlike scala.util.Random.shuffle, this method
    * uses a local random number generator, avoiding inter-thread contention.
+   * 将集合的顺序打乱
    */
   def randomize[T: ClassTag](seq: TraversableOnce[T]): Seq[T] = {
     randomizeInPlace(seq.toArray)
@@ -748,6 +749,7 @@ private[spark] object Utils extends Logging {
   /**
    * Shuffle the elements of an array into a random order, modifying the
    * original array. Returns the original array.
+   * 将集合的顺序打乱
    */
   def randomizeInPlace[T](arr: Array[T], rand: Random = new Random): Array[T] = {
     for (i <- (arr.length - 1) to 1 by -1) {

@@ -37,6 +37,7 @@ import org.apache.spark.util.{ShutdownHookManager, Utils}
 private[spark] class DiskBlockManager(blockManager: BlockManager, conf: SparkConf)
   extends Logging {
 
+  //比如3个根目录可以存储文件,每个根目录的subDirsPerLocalDir存储64个文件夹,那么则有3*64个文件夹存储blockId名字的文件
   private[spark]
   val subDirsPerLocalDir = blockManager.conf.getInt("spark.diskStore.subDirectories", 64) //每一个目录可以存储多少个子目录
 
@@ -85,6 +86,7 @@ private[spark] class DiskBlockManager(blockManager: BlockManager, conf: SparkCon
   // This method should be kept in sync with
   // org.apache.spark.network.shuffle.ExternalShuffleBlockResolver#getFile().
   //获取文件name应该在哪个磁盘上存储,返回path/filename
+  //文件名字是blockId
   def getFile(filename: String): File = {
     // Figure out which local directory it hashes to, and which subdirectory in that
     val hash = Utils.nonNegativeHash(filename) //根据name获取hash
@@ -92,6 +94,7 @@ private[spark] class DiskBlockManager(blockManager: BlockManager, conf: SparkCon
     val subDirId = (hash / localDirs.length) % subDirsPerLocalDir //存储在哪个目录下
 
     // Create the subdirectory if it doesn't already exist 获取或者创建子目录
+    //创建存储该blockId的文件夹
     val subDir = subDirs(dirId).synchronized {
       val old = subDirs(dirId)(subDirId)//先看看该目录是否有内容
       if (old != null) {//说明有内容
@@ -183,9 +186,9 @@ private[spark] class DiskBlockManager(blockManager: BlockManager, conf: SparkCon
     // Only perform cleanup if an external service is not serving our shuffle files.
     // Also blockManagerId could be null if block manager is not initialized properly.
     if (!blockManager.externalShuffleServiceEnabled ||
-      (blockManager.blockManagerId != null && blockManager.blockManagerId.isDriver)) {
+      (blockManager.blockManagerId != null && blockManager.blockManagerId.isDriver)) {//说明该节点是driver
       localDirs.foreach { localDir =>
-        if (localDir.isDirectory() && localDir.exists()) {
+        if (localDir.isDirectory() && localDir.exists()) {//删除该目录
           try {
             if (!ShutdownHookManager.hasRootAsShutdownDeleteDir(localDir)) {
               Utils.deleteRecursively(localDir)

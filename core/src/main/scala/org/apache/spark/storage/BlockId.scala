@@ -34,7 +34,7 @@ import org.apache.spark.annotation.DeveloperApi
 @DeveloperApi
 sealed abstract class BlockId {
   /** A globally unique identifier for this Block. Can be used for ser/de. 全局唯一的名称*/
-  def name: String
+  def name: String //是block文件的文件名
 
   // convenience methods 获取RDD数据块对象
   def asRDDId: Option[RDDBlockId] = if (isRDD) Some(asInstanceOf[RDDBlockId]) else None

@@ -66,7 +66,7 @@ private[spark] class BlockResult(
 private[spark] class BlockManager(
     executorId: String,//drver节点上,则该内容是driver,executor暂时未知
     rpcEnv: RpcEnv,//是driver节点或者executor节点的服务器对象RpcEnv
-    val master: BlockManagerMaster,//如果是driver节点,则是BlockManagerMaster对象,如果是executor节点,则是driver节点的RpcEndpointRef引用,driver中用于管理每一个execute节点上有哪些数据块以该节点上内存使用情况
+    val master: BlockManagerMaster,//driver和executor通信的客户端。如果是driver节点,则是BlockManagerMaster对象,如果是executor节点,则是driver节点的RpcEndpointRef引用,driver中用于管理每一个execute节点上有哪些数据块以该节点上内存使用情况
     defaultSerializer: Serializer,//如果序列化
     maxMemory: Long,//最大使用多少内存,存储数据块信息
     val conf: SparkConf,
@@ -87,10 +87,11 @@ private[spark] class BlockManager(
     ThreadUtils.newDaemonCachedThreadPool("block-manager-future", 128))
 
   // Actual storage of where blocks are kept
-  private var externalBlockStoreInitialized = false //true表示外部存储器已经初始化完成
+  private var externalBlockStoreInitialized = false //true表示外部存储器已经初始化完成----因为是懒加载模式启动外部存储,.因此一旦调用了外部存储后,则externalBlockStoreInitialized会设置为true
   private[spark] val memoryStore = new MemoryStore(this, maxMemory) //内存存储
   private[spark] val diskStore = new DiskStore(this, diskBlockManager) //真正意义去执行磁盘存储
-  
+
+  //因为是懒加载模式启动外部存储,.因此一旦调用了外部存储后,则externalBlockStoreInitialized会设置为true
   private[spark] lazy val externalBlockStore: ExternalBlockStore = { //外部存储器,懒加载模式,一般情况下不会被启动
     externalBlockStoreInitialized = true
     new ExternalBlockStore(this, executorId)
@@ -169,6 +170,7 @@ private[spark] class BlockManager(
 
   /**
    * Construct a BlockManager with a memory limit set based on system properties.
+   * 此构造函数的内存是计算出本地节点的内存
    */
   def this(
       execId: String,
@@ -193,12 +195,13 @@ private[spark] class BlockManager(
    * This method initializes the BlockTransferService and ShuffleClient, registers with the
    * BlockManagerMaster, starts the BlockManagerWorker endpoint, and registers with a local shuffle
    * service if configured.
-   * 参数是appid
+   * 参数是appid---是sparkContext产生yarn上的applicationId后,初始化该方法的
    */
   def initialize(appId: String): Unit = {
     blockTransferService.init(this)
     shuffleClient.init(appId)
 
+    //产生一个唯一ID
     blockManagerId = BlockManagerId(
       executorId, blockTransferService.hostName, blockTransferService.port)
 
@@ -208,7 +211,7 @@ private[spark] class BlockManager(
       blockManagerId
     }
 
-    master.registerBlockManager(blockManagerId, maxMemory, slaveEndpoint)
+    master.registerBlockManager(blockManagerId, maxMemory, slaveEndpoint)//向master发送注册信息
 
     // Register Executors' configuration with the local shuffle service, if one should exist.
     if (externalShuffleServiceEnabled && !blockManagerId.isDriver) {
@@ -255,7 +258,7 @@ private[spark] class BlockManager(
     logInfo(s"Reporting ${blockInfo.size} blocks to the master.")
     for ((blockId, info) <- blockInfo) {
       val status = getCurrentBlockStatus(blockId, info)
-      if (!tryToReportBlockStatus(blockId, info, status)) {
+      if (!tryToReportBlockStatus(blockId, info, status)) {//每次上报一个数据块
         logError(s"Failed to report $blockId to master; giving up.")
         return
       }
@@ -267,12 +270,14 @@ private[spark] class BlockManager(
    * thread if our heartbeat to the block manager indicates that we were not registered.
    *
    * Note that this method must be called without any BlockInfo locks held.
+   * 重新注册
+   * 当executor的心跳时候会调用该方法
    */
   def reregister(): Unit = {
     // TODO: We might need to rate limit re-registering.
     logInfo("BlockManager re-registering with master")
-    master.registerBlockManager(blockManagerId, maxMemory, slaveEndpoint)
-    reportAllBlocks()
+    master.registerBlockManager(blockManagerId, maxMemory, slaveEndpoint)//注册
+    reportAllBlocks()//上报所有的数据块
   }
 
   /**
@@ -306,7 +311,7 @@ private[spark] class BlockManager(
   /**
    * Interface to get local block data. Throws an exception if the block cannot be found or
    * cannot be read successfully.
-   * 获取本地的数据块信息
+   * 获取本地的数据块信息---懒加载模式
    */
   override def getBlockData(blockId: BlockId): ManagedBuffer = {
     if (blockId.isShuffle) {
@@ -383,6 +388,8 @@ private[spark] class BlockManager(
    * Actually send a UpdateBlockInfo message. Returns the master's response,
    * which will be true if the block was successfully recorded and false if
    * the slave needs to re-register.
+   * 上报给master该数据块的信息内容
+   * true表示上报成功
    */
   private def tryToReportBlockStatus(
       blockId: BlockId,
@@ -397,7 +404,7 @@ private[spark] class BlockManager(
 
       //向master报告一个数据块内容
       master.updateBlockInfo(
-        blockManagerId, blockId, storageLevel, inMemSize, onDiskSize, inExternalBlockStoreSize)
+        blockManagerId, blockId, storageLevel, inMemSize, onDiskSize, inExternalBlockStoreSize)//发送master信息
     } else {
       true
     }
@@ -741,14 +748,14 @@ private[spark] class BlockManager(
     /* Remember the block's storage level so that we can correctly drop it to disk if it needs
      * to be dropped right after it got put into memory. Note, however, that other threads will
      * not be able to get() this block until we call markReady on its BlockInfo. */
-     //定义一个函数
+     //定义一个函数---返回该数据块的信息
      val putBlockInfo = {
       val tinfo = new BlockInfo(level, tellMaster)
       // Do atomically !
       val oldBlockOpt = blockInfo.putIfAbsent(blockId, tinfo) //获取已经存在的对象
       if (oldBlockOpt.isDefined) {//如果已经存在
         if (oldBlockOpt.get.waitForReady()) {//阻塞,一直拿到结果
-          logWarning(s"Block $blockId already exists on this machine; not re-adding it") //该数据块已经存在在这个节点上,不是这个操作添加的,是别的线程添加的
+          logWarning(s"Block $blockId already exists on this machine; not re-adding it") //说明该数据块已经存在了,不能再次添加,因此返回数据
           return updatedBlocks
         }
         // TODO: So the block info exists - but previous attempt to load it (?) failed.
@@ -782,7 +789,7 @@ private[spark] class BlockManager(
         //复制到多个节点上
       case b: ByteBufferValues if putLevel.replication > 1 =>
         // Duplicate doesn't copy the bytes, but just creates a wrapper
-        val bufferView = b.buffer.duplicate()
+        val bufferView = b.buffer.duplicate() //复制要copy的字节内容
         Future {
           // This is a blocking action and should run in futureExecutionContext which is a cached
           // thread pool
@@ -799,6 +806,7 @@ private[spark] class BlockManager(
       try {
         // returnValues - Whether to return the values put
         // blockStore - The type of storage to put these values into
+        //返回是否有结果,以及采用什么存储器存储该数据块信息
         val (returnValues, blockStore: BlockStore) = {
           if (putLevel.useMemory) {
             // Put it in memory first, even if it also has useDisk set to true;
@@ -809,7 +817,7 @@ private[spark] class BlockManager(
             (false, externalBlockStore)
           } else if (putLevel.useDisk) {
             // Don't get back the bytes from put unless we replicate them
-            (putLevel.replication > 1, diskStore)
+            (putLevel.replication > 1, diskStore) //putLevel.replication > 1 结果是否是true,表示是否需要返回值,如果是1,即存储后不需要返回信息给接下来的备份节点,因此就是false
           } else {
             assert(putLevel == StorageLevel.NONE)
             throw new BlockException(
@@ -829,8 +837,8 @@ private[spark] class BlockManager(
         }
         size = result.size
         result.data match {
-          case Left (newIterator) if putLevel.useMemory => valuesAfterPut = newIterator
-          case Right (newBytes) => bytesAfterPut = newBytes
+          case Left (newIterator) if putLevel.useMemory => valuesAfterPut = newIterator //说明返回值是迭代器
+          case Right (newBytes) => bytesAfterPut = newBytes //说明返回结果是字节数组
           case _ =>
         }
 
@@ -887,7 +895,7 @@ private[spark] class BlockManager(
             .format(blockId, Utils.getUsedTimeMs(remoteStartTime)))
       }
     }
-
+    //销毁字节数组
     BlockManager.dispose(bytesAfterPut)
 
     if (putLevel.replication > 1) {
@@ -1268,7 +1276,7 @@ private[spark] class BlockManager(
       bytes: ByteBuffer,
       serializer: Serializer = defaultSerializer): Iterator[Any] = {
     bytes.rewind() //将bytes的position设置为0,limit不更改,即表示可以去从头读取数据了
-    dataDeserializeStream(blockId, new ByteBufferInputStream(bytes, true), serializer)
+    dataDeserializeStream(blockId, new ByteBufferInputStream(bytes, true), serializer) //对流进行压缩处理
   }
 
   /**
@@ -1282,7 +1290,7 @@ private[spark] class BlockManager(
       inputStream: InputStream,
       serializer: Serializer = defaultSerializer): Iterator[Any] = {
     val stream = new BufferedInputStream(inputStream)
-    serializer.newInstance().deserializeStream(wrapForCompression(blockId, stream)).asIterator
+    serializer.newInstance().deserializeStream(wrapForCompression(blockId, stream)).asIterator //对流进行压缩处理
   }
 
   def stop(): Unit = {
