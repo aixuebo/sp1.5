@@ -115,12 +115,12 @@ abstract class BlockTransferService extends ShuffleClient with Closeable with Lo
    * 同步上传一个数据块到指定host:port上
    */
   def uploadBlockSync(
-      hostname: String,
-      port: Int,
-      execId: String,
-      blockId: BlockId,
-      blockData: ManagedBuffer,
-      level: StorageLevel): Unit = {
+      hostname: String,//上传的目的地
+      port: Int,//上传的目的地
+      execId: String,//上传的目的地
+      blockId: BlockId,//要上传的数据块ID
+      blockData: ManagedBuffer,//要上传的数据块内容
+      level: StorageLevel): Unit = {//要上传的存储信息
     Await.result(uploadBlock(hostname, port, execId, blockId, blockData, level), Duration.Inf)
   }
 }

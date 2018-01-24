@@ -30,4 +30,4 @@ import java.nio.ByteBuffer
 private[spark] case class PutResult(
     size: Long,//文件大小(反序列化后的大小)
     data: Either[Iterator[_], ByteBuffer],//文件的具体内容,要么是迭代器,要么是具体的内容组成的ByteBuffer数组
-    droppedBlocks: Seq[(BlockId, BlockStatus)] = Seq.empty)//数据块ID和该数据块状态组成的集合,这些是在内存管理存储的时候,内存不足时,删除的一些数据块映射集合
+    droppedBlocks: Seq[(BlockId, BlockStatus)] = Seq.empty)//数据块ID和该数据块状态组成的集合,这些是在内存管理存储的时候,内存不足时,删除的一些数据块映射集合---该属性只用于内存存储对象中

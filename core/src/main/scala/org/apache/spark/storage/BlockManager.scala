@@ -118,6 +118,7 @@ private[spark] class BlockManager(
 
   // Address of the server that serves this executor's shuffle files. This is either an external
   // service, or just our own Executor's BlockManager.
+  //shuffle文件的数据块滴孩子,可能是自己本地的executor就是一个数据块存储器,或者shuffle的文件存储在yarn上一个额外的存储设备上
   private[spark] var shuffleServerId: BlockManagerId = _
 
   // Client to read other executors' shuffle files. This is either an external service, or just the
@@ -215,7 +216,7 @@ private[spark] class BlockManager(
 
     // Register Executors' configuration with the local shuffle service, if one should exist.
     if (externalShuffleServiceEnabled && !blockManagerId.isDriver) {
-      registerWithExternalShuffleServer()
+      registerWithExternalShuffleServer()//注册额外的shuffle存储器
     }
   }
 
@@ -785,6 +786,8 @@ private[spark] class BlockManager(
 
     // If we're storing bytes, then initiate the replication before storing them locally.
     // This is faster as data is already serialized and ready to send.
+    //如果存储的是字节数组,则在存储到本地之前,要先备份到其他节点上
+    //因为数据字节数组已经是序列化后的,因此直接发送即可
     val replicationFuture = data match {
         //复制到多个节点上
       case b: ByteBufferValues if putLevel.replication > 1 =>
@@ -870,7 +873,7 @@ private[spark] class BlockManager(
         }
       }
     }
-    logDebug("Put block %s locally took %s".format(blockId, Utils.getUsedTimeMs(startTimeMs)))
+    logDebug("Put block %s locally took %s".format(blockId, Utils.getUsedTimeMs(startTimeMs))) //存放数据块花费多少时间
 
     // Either we're storing bytes and we asynchronously started replication, or we're storing
     // values and need to serialize and replicate them now:
@@ -911,12 +914,12 @@ private[spark] class BlockManager(
 
   /**
    * Get peer block managers in the system.
-   * 获取该数据块都分布在哪些节点上了
+   * 更新driver端相关联的executor都有哪些节点
    */
-  private def getPeers(forceFetch: Boolean): Seq[BlockManagerId] = {
+  private def getPeers(forceFetch: Boolean): Seq[BlockManagerId] = { //参数forceFetch表示强制更新
     peerFetchLock.synchronized {
-      val cachedPeersTtl = conf.getInt("spark.storage.cachedPeersTtl", 60 * 1000) // milliseconds
-      val timeout = System.currentTimeMillis - lastPeerFetchTime > cachedPeersTtl
+      val cachedPeersTtl = conf.getInt("spark.storage.cachedPeersTtl", 60 * 1000) // milliseconds 缓存时间
+      val timeout = System.currentTimeMillis - lastPeerFetchTime > cachedPeersTtl //超过缓存时间则重新去driver去抓去
       if (cachedPeers == null || forceFetch || timeout) {
         cachedPeers = master.getPeers(blockManagerId).sortBy(_.hashCode) //返回除了driver和自己之外的  BlockManagerId集合 Seq[BlockManagerId]
         lastPeerFetchTime = System.currentTimeMillis
@@ -944,7 +947,7 @@ private[spark] class BlockManager(
     val peersFailedToReplicateTo = new ArrayBuffer[BlockManagerId]//复制过程中遇到失败的节点集合
 
     val tLevel = StorageLevel(
-      level.useDisk, level.useMemory, level.useOffHeap, level.deserialized, 1)
+      level.useDisk, level.useMemory, level.useOffHeap, level.deserialized, 1)//每次赋值一个备份
 
     val startTime = System.currentTimeMillis
     val random = new Random(blockId.hashCode)
@@ -964,7 +967,7 @@ private[spark] class BlockManager(
     def getRandomPeer(): Option[BlockManagerId] = {
       // If replication had failed, then force update the cached list of peers and remove the peers
       // that have been already used
-      if (replicationFailed) {
+      if (replicationFailed) {//说明一个节点失败了,因此要重新进行复制计算
         peersForReplication.clear()
         peersForReplication ++= getPeers(forceFetch = true) //重新抓去节点集合
         peersForReplication --= peersReplicatedTo //刨除已经成功复制的节点集合
@@ -1015,7 +1018,7 @@ private[spark] class BlockManager(
                 done = true //超过最大失败次数.也会完成
               }
           }
-        case None => // no peer left to replicate to
+        case None => // no peer left to replicate to 说明已经没有executor去备份了
           done = true
       }
     }
