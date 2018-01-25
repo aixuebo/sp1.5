@@ -195,6 +195,7 @@ class DAGScheduler(
    * Update metrics for in-progress tasks and let the master know that the BlockManager is still
    * alive. Return true if the driver knows about the given block manager. Otherwise, return false,
    * indicating that the block manager should re-register.
+   * 让masert知道该executor仍然活着
    */
   def executorHeartbeatReceived(
       execId: String,
@@ -202,7 +203,7 @@ class DAGScheduler(
       blockManagerId: BlockManagerId): Boolean = {
     listenerBus.post(SparkListenerExecutorMetricsUpdate(execId, taskMetrics))
     blockManagerMaster.driverEndpoint.askWithRetry[Boolean](
-      BlockManagerHeartbeat(blockManagerId), new RpcTimeout(600 seconds, "BlockManagerHeartbeat"))
+      BlockManagerHeartbeat(blockManagerId), new RpcTimeout(600 seconds, "BlockManagerHeartbeat"))//通知master
   }
 
   /**
@@ -681,7 +682,7 @@ class DAGScheduler(
     logTrace("failed: " + failedStages)
     val waitingStagesCopy = waitingStages.toArray //获取等待的阶段的备份
     waitingStages.clear()//清空等待的阶段集合
-    for (stage <- waitingStagesCopy.sortBy(_.firstJobId)) {//循环等待的阶段,然后以此提交这些阶段
+    for (stage <- waitingStagesCopy.sortBy(_.firstJobId)) {//循环等待的阶段,然后依次提交这些阶段
       submitStage(stage)
     }
   }

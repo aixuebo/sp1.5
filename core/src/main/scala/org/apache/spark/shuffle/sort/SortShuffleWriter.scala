@@ -25,10 +25,11 @@ import org.apache.spark.shuffle.{IndexShuffleBlockResolver, ShuffleWriter, BaseS
 import org.apache.spark.storage.ShuffleBlockId
 import org.apache.spark.util.collection.ExternalSorter
 
+//每一个map都对应一个该writer对象
 private[spark] class SortShuffleWriter[K, V, C](
     shuffleBlockResolver: IndexShuffleBlockResolver,
     handle: BaseShuffleHandle[K, V, C],
-    mapId: Int,
+    mapId: Int,//第几个mapper
     context: TaskContext)
   extends ShuffleWriter[K, V] with Logging {
 
@@ -51,6 +52,7 @@ private[spark] class SortShuffleWriter[K, V, C](
   /** Write a bunch of records to this task's output */
   override def write(records: Iterator[Product2[K, V]]): Unit = {
     sorter = if (dep.mapSideCombine) {
+      //表示在map端要进行一次merge合并,以及排序操作
       require(dep.aggregator.isDefined, "Map-side combine without Aggregator specified!")
       new ExternalSorter[K, V, C](
         dep.aggregator, Some(dep.partitioner), dep.keyOrdering, dep.serializer)
@@ -67,18 +69,19 @@ private[spark] class SortShuffleWriter[K, V, C](
       // In this case we pass neither an aggregator nor an ordering to the sorter, because we don't
       // care whether the keys get sorted in each partition; that will be done on the reduce side
       // if the operation being run is sortByKey.
+      //说明map端不需要排序,也不需要聚合,那么就直接输出就可以,最终到reduce端进行排序
       new ExternalSorter[K, V, V](
         aggregator = None, Some(dep.partitioner), ordering = None, dep.serializer)
     }
-    sorter.insertAll(records)
+    sorter.insertAll(records) //将map的结果进行排序
 
     // Don't bother including the time to open the merged output file in the shuffle write time,
     // because it just opens a single file, so is typically too fast to measure accurately
     // (see SPARK-3570).
-    val outputFile = shuffleBlockResolver.getDataFile(dep.shuffleId, mapId)
+    val outputFile = shuffleBlockResolver.getDataFile(dep.shuffleId, mapId) //找到该shuffle在该map上的数据块文件
     val blockId = ShuffleBlockId(dep.shuffleId, mapId, IndexShuffleBlockResolver.NOOP_REDUCE_ID)
-    val partitionLengths = sorter.writePartitionedFile(blockId, context, outputFile)
-    shuffleBlockResolver.writeIndexFile(dep.shuffleId, mapId, partitionLengths)
+    val partitionLengths = sorter.writePartitionedFile(blockId, context, outputFile) //文件内容输出到一个文件中
+    shuffleBlockResolver.writeIndexFile(dep.shuffleId, mapId, partitionLengths)//写入索引文件
 
     mapStatus = MapStatus(blockManager.shuffleServerId, partitionLengths)
   }
@@ -111,12 +114,20 @@ private[spark] class SortShuffleWriter[K, V, C](
 }
 
 private[spark] object SortShuffleWriter {
+
+  /**
+  此时task会为每个下游task都创建一个临时磁盘文件，并将数据按key进行hash然后根据key的hash值，将key写入对应的磁盘文件之中。当然，写入磁盘文件时也是先写入内存缓冲，缓冲写满之后再溢写到磁盘文件的。最后，同样会将所有临时磁盘文件都合并成一个磁盘文件，并创建一个单独的索引文件。
+　　该过程的磁盘写机制其实跟未经优化的HashShuffleManager是一模一样的，因为都要创建数量惊人的磁盘文件，只是在最后会做一个磁盘文件的合并而已。因此少量的最终磁盘文件，也让该机制相对未经优化的HashShuffleManager来说，shuffle read的性能会更好。
+　　而该机制与普通SortShuffleManager运行机制的不同在于：第一，磁盘写机制不同；第二，不会进行排序。也就是说，启用该机制的最大好处在于，shuffle write过程中，不需要进行数据的排序操作，也就节省掉了这部分的性能开销。
+   */
+  //是否要进行排序
   def shouldBypassMergeSort(
       conf: SparkConf,
       numPartitions: Int,
       aggregator: Option[Aggregator[_, _, _]],
       keyOrdering: Option[Ordering[_]]): Boolean = {
     val bypassMergeThreshold: Int = conf.getInt("spark.shuffle.sort.bypassMergeThreshold", 200)
+    //完全兼容hash方式的shuffle,本身不需要map上聚合,也不需要排序,同时reduce的数量又很小,那么一个map的所有的reduce产生产生一个文件即可
     numPartitions <= bypassMergeThreshold && aggregator.isEmpty && keyOrdering.isEmpty
   }
 }

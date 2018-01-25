@@ -66,11 +66,13 @@ case class ShuffleBlockId(shuffleId: Int, mapId: Int, reduceId: Int) extends Blo
   override def name: String = "shuffle_" + shuffleId + "_" + mapId + "_" + reduceId
 }
 
+//数据内容是属于该map产生的所有的数据内容---用于SortShuffleManager算法
 @DeveloperApi
 case class ShuffleDataBlockId(shuffleId: Int, mapId: Int, reduceId: Int) extends BlockId {
   override def name: String = "shuffle_" + shuffleId + "_" + mapId + "_" + reduceId + ".data"
 }
 
+//索引文件的内容是属于该map输出的所有reduce内容都写入到同一个文件里,每一个reduce的offset---用于SortShuffleManager算法
 @DeveloperApi
 case class ShuffleIndexBlockId(shuffleId: Int, mapId: Int, reduceId: Int) extends BlockId {
   override def name: String = "shuffle_" + shuffleId + "_" + mapId + "_" + reduceId + ".index"

@@ -50,7 +50,7 @@ private[spark] class Executor(
     isLocal: Boolean = false)
   extends Logging {
 
-  logInfo(s"Starting executor ID $executorId on host $executorHostname")
+  logInfo(s"Starting executor ID $executorId on host $executorHostname") //说明在某个host上开启了一个executor
 
   // Application dependencies (added through SparkContext) that we've fetched so far on this node.
   // Each map holds the master's timestamp for the version of that file or JAR we got.
@@ -86,7 +86,7 @@ private[spark] class Executor(
     env.blockManager.initialize(conf.getAppId)
   }
 
-  // Create an RpcEndpoint for receiving RPCs from the driver
+  // Create an RpcEndpoint for receiving RPCs from the driver 开启一个服务,接收driver发送过来的请求
   private val executorEndpoint = env.rpcEnv.setupEndpoint(
     ExecutorEndpoint.EXECUTOR_ENDPOINT_NAME, new ExecutorEndpoint(env.rpcEnv, executorId))
 

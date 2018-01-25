@@ -26,6 +26,7 @@ import org.apache.spark.{TaskContext, ShuffleDependency}
  *
  * NOTE: this will be instantiated by SparkEnv so its constructor can take a SparkConf and
  * boolean isDriver as parameters.
+ * 该对象是在一个节点上只初始化一次,即在SparkEnv里面进行初始化的
  */
 private[spark] trait ShuffleManager {
   /**

@@ -34,6 +34,7 @@ import org.apache.spark.storage.BlockId;
 @Private
 public interface SortShuffleFileWriter<K, V> {
 
+  //将一个map中的结果集写入到不同的reduce文件中
   void insertAll(Iterator<Product2<K, V>> records) throws IOException;
 
   /**
@@ -44,6 +45,7 @@ public interface SortShuffleFileWriter<K, V> {
    * @param blockId block ID to write to. The index file will be blockId.name + ".index".
    * @param context a TaskContext for a running Spark task, for us to update shuffle metrics.
    * @return array of lengths, in bytes, of each partition of the file (used by map output tracker)
+   * 将所有的reduce分区文件,合并到一个到的文件中,即合并到outputFile里面
    */
   long[] writePartitionedFile(
       BlockId blockId,

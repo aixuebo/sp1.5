@@ -75,7 +75,7 @@ final class BypassMergeSortShuffleWriter<K, V> implements SortShuffleFileWriter<
   private final Serializer serializer;
 
   /** Array of file writers, one for each partition */
-  private DiskBlockObjectWriter[] partitionWriters;
+  private DiskBlockObjectWriter[] partitionWriters; //每一个reduce结果集是一个单独的文件
 
   public BypassMergeSortShuffleWriter(
       SparkConf conf,
@@ -93,23 +93,27 @@ final class BypassMergeSortShuffleWriter<K, V> implements SortShuffleFileWriter<
     this.serializer = serializer;
   }
 
+  //将一个map的输出结果写入到不同的reduce分区文件中
   @Override
   public void insertAll(Iterator<Product2<K, V>> records) throws IOException {
     assert (partitionWriters == null);
     if (!records.hasNext()) {
       return;
     }
+
     final SerializerInstance serInstance = serializer.newInstance();
     final long openStartTime = System.nanoTime();
-    partitionWriters = new DiskBlockObjectWriter[numPartitions];
+
+    partitionWriters = new DiskBlockObjectWriter[numPartitions];//每一个reduce结果集是一个单独的文件
     for (int i = 0; i < numPartitions; i++) {
       final Tuple2<TempShuffleBlockId, File> tempShuffleBlockIdPlusFile =
-        blockManager.diskBlockManager().createTempShuffleBlock();
+        blockManager.diskBlockManager().createTempShuffleBlock();//创建一个临时shuffle文件.返回值是临时shuffle的数据块ID以及存储位置
       final File file = tempShuffleBlockIdPlusFile._2();
       final BlockId blockId = tempShuffleBlockIdPlusFile._1();
       partitionWriters[i] =
-        blockManager.getDiskWriter(blockId, file, serInstance, fileBufferSize, writeMetrics).open();
+        blockManager.getDiskWriter(blockId, file, serInstance, fileBufferSize, writeMetrics).open();//为每一个reduce的结果集分配一个文件输出流
     }
+
     // Creating the file to write to and creating a disk writer both involve interacting with
     // the disk, and can take a long time in aggregate when we open many files, so should be
     // included in the shuffle write time.
@@ -126,13 +130,14 @@ final class BypassMergeSortShuffleWriter<K, V> implements SortShuffleFileWriter<
     }
   }
 
+    //将所有的reduce分区文件,合并到一个到的文件中,即合并到outputFile里面
   @Override
   public long[] writePartitionedFile(
       BlockId blockId,
       TaskContext context,
       File outputFile) throws IOException {
     // Track location of the partition starts in the output file
-    final long[] lengths = new long[numPartitions];
+    final long[] lengths = new long[numPartitions];//记录每一个分区的字节数
     if (partitionWriters == null) {
       // We were passed an empty iterator
       return lengths;
@@ -142,7 +147,7 @@ final class BypassMergeSortShuffleWriter<K, V> implements SortShuffleFileWriter<
     final long writeStartTime = System.nanoTime();
     boolean threwException = true;
     try {
-      for (int i = 0; i < numPartitions; i++) {
+      for (int i = 0; i < numPartitions; i++) {//循环每一个分区reduce文件的结果
         final FileInputStream in = new FileInputStream(partitionWriters[i].fileSegment().file());
         boolean copyThrewException = true;
         try {
@@ -151,7 +156,7 @@ final class BypassMergeSortShuffleWriter<K, V> implements SortShuffleFileWriter<
         } finally {
           Closeables.close(in, copyThrewException);
         }
-        if (!blockManager.diskBlockManager().getFile(partitionWriters[i].blockId()).delete()) {
+        if (!blockManager.diskBlockManager().getFile(partitionWriters[i].blockId()).delete()) {//删除临时文件
           logger.error("Unable to delete file for partition {}", i);
         }
       }

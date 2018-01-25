@@ -47,14 +47,14 @@ private[spark] class IndexShuffleBlockResolver(conf: SparkConf) extends ShuffleB
   private val transportConf = SparkTransportConf.fromSparkConf(conf)
 
   /**
-   * 获取某偶一个shuffleId下某一个map的数据文件
+   * 获取某一个shuffleId下某一个map的数据文件,即获取第0个reduce的结果
    */
   def getDataFile(shuffleId: Int, mapId: Int): File = {
     blockManager.diskBlockManager.getFile(ShuffleDataBlockId(shuffleId, mapId, NOOP_REDUCE_ID))
   }
 
   /**
-   * 获取某偶一个shuffleId下某一个map的索引文件
+   * 获取某一个shuffleId下某一个map的索引文件
    */
   private def getIndexFile(shuffleId: Int, mapId: Int): File = {
     blockManager.diskBlockManager.getFile(ShuffleIndexBlockId(shuffleId, mapId, NOOP_REDUCE_ID))
@@ -81,6 +81,8 @@ private[spark] class IndexShuffleBlockResolver(conf: SparkConf) extends ShuffleB
    * end of the output file. This will be used by getBlockData to figure out where each block
    * begins and ends.
    * 写入索引文件,将每一个数据块的开始位置写入到索引文件中
+   *
+   * 索引文件的内容是每一个reduce的offset
    * */
   def writeIndexFile(shuffleId: Int, mapId: Int, lengths: Array[Long]): Unit = {
     val indexFile = getIndexFile(shuffleId, mapId)

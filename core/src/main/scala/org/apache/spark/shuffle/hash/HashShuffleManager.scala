@@ -24,6 +24,8 @@ import org.apache.spark.shuffle._
  * A ShuffleManager using hashing, that creates one output file per reduce partition on each
  * mapper (possibly reusing these across waves of tasks).
  * 在一个mapper上,为每一个reduce都创建一个输出文件
+ *
+ * 该对象是在一个节点上只初始化一次,即在SparkEnv里面进行初始化的
  */
 private[spark] class HashShuffleManager(conf: SparkConf) extends ShuffleManager {
 
@@ -47,7 +49,7 @@ private[spark] class HashShuffleManager(conf: SparkConf) extends ShuffleManager 
    */
   override def getReader[K, C](
       handle: ShuffleHandle,
-      startPartition: Int,
+      startPartition: Int,//读取reduce的范围
       endPartition: Int,
       context: TaskContext): ShuffleReader[K, C] = {
     new HashShuffleReader(

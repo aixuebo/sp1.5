@@ -82,6 +82,7 @@ case class Aggregator[K, V, C] (
     }
   }
 
+  //以下内容很耗费内存
   //相当于map-reduce过程中的reduce,将相同key组成的所有C进行汇总
   @deprecated("use combineCombinersByKey with TaskContext argument", "0.9.0")
   def combineCombinersByKey(iter: Iterator[_ <: Product2[K, C]]) : Iterator[(K, C)] =

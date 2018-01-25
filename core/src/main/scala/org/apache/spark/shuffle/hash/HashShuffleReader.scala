@@ -26,6 +26,7 @@ import org.apache.spark.util.collection.ExternalSorter
 
 /**
  * 读取某一个map的输出shuffler结果
+ * ********************************以下内容很耗费内存********************************
  */
 private[spark] class HashShuffleReader[K, C](
     handle: BaseShuffleHandle[K, _, C],//shuffle的定义信息
@@ -50,9 +51,9 @@ private[spark] class HashShuffleReader[K, C](
       context,
       blockManager.shuffleClient,
       blockManager,
-      mapOutputTracker.getMapSizesByExecutorId(handle.shuffleId, startPartition),
+      mapOutputTracker.getMapSizesByExecutorId(handle.shuffleId, startPartition),//获取该shuffle要抓去的reduce的数据块所在节点
       // Note: we use getSizeAsMb when no suffix is provided for backwards compatibility
-      SparkEnv.get.conf.getSizeAsMb("spark.reducer.maxSizeInFlight", "48m") * 1024 * 1024)
+      SparkEnv.get.conf.getSizeAsMb("spark.reducer.maxSizeInFlight", "48m") * 1024 * 1024) //抓去流量
 
     // Wrap the streams for compression based on configuration 如果数据是压缩的,对数据解压缩
     //对每一个数据块转换成解压缩后的数据流
@@ -86,6 +87,9 @@ private[spark] class HashShuffleReader[K, C](
     // An interruptible iterator must be used here in order to support task cancellation
     val interruptibleIter = new InterruptibleIterator[(Any, Any)](context, metricIter)
 
+    //********************************以下内容很耗费内存********************************
+
+    //对reduce的抓去结果进行merge操作
     val aggregatedIter: Iterator[Product2[K, C]] = if (dep.aggregator.isDefined) {
       if (dep.mapSideCombine) {//map端combine
         // We are reading values that are already combined
@@ -110,7 +114,7 @@ private[spark] class HashShuffleReader[K, C](
         // Create an ExternalSorter to sort the data. Note that if spark.shuffle.spill is disabled,
         // the ExternalSorter won't spill to disk.
         val sorter = new ExternalSorter[K, C, C](ordering = Some(keyOrd), serializer = Some(ser))
-        sorter.insertAll(aggregatedIter)
+        sorter.insertAll(aggregatedIter)//把合并后的迭代器进行排序处理
         context.taskMetrics().incMemoryBytesSpilled(sorter.memoryBytesSpilled)
         context.taskMetrics().incDiskBytesSpilled(sorter.diskBytesSpilled)
         context.internalMetricsToAccumulators(

@@ -35,8 +35,8 @@ import org.apache.spark.storage.DiskBlockObjectWriter
  */
 private[spark] class HashShuffleWriter[K, V](
     shuffleBlockResolver: FileShuffleBlockResolver,
-    handle: BaseShuffleHandle[K, V, _],
-    mapId: Int,
+    handle: BaseShuffleHandle[K, V, _],//描述shuffle的具体info信息
+    mapId: Int,//第几个map上输出的shuffle信息
     context: TaskContext)
   extends ShuffleWriter[K, V] with Logging {
 
