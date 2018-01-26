@@ -27,6 +27,7 @@ object RpcUtils {
 
   /**
    * Retrieve a [[RpcEndpointRef]] which is located in the driver via its name.
+   * 找到driver的服务
    */
   def makeDriverRef(name: String, conf: SparkConf, rpcEnv: RpcEnv): RpcEndpointRef = {
     //从配置文件中获取driver的host和port,

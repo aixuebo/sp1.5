@@ -420,6 +420,7 @@ private[spark] class Executor(
     }
   }
 
+  //找到driver的服务
   private val heartbeatReceiverRef =
     RpcUtils.makeDriverRef(HeartbeatReceiver.ENDPOINT_NAME, conf, env.rpcEnv)
 
@@ -456,10 +457,10 @@ private[spark] class Executor(
     }
     val message = Heartbeat(executorId, tasksMetrics.toArray, env.blockManager.blockManagerId)
     try {
-      val response = heartbeatReceiverRef.askWithRetry[HeartbeatResponse](message)
-      if (response.reregisterBlockManager) {
+      val response = heartbeatReceiverRef.askWithRetry[HeartbeatResponse](message) //向该服务发送message信息,返回值是HeartbeatResponse对象
+      if (response.reregisterBlockManager) { //返回值参数reregisterBlockManager=true,表示要重新注册到master
         logInfo("Told to re-register on heartbeat")
-        env.blockManager.reregister()
+        env.blockManager.reregister() //重新注册
       }
     } catch {
       case NonFatal(e) => logWarning("Issue communicating with driver in heartbeater", e)

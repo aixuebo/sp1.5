@@ -37,7 +37,7 @@ import org.apache.spark.util.{Clock, SystemClock, ThreadUtils, Utils}
 private[spark] case class Heartbeat(
     executorId: String,//哪一个executor的报告
     taskMetrics: Array[(Long, TaskMetrics)], // taskId -> TaskMetrics 每一个任务对应的统计信息
-    blockManagerId: BlockManagerId)
+    blockManagerId: BlockManagerId)//报告的executor所在唯一ID
 
 /**
  * An event that SparkContext uses to notify HeartbeatReceiver that SparkContext.taskScheduler is
@@ -51,7 +51,7 @@ private case class ExecutorRegistered(executorId: String)
 
 private case class ExecutorRemoved(executorId: String)
 
-private[spark] case class HeartbeatResponse(reregisterBlockManager: Boolean)
+private[spark] case class HeartbeatResponse(reregisterBlockManager: Boolean) //返回值参数reregisterBlockManager=true,表示要重新注册到master
 
 /**
  * Lives in the driver to receive heartbeats from executors..
@@ -70,6 +70,7 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
   private[spark] var scheduler: TaskScheduler = null
 
   // executor ID -> timestamp of when the last heartbeat from this executor was received
+  //记录每一个executorId的最后一次心跳时间
   private val executorLastSeen = new mutable.HashMap[String, Long]
 
   // "spark.network.timeout" uses "seconds", while `spark.storage.blockManagerSlaveTimeoutMs` uses
@@ -119,33 +120,32 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
       expireDeadHosts()
       context.reply(true)
 
-    // Messages received from executors
+    // Messages received from executors 表示收到了一个心跳请求
     case heartbeat @ Heartbeat(executorId, taskMetrics, blockManagerId) =>
       if (scheduler != null) {
         if (executorLastSeen.contains(executorId)) {
-          executorLastSeen(executorId) = clock.getTimeMillis()
-          eventLoopThread.submit(new Runnable {
+          executorLastSeen(executorId) = clock.getTimeMillis()//更新心跳时间
+          eventLoopThread.submit(new Runnable { //提交一个线程任务
             override def run(): Unit = Utils.tryLogNonFatalError {
-              val unknownExecutor = !scheduler.executorHeartbeatReceived(
-                executorId, taskMetrics, blockManagerId)
+              val unknownExecutor = !scheduler.executorHeartbeatReceived(executorId, taskMetrics, blockManagerId) //true表示master知道该BlockManager,false表示不知道,要重新注册
               val response = HeartbeatResponse(reregisterBlockManager = unknownExecutor)
               context.reply(response)
             }
           })
-        } else {
+        } else {//说明没有记录过该executorId的心跳记录,但是不应该,因为注册的时候就要有一次心跳了,说明注册都没有发生过
           // This may happen if we get an executor's in-flight heartbeat immediately
           // after we just removed it. It's not really an error condition so we should
           // not log warning here. Otherwise there may be a lot of noise especially if
           // we explicitly remove executors (SPARK-4134).
           logDebug(s"Received heartbeat from unknown executor $executorId")
-          context.reply(HeartbeatResponse(reregisterBlockManager = true))
+          context.reply(HeartbeatResponse(reregisterBlockManager = true)) //重新注册
         }
       } else {
         // Because Executor will sleep several seconds before sending the first "Heartbeat", this
         // case rarely happens. However, if it really happens, log it and ask the executor to
         // register itself again.
         logWarning(s"Dropping $heartbeat because TaskScheduler is not ready yet")
-        context.reply(HeartbeatResponse(reregisterBlockManager = true))
+        context.reply(HeartbeatResponse(reregisterBlockManager = true))//直接恢复说让他重新注册
       }
   }
 
