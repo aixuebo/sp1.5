@@ -21,10 +21,11 @@ import org.apache.spark.annotation.DeveloperApi
 /**
  * :: DeveloperApi ::
  * Stores information about an executor to pass from the scheduler to SparkListeners.
+ * driver上描述一个executor的对象
  */
 @DeveloperApi
 class ExecutorInfo(
-   val executorHost: String,
+   val executorHost: String,//仅仅包含executor所在的host,表示哪个节点运行了该executor
    val totalCores: Int,
    val logUrlMap: Map[String, String]) {
 

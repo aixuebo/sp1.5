@@ -22,7 +22,9 @@ import org.apache.mesos.Protos.{TaskState => MesosTaskState}
 //表示一个任务的状态
 private[spark] object TaskState extends Enumeration {
 
-  val LAUNCHING, RUNNING, FINISHED, FAILED, KILLED, LOST = Value //任务状态
+  val LAUNCHING,//启动中
+  RUNNING, //运行中
+  FINISHED, FAILED, KILLED, LOST = Value //任务状态
 
   val FINISHED_STATES = Set(FINISHED, FAILED, KILLED, LOST) //都是完成的状态
 

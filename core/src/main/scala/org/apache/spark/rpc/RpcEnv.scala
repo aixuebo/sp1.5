@@ -49,6 +49,7 @@ private[spark] object RpcEnv {
     Utils.classForName(rpcEnvFactoryClassName).newInstance().asInstanceOf[RpcEnvFactory]
   }
 
+  //在本地创建一个服务
   def create(
       name: String,//名称
       host: String,//RPC服务器所在host

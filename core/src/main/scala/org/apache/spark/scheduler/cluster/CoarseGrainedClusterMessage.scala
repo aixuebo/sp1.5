@@ -29,21 +29,26 @@ private[spark] object CoarseGrainedClusterMessages {
 
   case object RetrieveSparkProps extends CoarseGrainedClusterMessage
 
-  // Driver to executors
+  // Driver to executors  driver通知executor
+  //参数是TaskDescription的序列化内容
   case class LaunchTask(data: SerializableBuffer) extends CoarseGrainedClusterMessage
 
   case class KillTask(taskId: Long, executor: String, interruptThread: Boolean)
     extends CoarseGrainedClusterMessage
 
+  //表示driver成功接收了该executor的注册
   case object RegisteredExecutor extends CoarseGrainedClusterMessage
 
+  //注册失败的时候,通知executor
   case class RegisterExecutorFailed(message: String) extends CoarseGrainedClusterMessage
 
-  // Executors to driver
+  // Executors to driver  executor通知driver
+
+  //表示executor向driver发送注册请求
   case class RegisterExecutor(
       executorId: String,
       executorRef: RpcEndpointRef,
-      hostPort: String,
+      hostPort: String,//host和port
       cores: Int,
       logUrls: Map[String, String])
     extends CoarseGrainedClusterMessage {
@@ -65,9 +70,9 @@ private[spark] object CoarseGrainedClusterMessages {
   case object ReviveOffers extends CoarseGrainedClusterMessage
 
   case object StopDriver extends CoarseGrainedClusterMessage
-
+  //停止一个executor
   case object StopExecutor extends CoarseGrainedClusterMessage
-
+  //停止全部executor
   case object StopExecutors extends CoarseGrainedClusterMessage
 
   case class RemoveExecutor(executorId: String, reason: String) extends CoarseGrainedClusterMessage

@@ -98,6 +98,7 @@ case class SparkListenerBlockManagerRemoved(time: Long, blockManagerId: BlockMan
 @DeveloperApi
 case class SparkListenerUnpersistRDD(rddId: Int) extends SparkListenerEvent
 
+//表示某个时间点,一个executor注册成功到driver上,以及注册时候的信息
 @DeveloperApi
 case class SparkListenerExecutorAdded(time: Long, executorId: String, executorInfo: ExecutorInfo)
   extends SparkListenerEvent

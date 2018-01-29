@@ -341,6 +341,12 @@ private[spark] class TaskSchedulerImpl(
     return tasks
   }
 
+  /**
+   * executor发送一个任务的统计信息
+   * @param tid taskId
+   * @param state 任务执行的状态
+   * @param serializedData 统计内容
+   */
   def statusUpdate(tid: Long, state: TaskState, serializedData: ByteBuffer) {
     var failedExecutor: Option[String] = None
     synchronized {

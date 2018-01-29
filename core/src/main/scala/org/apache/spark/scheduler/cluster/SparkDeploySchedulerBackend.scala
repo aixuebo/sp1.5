@@ -27,7 +27,7 @@ import org.apache.spark.scheduler.{ExecutorExited, ExecutorLossReason, SlaveLost
 import org.apache.spark.util.Utils
 
 private[spark] class SparkDeploySchedulerBackend(
-    scheduler: TaskSchedulerImpl,
+    scheduler: TaskSchedulerImpl,//调度
     sc: SparkContext,
     masters: Array[String])
   extends CoarseGrainedSchedulerBackend(scheduler, sc.env.rpcEnv)
@@ -51,7 +51,7 @@ private[spark] class SparkDeploySchedulerBackend(
     // The endpoint for executors to talk to us
     val driverUrl = rpcEnv.uriOf(SparkEnv.driverActorSystemName,
       RpcAddress(sc.conf.get("spark.driver.host"), sc.conf.get("spark.driver.port").toInt),
-      CoarseGrainedSchedulerBackend.ENDPOINT_NAME)
+      CoarseGrainedSchedulerBackend.ENDPOINT_NAME)//创建driver上的url
     val args = Seq(
       "--driver-url", driverUrl,
       "--executor-id", "{{EXECUTOR_ID}}",

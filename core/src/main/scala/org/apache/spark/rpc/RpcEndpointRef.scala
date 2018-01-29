@@ -86,6 +86,7 @@ private[spark] abstract class RpcEndpointRef(@transient conf: SparkConf)
    * @tparam T type of the reply message
    * @return the reply message from the corresponding [[RpcEndpoint]]
    * 尝试多次发送该信息
+   * 该方法表示发送信息message,期待返回值是类型T
    */
   def askWithRetry[T: ClassTag](message: Any): T = askWithRetry(message, defaultAskTimeout)
 

@@ -27,12 +27,13 @@ import org.apache.spark.rpc.{RpcEndpointRef, RpcAddress}
  * @param executorHost The hostname that this executor is running on
  * @param freeCores  The current number of cores available for work on the executor
  * @param totalCores The total number of cores available to the executor
+ * driver上描述一个executor的对象
  */
 private[cluster] class ExecutorData(
-   val executorEndpoint: RpcEndpointRef,
-   val executorAddress: RpcAddress,
-   override val executorHost: String,
-   var freeCores: Int,
-   override val totalCores: Int,
-   override val logUrlMap: Map[String, String]
+   val executorEndpoint: RpcEndpointRef,//executor的通信对象
+   val executorAddress: RpcAddress,//executor的通信地址host:port
+   override val executorHost: String,//仅仅包含executor的host,即知道该executor运行在哪个节点上
+   var freeCores: Int,//目前空闲多少个cpu
+   override val totalCores: Int,//总共该executor分配了多少个cpu
+   override val logUrlMap: Map[String, String]//executor提供的属性集合
 ) extends ExecutorInfo(executorHost, totalCores, logUrlMap)

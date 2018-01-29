@@ -45,6 +45,10 @@ import org.apache.spark.util.Utils
  * ShuffleMapTask执行任务,并且拆分输出到多个桶中,拆分规则是任务的partitioner决定的
  * @param stageId id of the stage this task belongs to 该任务属于第几个阶段
  * @param partitionId index of the number in the RDD 该任务执行RDD的哪个partition
+ *
+可以知道spark的进程级别的,即一个Executors是一个进程,而该进程内所有的Task任务都是多线程执行的。
+因此只要将所有的代码封装到org.apache.spark.scheduler.Task中,因此持有该jar包的任意程序都可以执行Task的run方法,因此至于是多线程还是多进程持续都无所谓了,这样的架构非常漂亮
+还有好处就是不仅节省了JVM的创建、销毁时间问题,而且多个Task需要依赖的相同的文件和jar包只需要下载一次即可。
  */
 private[spark] abstract class Task[T](
     val stageId: Int,

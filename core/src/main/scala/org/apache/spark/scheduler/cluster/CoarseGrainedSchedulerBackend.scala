@@ -41,11 +41,11 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   extends ExecutorAllocationClient with SchedulerBackend with Logging
 {
   // Use an atomic variable to track total number of cores in the cluster for simplicity and speed
-  var totalCoreCount = new AtomicInteger(0)
+  var totalCoreCount = new AtomicInteger(0) //所有的executor产生了多少个cpu
   // Total number of executors that are currently registered
-  var totalRegisteredExecutors = new AtomicInteger(0)
+  var totalRegisteredExecutors = new AtomicInteger(0) //已经注册了多少个executor了
   val conf = scheduler.sc.conf
-  private val akkaFrameSize = AkkaUtils.maxFrameSizeBytes(conf)
+  private val akkaFrameSize = AkkaUtils.maxFrameSizeBytes(conf) //发送最大的字节数
   // Submit tasks only after (registered resources / total expected resources)
   // is equal to at least this value, that is double between 0 and 1.
   var minRegisteredRatio =
@@ -56,6 +56,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     conf.getTimeAsMs("spark.scheduler.maxRegisteredResourcesWaitingTime", "30s")
   val createTime = System.currentTimeMillis()
 
+  //所有的executorId对应一个对象
   private val executorDataMap = new HashMap[String, ExecutorData]
 
   // Number of executors requested from the cluster manager that have not registered yet
@@ -82,10 +83,10 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
     override protected def log = CoarseGrainedSchedulerBackend.this.log
 
-    private val addressToExecutorId = new HashMap[RpcAddress, String]
+    private val addressToExecutorId = new HashMap[RpcAddress, String] //executor所在的host:port与executorID映射
 
     private val reviveThread =
-      ThreadUtils.newDaemonSingleThreadScheduledExecutor("driver-revive-thread")
+      ThreadUtils.newDaemonSingleThreadScheduledExecutor("driver-revive-thread") //线程池执行线程的容器
 
     override def onStart() {
       // Periodically revive offers to allow delay scheduling to work
@@ -98,13 +99,14 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       }, 0, reviveIntervalMs, TimeUnit.MILLISECONDS)
     }
 
+    //仅仅接收,不回复
     override def receive: PartialFunction[Any, Unit] = {
-      case StatusUpdate(executorId, taskId, state, data) =>
+      case StatusUpdate(executorId, taskId, state, data) => //executor发送一个任务的统计信息
         scheduler.statusUpdate(taskId, state, data.value)
-        if (TaskState.isFinished(state)) {
+        if (TaskState.isFinished(state)) {//说明该任务完成了
           executorDataMap.get(executorId) match {
             case Some(executorInfo) =>
-              executorInfo.freeCores += scheduler.CPUS_PER_TASK
+              executorInfo.freeCores += scheduler.CPUS_PER_TASK //每一个任务要花费多少个cpu
               makeOffers(executorId)
             case None =>
               // Ignoring the update since we don't know about the executor.
@@ -116,7 +118,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       case ReviveOffers =>
         makeOffers()
 
-      case KillTask(taskId, executorId, interruptThread) =>
+      case KillTask(taskId, executorId, interruptThread) => //driver直接向executor发送一个kill task即可
         executorDataMap.get(executorId) match {
           case Some(executorInfo) =>
             executorInfo.executorEndpoint.send(KillTask(taskId, executorId, interruptThread))
@@ -127,17 +129,18 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
     }
 
+    //接收并且回复
     override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
-      case RegisterExecutor(executorId, executorRef, hostPort, cores, logUrls) =>
+      case RegisterExecutor(executorId, executorRef, hostPort, cores, logUrls) => //说明executor通知driver,要建立一个连接
         Utils.checkHostPort(hostPort, "Host port expected " + hostPort)
         if (executorDataMap.contains(executorId)) {
-          context.reply(RegisterExecutorFailed("Duplicate executor ID: " + executorId))
+          context.reply(RegisterExecutorFailed("Duplicate executor ID: " + executorId)) //说明注册失败
         } else {
           logInfo("Registered executor: " + executorRef + " with ID " + executorId)
-          addressToExecutorId(executorRef.address) = executorId
+          addressToExecutorId(executorRef.address) = executorId //executor所在的host:port与executorID映射
           totalCoreCount.addAndGet(cores)
           totalRegisteredExecutors.addAndGet(1)
-          val (host, _) = Utils.parseHostPort(hostPort)
+          val (host, _) = Utils.parseHostPort(hostPort) //所在host
           val data = new ExecutorData(executorRef, executorRef.address, host, cores, cores, logUrls)
           // This must be synchronized because variables mutated
           // in this block are read when requesting executors
@@ -149,7 +152,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
             }
           }
           // Note: some tests expect the reply to come after we put the executor in the map
-          context.reply(RegisteredExecutor)
+          context.reply(RegisteredExecutor) //回复注册成功
           listenerBus.post(
             SparkListenerExecutorAdded(System.currentTimeMillis(), executorId, data))
           makeOffers()
@@ -204,7 +207,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     private def launchTasks(tasks: Seq[Seq[TaskDescription]]) {
       for (task <- tasks.flatten) {
         val serializedTask = ser.serialize(task)
-        if (serializedTask.limit >= akkaFrameSize - AkkaUtils.reservedSizeBytes) {
+        if (serializedTask.limit >= akkaFrameSize - AkkaUtils.reservedSizeBytes) {//说明序列化的结果超出了字节
           scheduler.taskIdToTaskSetManager.get(task.taskId).foreach { taskSetMgr =>
             try {
               var msg = "Serialized task %s:%d was %d bytes, which exceeds max allowed: " +
@@ -218,10 +221,10 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
             }
           }
         }
-        else {
+        else {//说明没有超出
           val executorData = executorDataMap(task.executorId)
-          executorData.freeCores -= scheduler.CPUS_PER_TASK
-          executorData.executorEndpoint.send(LaunchTask(new SerializableBuffer(serializedTask)))
+          executorData.freeCores -= scheduler.CPUS_PER_TASK //减少一定cpu数量
+          executorData.executorEndpoint.send(LaunchTask(new SerializableBuffer(serializedTask))) //发送任务
         }
       }
     }

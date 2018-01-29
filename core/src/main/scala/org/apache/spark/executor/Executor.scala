@@ -41,6 +41,10 @@ import org.apache.spark.util._
  * This can be used with Mesos, YARN, and the standalone scheduler.
  * An internal RPC interface (at the moment Akka) is used for communication with the driver,
  * except in the case of Mesos fine-grained mode.
+ *
+可以知道spark的进程级别的,即一个Executors是一个进程,而该进程内所有的Task任务都是多线程执行的。
+因此只要将所有的代码封装到org.apache.spark.scheduler.Task中,因此持有该jar包的任意程序都可以执行Task的run方法,因此至于是多线程还是多进程持续都无所谓了,这样的架构非常漂亮
+还有好处就是不仅节省了JVM的创建、销毁时间问题,而且多个Task需要依赖的相同的文件和jar包只需要下载一次即可。
  */
 private[spark] class Executor(
     executorId: String,//唯一的Id
@@ -70,7 +74,7 @@ private[spark] class Executor(
   // Make sure the local hostname we report matches the cluster scheduler's name for this host
   Utils.setCustomHostname(executorHostname)
 
-  if (!isLocal) {
+  if (!isLocal) {//说明不是本地任务
     // Setup an uncaught exception handler for non-local mode.
     // Make any thread terminations due to uncaught exceptions kill the entire
     // executor process to avoid surprising stalls.
@@ -137,9 +141,11 @@ private[spark] class Executor(
 
   def stop(): Unit = {
     env.metricsSystem.report()
-    env.rpcEnv.stop(executorEndpoint)
+    env.rpcEnv.stop(executorEndpoint)//关闭exector服务
+    //关闭心跳线程
     heartbeater.shutdown()
     heartbeater.awaitTermination(10, TimeUnit.SECONDS)
+    //关闭executor上执行task的线程池
     threadPool.shutdown()
     if (!isLocal) {
       env.stop()
@@ -153,6 +159,7 @@ private[spark] class Executor(
     ManagementFactory.getGarbageCollectorMXBeans.map(_.getCollectionTime).sum
   }
 
+  //一个单独的线程去执行一个Task任务
   class TaskRunner(
       execBackend: ExecutorBackend,
       val taskId: Long,
@@ -238,20 +245,21 @@ private[spark] class Executor(
           throw new TaskKilledException
         }
 
+        //对返回值结果进行序列化
         val resultSer = env.serializer.newInstance()
         val beforeSerialization = System.currentTimeMillis()
         val valueBytes = resultSer.serialize(value)
         val afterSerialization = System.currentTimeMillis()
 
-        for (m <- task.metrics) {
+        for (m <- task.metrics) {//计算该任务的统计结果
           // Deserialization happens in two parts: first, we deserialize a Task object, which
           // includes the Partition. Second, Task.run() deserializes the RDD and function to be run.
           m.setExecutorDeserializeTime(
             (taskStart - deserializeStartTime) + task.executorDeserializeTime)
           // We need to subtract Task.run()'s deserialization time to avoid double-counting
-          m.setExecutorRunTime((taskFinish - taskStart) - task.executorDeserializeTime)
-          m.setJvmGCTime(computeTotalGcTime() - startGCTime)
-          m.setResultSerializationTime(afterSerialization - beforeSerialization)
+          m.setExecutorRunTime((taskFinish - taskStart) - task.executorDeserializeTime)//任务执行的时间
+          m.setJvmGCTime(computeTotalGcTime() - startGCTime)//jvm执行task的消耗情况
+          m.setResultSerializationTime(afterSerialization - beforeSerialization)//序列化返回值的时间
           m.updateAccumulators()
         }
 
@@ -391,7 +399,7 @@ private[spark] class Executor(
     lazy val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
     synchronized {
       // Fetch missing dependencies
-      for ((name, timestamp) <- newFiles if currentFiles.getOrElse(name, -1L) < timestamp) {
+      for ((name, timestamp) <- newFiles if currentFiles.getOrElse(name, -1L) < timestamp) {//下载文件
         logInfo("Fetching " + name + " with timestamp " + timestamp)
         // Fetch file with useCache mode, close cache for local mode.
         Utils.fetchFile(name, new File(SparkFiles.getRootDirectory()), conf,
@@ -403,7 +411,7 @@ private[spark] class Executor(
         val currentTimeStamp = currentJars.get(name)
           .orElse(currentJars.get(localName))
           .getOrElse(-1L)
-        if (currentTimeStamp < timestamp) {
+        if (currentTimeStamp < timestamp) {//下载文件
           logInfo("Fetching " + name + " with timestamp " + timestamp)
           // Fetch file with useCache mode, close cache for local mode.
           Utils.fetchFile(name, new File(SparkFiles.getRootDirectory()), conf,
@@ -422,7 +430,7 @@ private[spark] class Executor(
 
   //找到driver的服务
   private val heartbeatReceiverRef =
-    RpcUtils.makeDriverRef(HeartbeatReceiver.ENDPOINT_NAME, conf, env.rpcEnv)
+    RpcUtils.makeDriverRef(HeartbeatReceiver.ENDPOINT_NAME, conf, env.rpcEnv)//env.rpcEnv表示executor的服务
 
   /** Reports heartbeat and metrics for active tasks to the driver.
     * 心跳函数,将统计信息报告给driver
