@@ -27,12 +27,15 @@ private[spark] sealed trait CoarseGrainedClusterMessage extends Serializable
 
 private[spark] object CoarseGrainedClusterMessages {
 
+  //返回driver上运行的spark配置参数Seq[(String, String)]
   case object RetrieveSparkProps extends CoarseGrainedClusterMessage
 
   // Driver to executors  driver通知executor
   //参数是TaskDescription的序列化内容
+  //用于1.调度driver向某个executor发送一个任务去执行,以及2.executor上接收一个任务
   case class LaunchTask(data: SerializableBuffer) extends CoarseGrainedClusterMessage
 
+  //用于1.调度driver向某个executorkill一个任务,以及2.executor上接收一个kill任务请求
   case class KillTask(taskId: Long, executor: String, interruptThread: Boolean)
     extends CoarseGrainedClusterMessage
 
@@ -55,6 +58,7 @@ private[spark] object CoarseGrainedClusterMessages {
     Utils.checkHostPort(hostPort, "Expected host port")
   }
 
+  //用于executor将任务的统计信息上传给driver
   case class StatusUpdate(executorId: String, taskId: Long, state: TaskState,
     data: SerializableBuffer) extends CoarseGrainedClusterMessage
 
@@ -70,9 +74,11 @@ private[spark] object CoarseGrainedClusterMessages {
   case object ReviveOffers extends CoarseGrainedClusterMessage
 
   case object StopDriver extends CoarseGrainedClusterMessage
-  //停止一个executor
+
+  //停止一个executor,driver向某一个executor发送该事件,以及executor处理该事件
   case object StopExecutor extends CoarseGrainedClusterMessage
-  //停止全部executor
+
+  //driver端接收的停止全部executor
   case object StopExecutors extends CoarseGrainedClusterMessage
 
   case class RemoveExecutor(executorId: String, reason: String) extends CoarseGrainedClusterMessage

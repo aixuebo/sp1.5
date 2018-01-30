@@ -73,6 +73,17 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   // The number of pending tasks which is locality required
   protected var localityAwareTasks = 0
 
+  /**
+代表driver上的一个服务,因此可以提供以下服务
+1.定期自己调用ReviveOffers服务---不断的去集群上申请资源
+2.接收executor上传的RegisterExecutor任务,用于注册一个executor给driver
+3.接收executor上传的StatusUpdate任务,即汇总每一个task的任务统计值
+4.接收driver上产生的KillTask任务,通知executor执行kill该task
+5.接收StopExecutors任务,访问所有的executor,关闭每一个executor
+6.接收RemoveExecutor任务,移除一个RemoveExecutor
+7.当申请到任务的资源后,去executor节点上执行对应的task任务
+   */
+  //参数是driver的服务器  以及driver上运行的spark配置参数
   class DriverEndpoint(override val rpcEnv: RpcEnv, sparkProperties: Seq[(String, String)])
     extends ThreadSafeRpcEndpoint with Logging {
 
@@ -178,15 +189,17 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     }
 
     // Make fake resource offers on all executors
+    //激活一些任务去executor上执行
     private def makeOffers() {
       // Filter out executors under killing
-      val activeExecutors = executorDataMap.filterKeys(!executorsPendingToRemove.contains(_))
+      val activeExecutors = executorDataMap.filterKeys(!executorsPendingToRemove.contains(_)) //找到所有任务中尚未被删除的任务
       val workOffers = activeExecutors.map { case (id, executorData) =>
         new WorkerOffer(id, executorData.executorHost, executorData.freeCores)
       }.toSeq
-      launchTasks(scheduler.resourceOffers(workOffers))
+      launchTasks(scheduler.resourceOffers(workOffers)) //去集群的调度上申请资源
     }
 
+    //说明该节点失联了,要移除该节点
     override def onDisconnected(remoteAddress: RpcAddress): Unit = {
       addressToExecutorId.get(remoteAddress).foreach(removeExecutor(_,
         "remote Rpc client disassociated"))
@@ -235,7 +248,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         case Some(executorInfo) =>
           // This must be synchronized because variables mutated
           // in this block are read when requesting executors
-          CoarseGrainedSchedulerBackend.this.synchronized {
+          CoarseGrainedSchedulerBackend.this.synchronized { //driver的内存不再维护executor
             addressToExecutorId -= executorInfo.executorAddress
             executorDataMap -= executorId
             executorsPendingToRemove -= executorId
@@ -250,14 +263,15 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     }
 
     override def onStop() {
-      reviveThread.shutdownNow()
+      reviveThread.shutdownNow() //关闭定时线程
     }
   }
 
-  var driverEndpoint: RpcEndpointRef = null
+  var driverEndpoint: RpcEndpointRef = null //driver的服务socket
   val taskIdsOnSlave = new HashMap[String, HashSet[String]]
 
   override def start() {
+    //获取spark开头的配置信息
     val properties = new ArrayBuffer[(String, String)]
     for ((key, value) <- scheduler.sc.conf.getAll) {
       if (key.startsWith("spark.")) {
@@ -270,11 +284,12 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       CoarseGrainedSchedulerBackend.ENDPOINT_NAME, new DriverEndpoint(rpcEnv, properties))
   }
 
+  //最终会调用driver服务
   def stopExecutors() {
     try {
       if (driverEndpoint != null) {
         logInfo("Shutting down all executors")
-        driverEndpoint.askWithRetry[Boolean](StopExecutors)
+        driverEndpoint.askWithRetry[Boolean](StopExecutors)//杀死该driver的所有executor
       }
     } catch {
       case e: Exception =>
@@ -283,10 +298,10 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   }
 
   override def stop() {
-    stopExecutors()
+    stopExecutors() //最终会调用driver服务,杀死该driver的所有executor
     try {
       if (driverEndpoint != null) {
-        driverEndpoint.askWithRetry[Boolean](StopDriver)
+        driverEndpoint.askWithRetry[Boolean](StopDriver)//最终会调用driver服务,关闭driver节点服务
       }
     } catch {
       case e: Exception =>
@@ -295,9 +310,10 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   }
 
   override def reviveOffers() {
-    driverEndpoint.send(ReviveOffers)
+    driverEndpoint.send(ReviveOffers) //申请资源
   }
 
+  //调用driver服务杀死一个任务
   override def killTask(taskId: Long, executorId: String, interruptThread: Boolean) {
     driverEndpoint.send(KillTask(taskId, executorId, interruptThread))
   }
@@ -334,6 +350,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
   /**
    * Return the number of executors currently registered with this backend.
+   * 返回已经注册了多少个executor
    */
   def numExistingExecutors: Int = executorDataMap.size
 
@@ -420,14 +437,14 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
    */
   final def killExecutors(executorIds: Seq[String], replace: Boolean): Boolean = synchronized {
     logInfo(s"Requesting to kill executor(s) ${executorIds.mkString(", ")}")
-    val (knownExecutors, unknownExecutors) = executorIds.partition(executorDataMap.contains)
+    val (knownExecutors, unknownExecutors) = executorIds.partition(executorDataMap.contains) //拆分成两组,一组是已知的executor,一组是未知的
     unknownExecutors.foreach { id =>
       logWarning(s"Executor to kill $id does not exist!")
     }
 
     // If an executor is already pending to be removed, do not kill it again (SPARK-9795)
-    val executorsToKill = knownExecutors.filter { id => !executorsPendingToRemove.contains(id) }
-    executorsPendingToRemove ++= executorsToKill
+    val executorsToKill = knownExecutors.filter { id => !executorsPendingToRemove.contains(id) } //过滤掉已经在等待移除的executor
+    executorsPendingToRemove ++= executorsToKill //将其加入到等待移除队列中
 
     // If we do not wish to replace the executors we kill, sync the target number of executors
     // with the cluster manager to avoid allocating new ones. When computing the new target,
@@ -439,12 +456,13 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       numPendingExecutors += knownExecutors.size
     }
 
-    doKillExecutors(executorsToKill)
+    doKillExecutors(executorsToKill) //真正如何kill一些executor
   }
 
   /**
    * Kill the given list of executors through the cluster manager.
    * @return whether the kill request is acknowledged.
+   * 真正如何kill一些executor
    */
   protected def doKillExecutors(executorIds: Seq[String]): Boolean = false
 

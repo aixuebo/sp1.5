@@ -23,15 +23,16 @@ import java.util.Properties
  * A set of tasks submitted together to the low-level TaskScheduler, usually representing
  * missing partitions of a particular stage.
  * 表示某一个阶段的某个尝试阶段,提交一个任务集合
- * 
+ *
+ * 该对象代表一个阶段下所有的任务数量
  */
 private[spark] class TaskSet(
-    val tasks: Array[Task[_]],
+    val tasks: Array[Task[_]],//该阶段的任务集合,即map任务或者reduce任务
     val stageId: Int,
-    val stageAttemptId: Int,
+    val stageAttemptId: Int,//一般尝试ID都是0开始,即一般情况下都不需要尝试任务,因此0即可
     val priority: Int,
     val properties: Properties) {
-    val id: String = stageId + "." + stageAttemptId
+    val id: String = stageId + "." + stageAttemptId //
 
   override def toString: String = "TaskSet " + id
 }

@@ -97,6 +97,8 @@ abstract class RDD[T: ClassTag](
     logWarning("Spark does not support nested RDDs (see SPARK-5063)") //目前spark不支持嵌套RDD
   }
 
+  override def hashCode(): Int = super.hashCode()
+
   //RDD所持有的spark环境必须存在,不能是null
   private def sc: SparkContext = {
     if (_sc == null) {

@@ -83,7 +83,7 @@ private[spark] abstract class Task[T](
       metricsSystem,
       internalAccumulators,
       runningLocally = false)
-    TaskContext.setTaskContext(context)
+    TaskContext.setTaskContext(context) //绑定上下文对象
     context.taskMetrics.setHostname(Utils.localHostName())
     context.taskMetrics.setAccumulatorsUpdater(context.collectInternalAccumulators)
     taskThread = Thread.currentThread()

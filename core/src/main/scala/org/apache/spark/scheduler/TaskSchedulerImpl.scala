@@ -58,7 +58,7 @@ private[spark] class TaskSchedulerImpl(
     isLocal: Boolean = false)//是否本地执行的该driver
   extends TaskScheduler with Logging
 {
-  def this(sc: SparkContext) = this(sc, sc.conf.getInt("spark.task.maxFailures", 4))
+  def this(sc: SparkContext) = this(sc, sc.conf.getInt("spark.task.maxFailures", 4)) //最大失败次数
 
   val conf = sc.conf
 
@@ -76,7 +76,7 @@ private[spark] class TaskSchedulerImpl(
 
   // TaskSetManagers are not thread safe, so any access to one should be synchronized
   // on this class.
-  //key是阶段ID,StageId value的key是该阶段的Attempt尝试次数,value是该尝试次数对应的任务集合
+  //key是阶段ID,即StageId value的key是该阶段的Attempt尝试次数,value是该尝试次数对应的任务集合
   private val taskSetsByStageIdAndAttempt = new HashMap[Int, HashMap[Int, TaskSetManager]]
 
   private[scheduler] val taskIdToTaskSetManager = new HashMap[Long, TaskSetManager]
@@ -172,11 +172,11 @@ private[spark] class TaskSchedulerImpl(
       val stage = taskSet.stageId
       val stageTaskSets =
         taskSetsByStageIdAndAttempt.getOrElseUpdate(stage, new HashMap[Int, TaskSetManager])
-      stageTaskSets(taskSet.stageAttemptId) = manager
+      stageTaskSets(taskSet.stageAttemptId) = manager //添加该尝试节点对应的任务管理器
       
       //true表示任务集合有冲突
       val conflictingTaskSet = stageTaskSets.exists { case (_, ts) =>
-        ts.taskSet != taskSet && !ts.isZombie
+        ts.taskSet != taskSet && !ts.isZombie //说明尝试任务是不同的,但是isZombie=false表示不允许出现尝试任务一起执行
       }
       if (conflictingTaskSet) {
         throw new IllegalStateException(s"more than one active taskSet for stage $stage:" +
@@ -207,8 +207,8 @@ private[spark] class TaskSchedulerImpl(
 
   // Label as private[scheduler] to allow tests to swap in different task set managers if necessary
   private[scheduler] def createTaskSetManager(
-      taskSet: TaskSet,
-      maxTaskFailures: Int): TaskSetManager = {
+      taskSet: TaskSet,//一个阶段的任务
+      maxTaskFailures: Int): TaskSetManager = {//该阶段的失败次数
     new TaskSetManager(this, taskSet, maxTaskFailures)
   }
 
@@ -292,6 +292,7 @@ private[spark] class TaskSchedulerImpl(
    * Called by cluster manager to offer resources on slaves. We respond by asking our active task
    * sets for tasks in order of priority. We fill each node with tasks in a round-robin manner so
    * that tasks are balanced across the cluster.
+   * 为参数这些executor分配资源
    */
   def resourceOffers(offers: Seq[WorkerOffer]): Seq[Seq[TaskDescription]] = synchronized {
     // Mark each slave as alive and remember its hostname

@@ -94,10 +94,16 @@ class DAGScheduler(
   //一个job有多个阶段组成,因此有一个阶段的计数器
   private val nextStageId = new AtomicInteger(0)
 
+  /**
+因此有以下的映射关系
+每一个job对应一个ActiveJob对象
+每一个job对应一个set集合的StageId
+每一个stageId对应一个stage对象
+   */
+  private[scheduler] val jobIdToActiveJob = new HashMap[Int, ActiveJob]//可以运行的job
   private[scheduler] val jobIdToStageIds = new HashMap[Int, HashSet[Int]]//该jobid 有哪些阶段集合
   private[scheduler] val stageIdToStage = new HashMap[Int, Stage] //存储每一个Stage的Id与Stage对象的内存映射
   private[scheduler] val shuffleToMapStage = new HashMap[Int, ShuffleMapStage]
-  private[scheduler] val jobIdToActiveJob = new HashMap[Int, ActiveJob]//可以运行的job
 
   // Stages we need to run whose parents aren't done
   private[scheduler] val waitingStages = new HashSet[Stage]
@@ -801,7 +807,7 @@ class DAGScheduler(
       logDebug("submitStage(" + stage + ")")
 
       //该阶段没有等待中 没有运行中 没有失败中,则可以进行处理
-      if (!waitingStages(stage) && !runningStages(stage) && !failedStages(stage)) {
+      if (!waitingStages(stage) && !runningStages(stage) && !failedStages(stage)) {JobSubmitted
         val missing = getMissingParentStages(stage).sortBy(_.id) //缺失的阶段,按照id排序
         logDebug("missing: " + missing)
         if (missing.isEmpty) {//没有缺失
