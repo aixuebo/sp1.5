@@ -49,6 +49,8 @@ private[spark] class HttpBroadcast[T: ClassTag](
   /*
    * Broadcasted data is also stored in the BlockManager of the driver. The BlockManagerMaster
    * does not need to be told about this block as not only need to know about this data block.
+   * 将该广播写入到本地磁盘或者内存中,组成一个数据块,但是不用通知master
+   * 因为他就在master节点的磁盘存储
    */
   HttpBroadcast.synchronized {
     SparkEnv.get.blockManager.putSingle(
@@ -82,21 +84,21 @@ private[spark] class HttpBroadcast[T: ClassTag](
 
   /** Used by the JVM when deserializing this object. */
   private def readObject(in: ObjectInputStream): Unit = Utils.tryOrIOException {
-    in.defaultReadObject()
+    in.defaultReadObject() //反序列化后,可以拿到blockId,因此可以进一步获取数据块内容
     HttpBroadcast.synchronized {
       SparkEnv.get.blockManager.getSingle(blockId) match {
         case Some(x) => value_ = x.asInstanceOf[T]
         case None => {
           logInfo("Started reading broadcast variable " + id)
           val start = System.nanoTime
-          value_ = HttpBroadcast.read[T](id)
+          value_ = HttpBroadcast.read[T](id) //说明本地没有,因此要去服务器请求
           /*
            * We cache broadcast data in the BlockManager so that subsequent tasks using it
            * do not need to re-fetch. This data is only used locally and no other node
            * needs to fetch this block, so we don't notify the master.
            */
           SparkEnv.get.blockManager.putSingle(
-            blockId, value_, StorageLevel.MEMORY_AND_DISK, tellMaster = false)
+            blockId, value_, StorageLevel.MEMORY_AND_DISK, tellMaster = false)//服务器请求后存储到本地磁盘
           val time = (System.nanoTime - start) / 1e9
           logInfo("Reading broadcast variable " + id + " took " + time + " s")
         }
@@ -128,14 +130,14 @@ private[broadcast] object HttpBroadcast extends Logging {
         bufferSize = conf.getInt("spark.buffer.size", 65536)
         compress = conf.getBoolean("spark.broadcast.compress", true)
         securityManager = securityMgr
-        if (isDriver) {
+        if (isDriver) {//打开driver上的服务
           createServer(conf)
           conf.set("spark.httpBroadcast.uri", serverUri)
         }
         //获取HttpServer的uri
-        serverUri = conf.get("spark.httpBroadcast.uri")
-        cleaner = new MetadataCleaner(MetadataCleanerType.HTTP_BROADCAST, cleanup, conf)
-        compressionCodec = CompressionCodec.createCodec(conf)
+        serverUri = conf.get("spark.httpBroadcast.uri") //获取driver上的服务地址
+        cleaner = new MetadataCleaner(MetadataCleanerType.HTTP_BROADCAST, cleanup, conf) //创建广播的定期清理程序
+        compressionCodec = CompressionCodec.createCodec(conf) //获取压缩方式
         initialized = true
       }
     }
@@ -143,11 +145,11 @@ private[broadcast] object HttpBroadcast extends Logging {
 
   def stop() {
     synchronized {
-      if (server != null) {
+      if (server != null) {//关闭driver上的广播服务
         server.stop()
         server = null
       }
-      if (cleaner != null) {
+      if (cleaner != null) {//关闭广播定期清理程序
         cleaner.cancel()
         cleaner = null
       }
@@ -156,6 +158,7 @@ private[broadcast] object HttpBroadcast extends Logging {
     }
   }
 
+  //driver端创建服务
   private def createServer(conf: SparkConf) {
     //创建broadcast文件夹,并且在该目录下常见一个服务
     broadcastDir = Utils.createTempDir(Utils.getLocalDir(conf), "broadcast")
@@ -167,10 +170,10 @@ private[broadcast] object HttpBroadcast extends Logging {
     logInfo("Broadcast server started at " + serverUri)
   }
 
-
+  //在广播目录下创建一个广播的数据块文件
   def getFile(id: Long): File = new File(broadcastDir, BroadcastBlockId(id).name)
 
-  //将服务器上的文件读取成流,发送给客户端
+  //将广播的id创建成一个文件,然后将value内容序列化后存储到文件中
   private def write(id: Long, value: Any) {
     val file = getFile(id)
     val fileOutputStream = new FileOutputStream(file) //原始文件的输出流
@@ -247,8 +250,8 @@ private[broadcast] object HttpBroadcast extends Logging {
     SparkEnv.get.blockManager.master.removeBroadcast(id, removeFromDriver, blocking)
     if (removeFromDriver) {//删除该文件
       val file = getFile(id)
-      files.remove(file)
-      deleteBroadcastFile(file)
+      files.remove(file) //移除文件的映射
+      deleteBroadcastFile(file) //真正删除该广播文件
     }
   }
 

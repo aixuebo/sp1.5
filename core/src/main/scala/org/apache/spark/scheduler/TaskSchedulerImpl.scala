@@ -68,7 +68,7 @@ private[spark] class TaskSchedulerImpl(
   private val speculationScheduler =
     ThreadUtils.newDaemonSingleThreadScheduledExecutor("task-scheduler-speculation")//线程服务
 
-  // Threshold above which we warn user initial TaskSet may be starved
+  // Threshold above which we warn user initial TaskSet may be starved 多久开启一次task执行
   val STARVATION_TIMEOUT_MS = conf.getTimeAsMs("spark.starvation.timeout", "15s")
 
   // CPUs to request per task 每一个任务要花费多少个cpu
@@ -126,6 +126,7 @@ private[spark] class TaskSchedulerImpl(
     this.dagScheduler = dagScheduler
   }
 
+  //初始化的时候产生调度队列
   def initialize(backend: SchedulerBackend) {
     this.backend = backend
     // temporarily set rootPool name to empty
@@ -164,9 +165,9 @@ private[spark] class TaskSchedulerImpl(
   override def submitTasks(taskSet: TaskSet) {
     val tasks = taskSet.tasks //真正的任务集合
     //打印日志,说明哪个尝试阶段提交了多少个任务
-    logInfo("Adding task set " + taskSet.id + " with " + tasks.length + " tasks")
+    logInfo("Adding task set " + taskSet.id + " with " + tasks.length + " tasks") //此时driver节点会看到日志,表示哪个任务集合 有多少个任务被提交到队列了,但是此时尚未执行
     this.synchronized {
-      val manager = createTaskSetManager(taskSet, maxTaskFailures)
+      val manager = createTaskSetManager(taskSet, maxTaskFailures) //创建一个任务队列的叶子节点
       
       //设置该尝试的阶段与对应的任务集合映射
       val stage = taskSet.stageId
@@ -190,12 +191,12 @@ private[spark] class TaskSchedulerImpl(
       if (!isLocal && !hasReceivedTask) {
         starvationTimer.scheduleAtFixedRate(new TimerTask() {
           override def run() {
-            if (!hasLaunchedTask) {
+            if (!hasLaunchedTask) { //说明一直没有启动过任务
               logWarning("Initial job has not accepted any resources; " +
                 "check your cluster UI to ensure that workers are registered " +
                 "and have sufficient resources")
             } else {
-              this.cancel()
+              this.cancel() //一旦启动了,就不会出现这个字符串了,就可以关闭该任务了
             }
           }
         }, STARVATION_TIMEOUT_MS, STARVATION_TIMEOUT_MS)
@@ -240,7 +241,7 @@ private[spark] class TaskSchedulerImpl(
    * Called to indicate that all task attempts (including speculated tasks) associated with the
    * given TaskSetManager have completed, so state associated with the TaskSetManager should be
    * cleaned up.
-   * 该阶段的某一个尝试阶段完成了,则移除内存映射,以及移除调度
+   * 说明一个阶段的任务都完成了
    */
   def taskSetFinished(manager: TaskSetManager): Unit = synchronized {
     taskSetsByStageIdAndAttempt.get(manager.taskSet.stageId).foreach { taskSetsForStage =>
@@ -254,26 +255,29 @@ private[spark] class TaskSchedulerImpl(
       .format(manager.taskSet.id, manager.parent.name))
   }
 
+  /**
+   * 真正的为executor分配任务
+   */
   private def resourceOfferSingleTaskSet(
-      taskSet: TaskSetManager,
+      taskSet: TaskSetManager,//要为这些task分配任务,去executor上执行
       maxLocality: TaskLocality,
-      shuffledOffers: Seq[WorkerOffer],
-      availableCpus: Array[Int],
-      tasks: Seq[ArrayBuffer[TaskDescription]]) : Boolean = {
+      shuffledOffers: Seq[WorkerOffer],//可以为哪些executor分配任务
+      availableCpus: Array[Int],//每一个shuffledOffers对应的executor空闲多少个cpu可以执行任务
+      tasks: Seq[ArrayBuffer[TaskDescription]]) : Boolean = { //用于存储生成的task任务,去executor上要执行的任务
     var launchedTask = false
-    for (i <- 0 until shuffledOffers.size) {
+    for (i <- 0 until shuffledOffers.size) {//循环每一个节点--每一个executor分配一个任务
       val execId = shuffledOffers(i).executorId
       val host = shuffledOffers(i).host
-      if (availableCpus(i) >= CPUS_PER_TASK) {
+      if (availableCpus(i) >= CPUS_PER_TASK) {//说明该节点上cpu可以够一个任务的
         try {
-          for (task <- taskSet.resourceOffer(execId, host, maxLocality)) {
+          for (task <- taskSet.resourceOffer(execId, host, maxLocality)) { //一次只分配一个任务
             tasks(i) += task
             val tid = task.taskId
             taskIdToTaskSetManager(tid) = taskSet
             taskIdToExecutorId(tid) = execId
             executorsByHost(host) += execId
-            availableCpus(i) -= CPUS_PER_TASK
-            assert(availableCpus(i) >= 0)
+            availableCpus(i) -= CPUS_PER_TASK //减少cpu
+            assert(availableCpus(i) >= 0) //必须不能是负数
             launchedTask = true
           }
         } catch {
@@ -292,7 +296,7 @@ private[spark] class TaskSchedulerImpl(
    * Called by cluster manager to offer resources on slaves. We respond by asking our active task
    * sets for tasks in order of priority. We fill each node with tasks in a round-robin manner so
    * that tasks are balanced across the cluster.
-   * 为参数这些executor分配资源
+   * 为参数这些executor分配资源,即参数这些executor已经空闲了
    */
   def resourceOffers(offers: Seq[WorkerOffer]): Seq[Seq[TaskDescription]] = synchronized {
     // Mark each slave as alive and remember its hostname
@@ -301,7 +305,7 @@ private[spark] class TaskSchedulerImpl(
     for (o <- offers) {
       executorIdToHost(o.executorId) = o.host
       activeExecutorIds += o.executorId
-      if (!executorsByHost.contains(o.host)) {
+      if (!executorsByHost.contains(o.host)) {//说明是新的host,以前未知的host出现了
         executorsByHost(o.host) = new HashSet[String]()
         executorAdded(o.executorId, o.host)
         newExecAvail = true
@@ -314,9 +318,9 @@ private[spark] class TaskSchedulerImpl(
     // Randomly shuffle offers to avoid always placing tasks on the same set of workers.
     val shuffledOffers = Random.shuffle(offers)
     // Build a list of tasks to assign to each worker.
-    val tasks = shuffledOffers.map(o => new ArrayBuffer[TaskDescription](o.cores))
-    val availableCpus = shuffledOffers.map(o => o.cores).toArray
-    val sortedTaskSets = rootPool.getSortedTaskSetQueue
+    val tasks = shuffledOffers.map(o => new ArrayBuffer[TaskDescription](o.cores)) //表示每一个节点上分配一组任务数组.数组的大小取决于该节点的core数量
+    val availableCpus = shuffledOffers.map(o => o.cores).toArray //每一个节点的core空闲数量
+    val sortedTaskSets = rootPool.getSortedTaskSetQueue //获取队列上任务的优先级
     for (taskSet <- sortedTaskSets) {
       logDebug("parentName: %s, name: %s, runningTasks: %s".format(
         taskSet.parent.name, taskSet.name, taskSet.runningTasks))
@@ -460,14 +464,14 @@ private[spark] class TaskSchedulerImpl(
   }
 
   override def stop() {
-    speculationScheduler.shutdown()
+    speculationScheduler.shutdown() //关闭推测任务进程
     if (backend != null) {
-      backend.stop()
+      backend.stop() //关闭后台进程
     }
-    if (taskResultGetter != null) {
+    if (taskResultGetter != null) { //关闭获取结果的进程
       taskResultGetter.stop()
     }
-    starvationTimer.cancel()
+    starvationTimer.cancel() //关闭定时器
   }
 
   override def defaultParallelism(): Int = backend.defaultParallelism()
@@ -509,7 +513,9 @@ private[spark] class TaskSchedulerImpl(
   }
 
   /** Remove an executor from all our data structures and mark it as lost 
-   * 删除一个执行的进程映射 
+   * 删除一个执行的进程映射
+    * 1.清空该executor的内存关系
+    * 2.通知队列池该executor上不能派发任务了
    **/
   private def removeExecutor(executorId: String) {
     activeExecutorIds -= executorId
@@ -538,10 +544,12 @@ private[spark] class TaskSchedulerImpl(
     executorsByHost.get(host).map(_.toSet)
   }
 
+  //host上是否有executor进程
   def hasExecutorsAliveOnHost(host: String): Boolean = synchronized {
     executorsByHost.contains(host)
   }
 
+  //该rack上是否有executor进程
   def hasHostAliveOnRack(rack: String): Boolean = synchronized {
     hostsByRack.contains(rack)
   }

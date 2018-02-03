@@ -25,6 +25,7 @@ import org.apache.spark.metrics.source.Source
 import org.apache.spark.unsafe.memory.TaskMemoryManager
 import org.apache.spark.util.{TaskCompletionListener, TaskCompletionListenerException}
 
+//封装该task的基本属性,即所属阶段ID,所属阶段的分区,第几个尝试任务
 private[spark] class TaskContextImpl(
     val stageId: Int,
     val partitionId: Int,
@@ -41,14 +42,14 @@ private[spark] class TaskContextImpl(
   // For backwards-compatibility; this method is now deprecated as of 1.3.0.
   override def attemptId(): Long = taskAttemptId
 
-  // List of callback functions to execute when the task completes.
+  // List of callback functions to execute when the task completes.当完成的时候产生的回调函数集合
   @transient private val onCompleteCallbacks = new ArrayBuffer[TaskCompletionListener]
 
   // Whether the corresponding task has been killed.
-  @volatile private var interrupted: Boolean = false
+  @volatile private var interrupted: Boolean = false //true表示被kill了
 
   // Whether the task has completed.
-  @volatile private var completed: Boolean = false
+  @volatile private var completed: Boolean = false //true表示完成task
 
   override def addTaskCompletionListener(listener: TaskCompletionListener): this.type = {
     onCompleteCallbacks += listener
@@ -62,6 +63,7 @@ private[spark] class TaskContextImpl(
     this
   }
 
+  //即使参数是TaskContext,但是回调函数中没有用到该参数,因此没必要含有该参数
   @deprecated("use addTaskCompletionListener", "1.1.0")
   override def addOnCompleteCallback(f: () => Unit) {
     onCompleteCallbacks += new TaskCompletionListener {
@@ -69,14 +71,16 @@ private[spark] class TaskContextImpl(
     }
   }
 
-  /** Marks the task as completed and triggers the listeners. */
+  /** Marks the task as completed and triggers the listeners.
+    * 当任务完成的时候,调用回调函数,并且将上下文传递给回调函数
+    **/
   private[spark] def markTaskCompleted(): Unit = {
     completed = true
     val errorMsgs = new ArrayBuffer[String](2)
     // Process complete callbacks in the reverse order of registration
     onCompleteCallbacks.reverse.foreach { listener =>
       try {
-        listener.onTaskCompletion(this)
+        listener.onTaskCompletion(this) //上下文this传递给回调函数
       } catch {
         case e: Throwable =>
           errorMsgs += e.getMessage

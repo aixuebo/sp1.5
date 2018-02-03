@@ -27,7 +27,11 @@ import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 
 /**
  * An Schedulable entity that represent collection of Pools or TaskSetManagers
- * 更多的代表一个树上非叶子节点
+调度器队列的具体实现类Pool
+该类表示的就是一个具体的调度器队列的非叶子节点,即承担了队列的容器工作
+
+调度器队列的具体实现类TaskSetManager
+主要承担了叶子节点的功能
  */
 private[spark] class Pool(
     val poolName: String,//调度的name
@@ -37,7 +41,7 @@ private[spark] class Pool(
   extends Schedulable
   with Logging {
 
-  //调度的队列
+  //调度的队列---因为调度是有父子关系的
   val schedulableQueue = new ConcurrentLinkedQueue[Schedulable]
   //调度的name与调度的映射关系
   val schedulableNameToSchedulable = new ConcurrentHashMap[String, Schedulable]
@@ -63,6 +67,7 @@ private[spark] class Pool(
     }
   }
 
+  //设置父子关系
   override def addSchedulable(schedulable: Schedulable) {
     require(schedulable != null)
     schedulableQueue.add(schedulable)
@@ -70,11 +75,13 @@ private[spark] class Pool(
     schedulable.parent = this
   }
 
+  //移除一个子队列
   override def removeSchedulable(schedulable: Schedulable) {
     schedulableQueue.remove(schedulable)
     schedulableNameToSchedulable.remove(schedulable.name)
   }
 
+  //子子孙孙中查找该name的调度
   override def getSchedulableByName(schedulableName: String): Schedulable = {
     if (schedulableNameToSchedulable.containsKey(schedulableName)) {
       return schedulableNameToSchedulable.get(schedulableName)
@@ -89,20 +96,22 @@ private[spark] class Pool(
   }
 
   override def executorLost(executorId: String, host: String) {
-    schedulableQueue.foreach(_.executorLost(executorId, host))
+    schedulableQueue.foreach(_.executorLost(executorId, host)) //丢失了一个节点
   }
 
+  //校验是否有延迟加载的任务
   override def checkSpeculatableTasks(): Boolean = {
     var shouldRevive = false
     for (schedulable <- schedulableQueue) {
-      shouldRevive |= schedulable.checkSpeculatableTasks()
+      shouldRevive |= schedulable.checkSpeculatableTasks() //递归操作
     }
     shouldRevive
   }
 
   //获取排序后的TaskSetManager队列
+  //注意:只要第一轮判断某个节点优先级高,那么就对该优先级高的队列的所有任务都一定比 优先级底的任务要高,这是一个递归过程
   override def getSortedTaskSetQueue: ArrayBuffer[TaskSetManager] = {
-    var sortedTaskSetQueue = new ArrayBuffer[TaskSetManager]
+    var sortedTaskSetQueue = new ArrayBuffer[TaskSetManager] //排序后的任务集合
     val sortedSchedulableQueue =
       schedulableQueue.toSeq.sortWith(taskSetSchedulingAlgorithm.comparator) //所有调度任务进行排序
     for (schedulable <- sortedSchedulableQueue) {

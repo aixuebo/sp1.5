@@ -34,7 +34,7 @@ class HttpBroadcastFactory extends BroadcastFactory {
   }
 
   /**
-   * @param value value to broadcast 要广播的对象
+   * @param value_ value to broadcast 要广播的对象
    * @param isLocal whether we are in local mode (single JVM process)
    * @param id unique id representing this broadcast variable 为广播生成一个唯一编号
    * 产生一个新的广播对象

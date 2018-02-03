@@ -43,7 +43,7 @@ private[spark] trait Schedulable {
   def weight: Int //资源权重
   def minShare: Int //最小CPU的数量
   def priority: Int //优先级
-  def stageId: Int //阶段
+  def stageId: Int //阶段---非叶子节点是没有任务被分配的,因此都是默认值-1,叶子节点是有任务被分配的,而分配的任务都属于同一个阶段,因此是有stageId的
 
   //调度队列可以嵌套
   def addSchedulable(schedulable: Schedulable): Unit
@@ -51,7 +51,7 @@ private[spark] trait Schedulable {
   def getSchedulableByName(name: String): Schedulable//获取属于该调度队列下的一个调度
 
 
-  def executorLost(executorId: String, host: String): Unit
+  def executorLost(executorId: String, host: String): Unit //丢失了一个节点
   def checkSpeculatableTasks(): Boolean //如果有符合推测的任务,则返回true
 
   def getSortedTaskSetQueue: ArrayBuffer[TaskSetManager]//对子队列进行重新排序,按照队列模式

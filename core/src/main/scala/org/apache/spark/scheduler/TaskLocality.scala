@@ -19,10 +19,11 @@ package org.apache.spark.scheduler
 
 import org.apache.spark.annotation.DeveloperApi
 
+//该task要在哪些地方执行
 @DeveloperApi
 object TaskLocality extends Enumeration {
   // Process local is expected to be used ONLY within TaskSetManager for now.
-  //executor内执行、node一个节点上执行、没有规定在哪个节点执行、rack上执行、任意节点执行
+  //executor内执行、node一个节点上执行、没有优先在哪个节点上执行(即没有推荐task在哪个节点或者executor上运行)、rack上执行、任意节点执行
   val PROCESS_LOCAL, NODE_LOCAL, NO_PREF, RACK_LOCAL, ANY = Value
 
   type TaskLocality = Value

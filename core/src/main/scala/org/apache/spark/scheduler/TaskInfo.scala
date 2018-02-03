@@ -27,14 +27,14 @@ import org.apache.spark.annotation.DeveloperApi
  */
 @DeveloperApi
 class TaskInfo(
-    val taskId: Long,
-    val index: Int,
-    val attemptNumber: Int,
-    val launchTime: Long,
-    val executorId: String,
-    val host: String,
-    val taskLocality: TaskLocality.TaskLocality,
-    val speculative: Boolean) {
+    val taskId: Long,//为task自增长一个唯一ID
+    val index: Int,//第几个task任务
+    val attemptNumber: Int,//尝试任务编号
+    val launchTime: Long,//启动时间
+    val executorId: String,//在哪个executor执行该任务
+    val host: String,//exeutor所在的host节点
+    val taskLocality: TaskLocality.TaskLocality,//启动该task的级别
+    val speculative: Boolean) {//是否是推测执行启动的任务
 
   /**
    * The time when the task started remotely getting the result. Will not be set if the
@@ -58,14 +58,17 @@ class TaskInfo(
 
   var failed = false //是否失败
 
+  //表示结果已经存在的时间
   private[spark] def markGettingResult(time: Long = System.currentTimeMillis) {
     gettingResultTime = time
   }
 
+  //表示成功的时间
   private[spark] def markSuccessful(time: Long = System.currentTimeMillis) {
     finishTime = time
   }
 
+  //表示失败的时间
   private[spark] def markFailed(time: Long = System.currentTimeMillis) {
     finishTime = time
     failed = true

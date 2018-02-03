@@ -48,9 +48,9 @@ trait BroadcastFactory {
 
   /**
    * 对已经存在的广播对象进行销毁或者暂时删除
-   * @id 准备要处理哪个广播对象
-   * @removeFromDriver 是销毁还是暂时删除
-   * @blocking 是阻塞的还是非阻塞的
+   * @ id 准备要处理哪个广播对象
+   * @ removeFromDriver 是销毁还是暂时删除
+   * @ blocking 是阻塞的还是非阻塞的
    */
   def unbroadcast(id: Long, removeFromDriver: Boolean, blocking: Boolean): Unit
 

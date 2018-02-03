@@ -37,11 +37,13 @@ import org.apache.spark.shuffle.ShuffleWriter
  *                   the type should be (RDD[_], ShuffleDependency[_, _, _]).
  * @param partition partition of the RDD this task is associated with 该任务执行第几个RDD的partition分区
  * @param locs preferred task execution locations for locality scheduling
+ *
+ * 处理shffle的map阶段的任务
  */
 private[spark] class ShuffleMapTask(
     stageId: Int,//该task属于哪个阶段ID
     stageAttemptId: Int,//该阶段的尝试任务ID
-    taskBinary: Broadcast[Array[Byte]],
+    taskBinary: Broadcast[Array[Byte]],//广播的任务序列化的结果
     partition: Partition,//该任务执行第几个RDD的partition分区
     @transient private var locs: Seq[TaskLocation],
     internalAccumulators: Seq[Accumulator[Long]])

@@ -38,7 +38,7 @@ private[spark] class ShuffleMapStage(
 
   override def toString: String = "ShuffleMapStage " + id
 
-  var numAvailableOutputs: Long = 0 //可用的输出数量
+  var numAvailableOutputs: Long = 0 //可用的分区输出数量
 
   def isAvailable: Boolean = numAvailableOutputs == numPartitions
 
@@ -57,7 +57,7 @@ private[spark] class ShuffleMapStage(
   //移除该partition的某一个输出
   def removeOutputLoc(partition: Int, bmAddress: BlockManagerId): Unit = {
     val prevList = outputLocs(partition) //找到该partiiton对应的输出集合
-    val newList = prevList.filterNot(_.location == bmAddress) //过滤不是要删除的bmAddress
+    val newList = prevList.filterNot(_.location == bmAddress) //过滤---删除bmAddress节点的数据块信息
     outputLocs(partition) = newList //重新设置
     if (prevList != Nil && newList == Nil) {
       numAvailableOutputs -= 1 //减少一个有效可用的输出数量

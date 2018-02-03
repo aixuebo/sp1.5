@@ -30,6 +30,7 @@ private[spark] sealed trait TaskLocation {
 
 /**
  * A location that includes both a host and an executor id on that host.
+ * 说明该executor已经明确指明了在哪个节点的哪个host上运行
  */
 private [spark]
 case class ExecutorCacheTaskLocation(override val host: String, executorId: String)
@@ -49,6 +50,7 @@ private [spark] case class HDFSCacheTaskLocation(override val host: String) exte
   override def toString: String = TaskLocation.inMemoryLocationTag + host
 }
 
+//表示每一个数据块所在的节点地址,因为数据块可能已经被缓存在某些节点上了
 private[spark] object TaskLocation {
   // We identify hosts on which the block is cached with this prefix.  Because this prefix contains
   // underscores, which are not legal characters in hostnames, there should be no potential for

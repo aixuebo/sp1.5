@@ -33,10 +33,10 @@ class StageInfo(
     val attemptId: Int,//第几次尝试执行该阶段
     val name: String,
     val numTasks: Int,//该阶段的任务数量
-    val rddInfos: Seq[RDDInfo],
-    val parentIds: Seq[Int],
-    val details: String,
-    private[spark] val taskLocalityPreferences: Seq[Seq[TaskLocation]] = Seq.empty) {
+    val rddInfos: Seq[RDDInfo],//依赖哪些RDD
+    val parentIds: Seq[Int],//依赖的哪些stageId集合
+    val details: String,//callSite.longForm
+    private[spark] val taskLocalityPreferences: Seq[Seq[TaskLocation]] = Seq.empty) { //推荐每一个partition任务在哪个节点上执行
   /** When this stage was submitted from the DAGScheduler to a TaskScheduler.
     * 该阶段被提交的时间
     **/
@@ -80,8 +80,8 @@ private[spark] object StageInfo {
   def fromStage(
       stage: Stage,
       attemptId: Int,
-      numTasks: Option[Int] = None,
-      taskLocalityPreferences: Seq[Seq[TaskLocation]] = Seq.empty
+      numTasks: Option[Int] = None,//需要执行多少个parititon
+      taskLocalityPreferences: Seq[Seq[TaskLocation]] = Seq.empty //推荐每一个partition任务在哪个节点上执行
     ): StageInfo = {
     val ancestorRddInfos = stage.rdd.getNarrowAncestors.map(RDDInfo.fromRdd)
     val rddInfos = Seq(RDDInfo.fromRdd(stage.rdd)) ++ ancestorRddInfos

@@ -28,7 +28,7 @@ import java.util.Properties
  */
 private[spark] class TaskSet(
     val tasks: Array[Task[_]],//该阶段的任务集合,即map任务或者reduce任务
-    val stageId: Int,
+    val stageId: Int,//该任务集合属于哪个阶段
     val stageAttemptId: Int,//一般尝试ID都是0开始,即一般情况下都不需要尝试任务,因此0即可
     val priority: Int,
     val properties: Properties) {

@@ -35,7 +35,7 @@ private[spark] trait SchedulableBuilder {
 
   def buildPools() //创建Pool
 
-  def addTaskSetManager(manager: Schedulable, properties: Properties) //将Schedulable添加到某个Pool上
+  def addTaskSetManager(manager: Schedulable, properties: Properties) //将Schedulable添加到某个非叶子队列节点(Pool)上
 }
 
 private[spark] class FIFOSchedulableBuilder(val rootPool: Pool)
@@ -55,8 +55,8 @@ private[spark] class FIFOSchedulableBuilder(val rootPool: Pool)
  * <root>
  *  <pool @name="">
  *    <schedulingMode>FIFO</schedulingMode>
- *    <minShare>5</minShare>
- *    <weight>6</weight>
+ *    <minShare>5</minShare>  即该队列上最少也要有这些个task在运行
+ *    <weight>6</weight> 权重值,可以理解成他是百分比,但是不需要分配成100%
  *  </pool>
  *  <pool @name="">
  *    <schedulingMode>FIFO</schedulingMode>
@@ -71,7 +71,7 @@ private[spark] class FairSchedulableBuilder(val rootPool: Pool, conf: SparkConf)
   val schedulerAllocFile = conf.getOption("spark.scheduler.allocation.file") //调度配置文件
   val DEFAULT_SCHEDULER_FILE = "fairscheduler.xml" //默认的调度配置文件
     
-  val FAIR_SCHEDULER_PROPERTIES = "spark.scheduler.pool"//调度的name对应的key
+  val FAIR_SCHEDULER_PROPERTIES = "spark.scheduler.pool"//调度的name对应的key,即该任务分配到哪个队列上
   val DEFAULT_POOL_NAME = "default"//必须要有name为default的Pool
 
   //xml节点的内容
@@ -124,7 +124,7 @@ private[spark] class FairSchedulableBuilder(val rootPool: Pool, conf: SparkConf)
   //参数是配置文件流,对该流进行解析
   private def buildFairSchedulerPool(is: InputStream) {//读取xml配置文件,创建若干子队列
     val xml = XML.load(is) //加载xml
-    for (poolNode <- (xml \\ POOLS_PROPERTY)) {//循环所有的pool标签
+    for (poolNode <- (xml \\ POOLS_PROPERTY)) {//循环所有的pool标签,即根目录下有多少个一级目录
 
       val poolName = (poolNode \ POOL_NAME_PROPERTY).text //获取@name属性
       var schedulingMode = DEFAULT_SCHEDULING_MODE
@@ -167,9 +167,9 @@ private[spark] class FairSchedulableBuilder(val rootPool: Pool, conf: SparkConf)
     var parentPool = rootPool.getSchedulableByName(poolName)
     
     if (properties != null) {
-      poolName = properties.getProperty(FAIR_SCHEDULER_PROPERTIES, DEFAULT_POOL_NAME)
-      parentPool = rootPool.getSchedulableByName(poolName)
-      if (parentPool == null) {
+      poolName = properties.getProperty(FAIR_SCHEDULER_PROPERTIES, DEFAULT_POOL_NAME) //获取该任务分配到哪个队列上
+      parentPool = rootPool.getSchedulableByName(poolName) //找到队列
+      if (parentPool == null) {//创建一个队列池,其实我觉得更应该抛异常,因为属于客户端都连分配的池子都写错了,这样乱改会影响池子的结构的
         // we will create a new pool that user has configured in app
         // instead of being defined in xml file
         parentPool = new Pool(poolName, DEFAULT_SCHEDULING_MODE,
@@ -180,7 +180,7 @@ private[spark] class FairSchedulableBuilder(val rootPool: Pool, conf: SparkConf)
       }
     }
     
-    parentPool.addSchedulable(manager)
+    parentPool.addSchedulable(manager) //为该队列分配一个任务调度
     logInfo("Added task set " + manager.name + " tasks to pool " + poolName)
   }
 }

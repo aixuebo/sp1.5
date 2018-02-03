@@ -67,14 +67,14 @@ private[spark] abstract class Stage(
     val callSite: CallSite)
   extends Logging {
 
-  val numPartitions = rdd.partitions.size
+  val numPartitions = rdd.partitions.size //该阶段需要多少个partition
 
   /** Set of jobs that this stage belongs to.
     * 可能该阶段被多个job共同使用,因此这里面是使用该阶段的job集合
     **/
   val jobIds = new HashSet[Int]
 
-  var pendingTasks = new HashSet[Task[_]]
+  var pendingTasks = new HashSet[Task[_]] //等待提交到执行队列的任务集合
 
   /** The ID to use for the next new attempt for this stage.最后一次尝试阶段的ID */
   private var nextAttemptId: Int = 0
@@ -111,7 +111,7 @@ private[spark] abstract class Stage(
   /** Creates a new attempt for this stage by creating a new StageInfo with a new attempt ID. */
   def makeNewStageAttempt(
       numPartitionsToCompute: Int,//要去重新计算的partition数量
-      taskLocalityPreferences: Seq[Seq[TaskLocation]] = Seq.empty): Unit = {//每一个partition在哪个节点执行
+      taskLocalityPreferences: Seq[Seq[TaskLocation]] = Seq.empty): Unit = {//每一个partition推荐在哪个节点执行
     _latestInfo = StageInfo.fromStage(
       this, nextAttemptId, Some(numPartitionsToCompute), taskLocalityPreferences)
     nextAttemptId += 1

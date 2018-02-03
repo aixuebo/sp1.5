@@ -27,7 +27,7 @@ private[spark] trait SchedulingAlgorithm {
   def comparator(s1: Schedulable, s2: Schedulable): Boolean
 }
 
-//先比较优先级,再比较阶段
+//先比较优先级,再比较阶段---一般这种队列都用于叶子节点的倒数第二个节点上,即该节点管理的都是叶子节点
 private[spark] class FIFOSchedulingAlgorithm extends SchedulingAlgorithm {
   override def comparator(s1: Schedulable, s2: Schedulable): Boolean = {
     val priority1 = s1.priority
@@ -55,14 +55,15 @@ private[spark] class FairSchedulingAlgorithm extends SchedulingAlgorithm {
     val runningTasks1 = s1.runningTasks
     val runningTasks2 = s2.runningTasks
 
+    //即该队列上最少也要有这些个task在运行
     val s1Needy = runningTasks1 < minShare1 //true表示缺乏,即运行的task没有达到最小值,可以继续运行
     val s2Needy = runningTasks2 < minShare2
 
     //当前任务数量是最小资源的多少倍,该比值越大,说明当前队列任务越重
-    val minShareRatio1 = runningTasks1.toDouble / math.max(minShare1, 1.0).toDouble
+    val minShareRatio1 = runningTasks1.toDouble / math.max(minShare1, 1.0).toDouble //math.max(minShare1, 1.0)说明队列至少也要有1个任务在运行
     val minShareRatio2 = runningTasks2.toDouble / math.max(minShare2, 1.0).toDouble
 
-    //表示单位权重下的任务数量,越大,表示任务越重
+    //表示单位权重下的任务数量,越大,表示任务越重---用于在队列未满的时候,让队列均匀按照权重分配任务
     val taskToWeightRatio1 = runningTasks1.toDouble / s1.weight.toDouble
     val taskToWeightRatio2 = runningTasks2.toDouble / s2.weight.toDouble
 
@@ -71,11 +72,11 @@ private[spark] class FairSchedulingAlgorithm extends SchedulingAlgorithm {
 
     if (s1Needy && !s2Needy) {//如果s1缺乏,而s2满足了,则就让给s1运行
       return true
-    } else if (!s1Needy && s2Needy) {
+    } else if (!s1Needy && s2Needy) {//说明给队列2
       return false
     } else if (s1Needy && s2Needy) {//如果两个队列都缺乏,则需要竞争,看谁的占比更小,谁更合适
       compare = minShareRatio1.compareTo(minShareRatio2)
-    } else {//如果两个队列都已经达到了最小值,则需要竞争,看权重
+    } else {//如果两个队列都已经达到了最小值,则需要竞争,看权重---谁小就放哪个队列中,看谁的占比更小,谁更合适
       compare = taskToWeightRatio1.compareTo(taskToWeightRatio2)
     }
 
@@ -85,7 +86,7 @@ private[spark] class FairSchedulingAlgorithm extends SchedulingAlgorithm {
     } else if (compare > 0) {
       false
     } else {
-      s1.name < s2.name
+      s1.name < s2.name //name一定可以排序出来的
     }
   }
 }
