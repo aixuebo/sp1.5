@@ -264,23 +264,23 @@ private[spark] class Executor(
         }
 
         val directResult = new DirectTaskResult(valueBytes, accumUpdates, task.metrics.orNull)
-        val serializedDirectResult = ser.serialize(directResult)
+        val serializedDirectResult = ser.serialize(directResult) //对数据结果进行序列化,用于传输到driver端
         val resultSize = serializedDirectResult.limit
 
         // directSend = sending directly back to the driver
         val serializedResult: ByteBuffer = {
-          if (maxResultSize > 0 && resultSize > maxResultSize) {
+          if (maxResultSize > 0 && resultSize > maxResultSize) {//超过了最大的返回值
             logWarning(s"Finished $taskName (TID $taskId). Result is larger than maxResultSize " +
               s"(${Utils.bytesToString(resultSize)} > ${Utils.bytesToString(maxResultSize)}), " +
               s"dropping it.")
-            ser.serialize(new IndirectTaskResult[Any](TaskResultBlockId(taskId), resultSize))
+            ser.serialize(new IndirectTaskResult[Any](TaskResultBlockId(taskId), resultSize)) //因为超过了最大的返回值,因此使用数据块方式传输,注意此时是没传输的,因为数据块没有真正存储到本地磁盘
           } else if (resultSize >= akkaFrameSize - AkkaUtils.reservedSizeBytes) {
             val blockId = TaskResultBlockId(taskId)
             env.blockManager.putBytes(
-              blockId, serializedDirectResult, StorageLevel.MEMORY_AND_DISK_SER)
+              blockId, serializedDirectResult, StorageLevel.MEMORY_AND_DISK_SER) //将内容存储到本地数据快里面
             logInfo(
               s"Finished $taskName (TID $taskId). $resultSize bytes result sent via BlockManager)")
-            ser.serialize(new IndirectTaskResult[Any](blockId, resultSize))
+            ser.serialize(new IndirectTaskResult[Any](blockId, resultSize)) //间接方式通知driver端该数据块即可
           } else {
             logInfo(s"Finished $taskName (TID $taskId). $resultSize bytes result sent to driver")
             serializedDirectResult

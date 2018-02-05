@@ -84,6 +84,7 @@ case class BroadcastBlockId(broadcastId: Long, field: String = "") extends Block
   override def name: String = "broadcast_" + broadcastId + (if (field == "") "" else "_" + field)
 }
 
+//表示任务在executor阶段上执行的返回值,将其存储成一个数据块
 @DeveloperApi
 case class TaskResultBlockId(taskId: Long) extends BlockId {
   override def name: String = "taskresult_" + taskId

@@ -81,7 +81,7 @@ private[spark] class TaskSetManager(
   val SPECULATION_MULTIPLIER = conf.getDouble("spark.speculation.multiplier", 1.5) //运行时间超过多少平均值的倍数,才可以对其进行推测执行
 
   // Limit of bytes for total size of results (default is 1GB) 默认1G,表示最大的输出结果字节数
-  val maxResultSize = Utils.getMaxResultSize(conf)
+  val maxResultSize = Utils.getMaxResultSize(conf) //抓去数据块结果不允许超过这个大小
 
   // Serializer for closures and tasks.
   val env = SparkEnv.get
@@ -161,7 +161,7 @@ private[spark] class TaskSetManager(
 
   // Tasks that can be speculated. Since these will be a small fraction of total
   // tasks, we'll just hold them in a HashSet.
-  //正在推测执行的任务集合
+  //后期可以执行推测的任务集合
   val speculatableTasks = new HashSet[Int]
 
   // Task index, start and finish time for each task attempt (indexed by task ID)
@@ -343,21 +343,23 @@ private[spark] class TaskSetManager(
   protected def dequeueSpeculativeTask(execId: String, host: String, locality: TaskLocality.Value)
     : Option[(Int, TaskLocality.Value)] =
   {
-    speculatableTasks.retain(index => !successful(index)) // Remove finished tasks from set
+    speculatableTasks.retain(index => !successful(index)) // Remove finished tasks from set 移除已经完成的任务
 
+    //true表示该任务可以在该executor上运行
     def canRunOnHost(index: Int): Boolean =
-      !hasAttemptOnHost(index, host) && !executorIsBlacklisted(execId, index)
+      !hasAttemptOnHost(index, host) //说明该任务没有在该host上运行过尝试任务
+      && !executorIsBlacklisted(execId, index) //该task在该executor节点不是黑名单
 
     if (!speculatableTasks.isEmpty) {
       // Check for process-local tasks; note that tasks can be process-local
       // on multiple nodes when we replicate cached blocks, as in Spark Streaming
-      for (index <- speculatableTasks if canRunOnHost(index)) {
+      for (index <- speculatableTasks if canRunOnHost(index)) {//遍历要推测执行的任务,过滤找到可以在host上运行的任务集合
         val prefs = tasks(index).preferredLocations
         val executors = prefs.flatMap(_ match {
           case e: ExecutorCacheTaskLocation => Some(e.executorId)
           case _ => None
         });
-        if (executors.contains(execId)) {
+        if (executors.contains(execId)) {//说明该任务推荐的运行executor就是该executor
           speculatableTasks -= index
           return Some((index, TaskLocality.PROCESS_LOCAL))
         }
@@ -375,7 +377,7 @@ private[spark] class TaskSetManager(
       }
 
       // Check for no-preference tasks
-      if (TaskLocality.isAllowed(locality, TaskLocality.NO_PREF)) {
+      if (TaskLocality.isAllowed(locality, TaskLocality.NO_PREF)) {//找到没有推荐的节点的任务,去让该executor执行该任务
         for (index <- speculatableTasks if canRunOnHost(index)) {
           val locations = tasks(index).preferredLocations
           if (locations.size == 0) {
@@ -637,6 +639,7 @@ private[spark] class TaskSetManager(
 
   /**
    * Marks the task as getting result and notifies the DAG Scheduler
+   * 当一个任务执行完成后,并且成功执行完成,然后开始抓去返回值
    */
   def handleTaskGettingResult(tid: Long): Unit = {
     val info = taskInfos(tid)
@@ -656,7 +659,7 @@ private[spark] class TaskSetManager(
         s"(${Utils.bytesToString(totalResultSize)}) is bigger than spark.driver.maxResultSize " +
         s"(${Utils.bytesToString(maxResultSize)})"
       logError(msg)
-      abort(msg)
+      abort(msg) //如果数据结果集太大了,都抓回到driver是有问题的,因此报告该阶段失败
       false
     } else {
       true
@@ -665,7 +668,7 @@ private[spark] class TaskSetManager(
 
   /**
    * Marks the task as successful and notifies the DAGScheduler that a task has ended.
-   * 标志任务成功完
+   * 标志任务的结果已经抓去到本地了,参数2就是该任务的返回值
    */
   def handleSuccessfulTask(tid: Long, result: DirectTaskResult[_]): Unit = {
     val info = taskInfos(tid)
@@ -833,13 +836,16 @@ private[spark] class TaskSetManager(
     sortedTaskSetQueue
   }
 
-  /** Called by TaskScheduler when an executor is lost so we can re-enqueue our tasks */
+  /** Called by TaskScheduler when an executor is lost so we can re-enqueue our tasks
+    * 当一个executor丢失了,则该上面跑的任务要重新跑
+    **/
   override def executorLost(execId: String, host: String) {
     logInfo("Re-queueing tasks for " + execId + " from TaskSet " + taskSet.id)
 
     // Re-enqueue pending tasks for this host based on the status of the cluster. Note
     // that it's okay if we add a task to the same queue twice (if it had multiple preferred
     // locations), because dequeueTaskFromList will skip already-running tasks.
+    //重新添加已经在该节点上跑的任务
     for (index <- getPendingTasksForExecutor(execId)) {
       addPendingTask(index, readding = true)
     }
@@ -851,7 +857,7 @@ private[spark] class TaskSetManager(
     // and we are not using an external shuffle server which could serve the shuffle outputs.
     // The reason is the next stage wouldn't be able to fetch the data from this dead executor
     // so we would need to rerun these tasks on other executors.
-    if (tasks(0).isInstanceOf[ShuffleMapTask] && !env.blockManager.externalShuffleServiceEnabled) {
+    if (tasks(0).isInstanceOf[ShuffleMapTask] && !env.blockManager.externalShuffleServiceEnabled) {//说明不是外部的shuffle存储,并且还是一个shuffle的Map任务,即使任务已经成功了,依然也要重新跑
       for ((tid, info) <- taskInfos if info.executorId == execId) {
         val index = taskInfos(tid).index
         if (successful(index)) {
@@ -866,7 +872,7 @@ private[spark] class TaskSetManager(
       }
     }
     // Also re-enqueue any tasks that were running on the node
-    for ((tid, info) <- taskInfos if info.running && info.executorId == execId) {
+    for ((tid, info) <- taskInfos if info.running && info.executorId == execId) {//通知该任务失败了
       handleFailedTask(tid, TaskState.FAILED, ExecutorLostFailure(execId))
     }
     // recalculate valid locality levels and waits when executor is lost
@@ -876,7 +882,7 @@ private[spark] class TaskSetManager(
   /**
    * Check for tasks to be speculated and return true if there are any. This is called periodically
    * by the TaskScheduler.
-   * 如果有符合推测的任务,则返回true
+   * 校验是否可以开启推测执行,true表示可以开启推测执行任务
    * TODO: To make this scale to large jobs, we need to maintain a list of running tasks, so that
    * we don't scan the whole task set. It might also help to make this sorted by launch time.
    */
@@ -890,7 +896,7 @@ private[spark] class TaskSetManager(
     var foundTasks = false
     val minFinishedForSpeculation = (SPECULATION_QUANTILE * numTasks).floor.toInt //计算最小完成数量(达到该数量,才能启动推测执行)
     logDebug("Checking for speculative tasks: minFinished = " + minFinishedForSpeculation)
-    if (tasksSuccessful >= minFinishedForSpeculation && tasksSuccessful > 0) { //已经完成了若干个任务了
+    if (tasksSuccessful >= minFinishedForSpeculation && tasksSuccessful > 0) { //即已经成功的完成了很多个任务了,因此可以推测执行
       val time = clock.getTimeMillis()
       val durations = taskInfos.values.filter(_.successful).map(_.duration).toArray //获取每一个成功完成的任务,每一个任务的处理时间集合
       Arrays.sort(durations) //按照处理时间排序
@@ -970,6 +976,10 @@ private[spark] class TaskSetManager(
     currentLocalityIndex = getLocalityIndex(previousLocalityLevel)
   }
 
+  /**
+  因为添加了一个executor,因此有可能一些任务在新添加的executor,或者新添加的executor所在的host上存在任务,
+因此有必要重新计算computeValidLocalityLevels
+   */
   def executorAdded() {
     recomputeLocality()
   }

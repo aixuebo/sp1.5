@@ -29,6 +29,7 @@ import org.apache.spark.storage.BlockId
 import org.apache.spark.util.Utils
 
 // Task result. Also contains updates to accumulator variables.
+//描述execuot类执行一个task后的结果,该结果序列化后传输到driver端
 private[spark] sealed trait TaskResult[T]
 
 /** A reference to a DirectTaskResult that has been stored in the worker's BlockManager.
@@ -41,8 +42,9 @@ private[spark] case class IndirectTaskResult[T](blockId: BlockId, size: Int)
   *  一个任务的结果,包含任务的返回值以及更新的累加器
   **/
 private[spark]
-class DirectTaskResult[T](var valueBytes: ByteBuffer, var accumUpdates: Map[Long, Any],
-    var metrics: TaskMetrics)
+class DirectTaskResult[T](var valueBytes: ByteBuffer,//返回值T的序列化结果
+                          var accumUpdates: Map[Long, Any],//同步的统计值
+    var metrics: TaskMetrics) //固定的统计值
   extends TaskResult[T] with Externalizable {
 
   private var valueObjectDeserialized = false //true表示该对象已经被反序列化了
@@ -50,6 +52,7 @@ class DirectTaskResult[T](var valueBytes: ByteBuffer, var accumUpdates: Map[Long
 
   def this() = this(null.asInstanceOf[ByteBuffer], null, null)
 
+  //executor如何将该对象序列化成字节数组,然后传输给driver端
   override def writeExternal(out: ObjectOutput): Unit = Utils.tryOrIOException {
 
     out.writeInt(valueBytes.remaining);//valueBytes字节数组还有多少个位置尚未被使用
@@ -65,6 +68,7 @@ class DirectTaskResult[T](var valueBytes: ByteBuffer, var accumUpdates: Map[Long
     out.writeObject(metrics)
   }
 
+  //durver端如何反序列化
   override def readExternal(in: ObjectInput): Unit = Utils.tryOrIOException {
 
     val blen = in.readInt()
@@ -92,6 +96,7 @@ class DirectTaskResult[T](var valueBytes: ByteBuffer, var accumUpdates: Map[Long
    * the first time, the caller should avoid to block other threads.
    *
    * After the first time, `value()` is trivial and just returns the deserialized `valueObject`.
+   * driver端使用该方法获取返回值
    */
   def value(): T = {
     if (valueObjectDeserialized) {//true表示该对象已经被反序列化了

@@ -65,6 +65,7 @@ class TaskMetrics extends Serializable {
 
   /**
    * The number of bytes this task transmitted back to the driver as the TaskResult
+   * 设置该task返回值的结果字节大小
    */
   private var _resultSize: Long = _
   def resultSize: Long = _resultSize

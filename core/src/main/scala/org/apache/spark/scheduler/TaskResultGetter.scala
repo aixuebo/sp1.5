@@ -31,6 +31,8 @@ import org.apache.spark.util.{ThreadUtils, Utils}
 /**
  * Runs a thread pool that deserializes and remotely fetches (if necessary) task results.
  * 运行一个线程池,去反序列化并且远程抓取(如果需要的话)任务的结果
+ *
+ * driver上执行该类,当TaskSchedulerImpl(statusUpdate方法)接收到一个任务的状态是完成或者失败的时候,触发该类
  */
 private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedulerImpl)
   extends Logging {
@@ -54,17 +56,17 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
         try {
           //序列化对象进行反序列化.结果是TaskResult对象,参数serializedData是结果字节内容
           val (result, size) = serializer.get().deserialize[TaskResult[_]](serializedData) match {
-            case directResult: DirectTaskResult[_] =>
-              if (!taskSetManager.canFetchMoreResults(serializedData.limit())) {//说明超出范围了
+            case directResult: DirectTaskResult[_] => //说明直接返回值就都返回过来了,而不是数据块存储在executor节点,只返回了一个数据块ID
+              if (!taskSetManager.canFetchMoreResults(serializedData.limit())) {//说明超出范围了,如果数据结果集太大了,都抓回到driver是有问题的,因此报告该阶段失败
                 return
               }
               // deserialize "value" without holding any lock so that it won't block other threads.
               // We should call it here, so that when it's called again in
               // "TaskSetManager.handleSuccessfulTask", it does not need to deserialize the value.
-              directResult.value()
+              directResult.value() //反序列化最终的结果值
               (directResult, serializedData.limit())
-            case IndirectTaskResult(blockId, size) =>
-              if (!taskSetManager.canFetchMoreResults(size)) {
+            case IndirectTaskResult(blockId, size) => //间接的返回值,说明返回的数据块ID,真正的数据块还存储在executor上
+              if (!taskSetManager.canFetchMoreResults(size)) { //通知删除该数据块在executor上的数据内容
                 // dropped by executor if size is larger than maxResultSize
                 sparkEnv.blockManager.master.removeBlock(blockId)
                 return
@@ -82,11 +84,11 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
               }
               val deserializedResult = serializer.get().deserialize[DirectTaskResult[_]](
                 serializedTaskResult.get)
-              sparkEnv.blockManager.master.removeBlock(blockId)
+              sparkEnv.blockManager.master.removeBlock(blockId) //删除该数据块---我觉得有点早,万一driver挂了,岂不是还要重新算?不过不影响大局
               (deserializedResult, size)
           }
 
-          result.metrics.setResultSize(size)
+          result.metrics.setResultSize(size) //设置该task返回值的结果字节大小
           scheduler.handleSuccessfulTask(taskSetManager, tid, result)
         } catch {
           case cnf: ClassNotFoundException =>

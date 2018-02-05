@@ -54,7 +54,7 @@ import org.apache.spark.storage.BlockManagerId
  */
 private[spark] class TaskSchedulerImpl(
     val sc: SparkContext,
-    val maxTaskFailures: Int,//最大失败次数,失败次数达到该值,则该driver停止运行
+    val maxTaskFailures: Int,//最大失败次数,失败次数达到该值,则停止对应的阶段---即每一个阶段都面对一个最大尝试次数,该值是由这个参数决定的
     isLocal: Boolean = false)//是否本地执行的该driver
   extends TaskScheduler with Logging
 {
@@ -66,7 +66,7 @@ private[spark] class TaskSchedulerImpl(
   val SPECULATION_INTERVAL_MS = conf.getTimeAsMs("spark.speculation.interval", "100ms")//每隔多久执行一次推测执行检查
 
   private val speculationScheduler =
-    ThreadUtils.newDaemonSingleThreadScheduledExecutor("task-scheduler-speculation")//线程服务
+    ThreadUtils.newDaemonSingleThreadScheduledExecutor("task-scheduler-speculation")//线程服务---用于定期执行测试执行任务的检查
 
   // Threshold above which we warn user initial TaskSet may be starved 多久开启一次task执行
   val STARVATION_TIMEOUT_MS = conf.getTimeAsMs("spark.starvation.timeout", "15s")
@@ -84,7 +84,7 @@ private[spark] class TaskSchedulerImpl(
 
   @volatile private var hasReceivedTask = false //true表示已经接收了任务
   @volatile private var hasLaunchedTask = false //true表示已经启动了任务
-  private val starvationTimer = new Timer(true)
+  private val starvationTimer = new Timer(true) //就一开始的时候使用过该线程,主要用于确定该调度器是否能成功调度任务
 
   // Incrementing task IDs 自增长的taskId
   val nextTaskId = new AtomicLong(0)
@@ -96,7 +96,7 @@ private[spark] class TaskSchedulerImpl(
   //key是host,value是该host上运行的哪些executorId集合
   protected val executorsByHost = new HashMap[String, HashSet[String]]
 
-  protected val hostsByRack = new HashMap[String, HashSet[String]]
+  protected val hostsByRack = new HashMap[String, HashSet[String]] //该rack上有哪些host
 //每一个executorId对应在哪台节点上运行,key是executorId,value是host节点
   protected val executorIdToHost = new HashMap[String, String]
 
@@ -151,7 +151,7 @@ private[spark] class TaskSchedulerImpl(
       logInfo("Starting speculative execution thread")
       speculationScheduler.scheduleAtFixedRate(new Runnable {//每隔多久执行一次推测执行检查
         override def run(): Unit = Utils.tryOrStopSparkContext(sc) {
-          checkSpeculatableTasks()
+          checkSpeculatableTasks() //定时查找有推测执行的任务
         }
       }, SPECULATION_INTERVAL_MS, SPECULATION_INTERVAL_MS, TimeUnit.MILLISECONDS)
     }
@@ -353,10 +353,10 @@ private[spark] class TaskSchedulerImpl(
    * @param serializedData 统计内容
    */
   def statusUpdate(tid: Long, state: TaskState, serializedData: ByteBuffer) {
-    var failedExecutor: Option[String] = None
+    var failedExecutor: Option[String] = None //失败的executor
     synchronized {
       try {
-        if (state == TaskState.LOST && taskIdToExecutorId.contains(tid)) {
+        if (state == TaskState.LOST && taskIdToExecutorId.contains(tid)) { //说明executor被丢失了
           // We lost this entire executor, so remember that it's gone
           val execId = taskIdToExecutorId(tid)
           if (activeExecutorIds.contains(execId)) {
@@ -364,13 +364,13 @@ private[spark] class TaskSchedulerImpl(
             failedExecutor = Some(execId)
           }
         }
-        taskIdToTaskSetManager.get(tid) match {
-          case Some(taskSet) =>
-            if (TaskState.isFinished(state)) {
+        taskIdToTaskSetManager.get(tid) match {//找到任务所对应的阶段对象
+          case Some(taskSet) => //有该任务对应的阶段对象
+            if (TaskState.isFinished(state)) {//executor的状态是完成了,不管是什么完成,总之是完成了,包含被kill,被丢失等操作
               taskIdToTaskSetManager.remove(tid)
               taskIdToExecutorId.remove(tid)
             }
-            if (state == TaskState.FINISHED) {
+            if (state == TaskState.FINISHED) {//任务成功完成该任务
               taskSet.removeRunningTask(tid)
               taskResultGetter.enqueueSuccessfulTask(taskSet, tid, serializedData)
             } else if (Set(TaskState.FAILED, TaskState.KILLED, TaskState.LOST).contains(state)) {
@@ -400,13 +400,14 @@ private[spark] class TaskSchedulerImpl(
    * indicating that the block manager should re-register.
    */
   override def executorHeartbeatReceived(
-      execId: String,
-      taskMetrics: Array[(Long, TaskMetrics)], // taskId -> TaskMetrics
+      execId: String,//表示该executor上发来的心跳报告
+      taskMetrics: Array[(Long, TaskMetrics)], // taskId -> TaskMetrics 描述该executor上所有的任务执行情况
       blockManagerId: BlockManagerId): Boolean = {
 
+    //返回值(任务ID,所属阶段ID,所属阶段的尝试任务ID,统计信息)
     val metricsWithStageIds: Array[(Long, Int, Int, TaskMetrics)] = synchronized {
-      taskMetrics.flatMap { case (id, metrics) =>
-        taskIdToTaskSetManager.get(id).map { taskSetMgr =>
+      taskMetrics.flatMap { case (id, metrics) => //循环每一个任务以及报告情况
+        taskIdToTaskSetManager.get(id).map { taskSetMgr => //获取该任务对应的阶段情况
           (id, taskSetMgr.stageId, taskSetMgr.taskSet.stageAttemptId, metrics)
         }
       }
@@ -418,7 +419,7 @@ private[spark] class TaskSchedulerImpl(
     taskSetManager.handleTaskGettingResult(tid)
   }
 
-  //任务成功
+  //任务成功,并且已经将结果从executor上抓去到driver本地了
   def handleSuccessfulTask(
       taskSetManager: TaskSetManager,
       tid: Long,
@@ -433,13 +434,14 @@ private[spark] class TaskSchedulerImpl(
       taskState: TaskState,
       reason: TaskEndReason): Unit = synchronized {
     taskSetManager.handleFailedTask(tid, taskState, reason)
-    if (!taskSetManager.isZombie && taskState != TaskState.KILLED) {
+    if (!taskSetManager.isZombie && taskState != TaskState.KILLED) {//重新发起调度,去将该失败的任务再次调度起来
       // Need to revive offers again now that the task set manager state has been updated to
       // reflect failed tasks that need to be re-run.
       backend.reviveOffers()
     }
   }
 
+  //调度器出现错误了,因此所有的阶段系统都要被退出
   def error(message: String) {
     synchronized {
       if (taskSetsByStageIdAndAttempt.nonEmpty) {
@@ -471,7 +473,7 @@ private[spark] class TaskSchedulerImpl(
     if (taskResultGetter != null) { //关闭获取结果的进程
       taskResultGetter.stop()
     }
-    starvationTimer.cancel() //关闭定时器
+    starvationTimer.cancel() //关闭定时器-----就一开始的时候使用过该线程,主要用于确定该调度器是否能成功调度任务
   }
 
   override def defaultParallelism(): Int = backend.defaultParallelism()
