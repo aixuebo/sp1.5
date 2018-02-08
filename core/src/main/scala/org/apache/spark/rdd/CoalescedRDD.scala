@@ -234,8 +234,10 @@ it.foreach(print(_))
 
        即返回值是每一个partition第一个备份host和备份块  然后是第二个备份host和备份块 然后是第三个备份host和备份块
        */
-      val iterators = (0 to 2).map( x =>
+      val iterators = (0 to 2).map( x => //map的结果是(String,Parttaion)的迭代器
         prev.partitions.iterator.flatMap(p => {
+          //首先是x=0,表示优先获取第0个推荐的位置,返回<String,Partition>,此时String表示host,即第0个host,就是优先推荐的host
+          //第二轮循环的时候变成1,就变成非优先推荐的host了,有可能partiton都没有第二个推荐的host
           if (currPrefLocs(p).size > x) Some((currPrefLocs(p)(x), p)) else None //注意,此时为什么是flatMap,而不是map呢,是因为里面套用的是Some,因此使用循环的时候必须将some去掉,因此用的是flatMap
         } )
       )
