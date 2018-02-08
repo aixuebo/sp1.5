@@ -61,11 +61,12 @@ private[spark] case class CoalescedRDDPartition(
    */
   def localFraction: Double = {
     //计算首选路径在RDD的partition中的比例
+    //count函数计算结果为true的数量
     val loc = parents.count { p =>
       val parentPreferredLocations = rdd.context.getPreferredLocs(rdd, p.index).map(_.host) //获取每一个partition的地址集合对应的host
       preferredLocation.exists(parentPreferredLocations.contains)//判断首选的节点host是否在集合里面
     }
-    if (parents.size == 0) 0.0 else (loc.toDouble / parents.size.toDouble)
+    if (parents.size == 0) 0.0 else (loc.toDouble / parents.size.toDouble) //    推荐节点包含数据块的数量/总数据块数量
   }
 }
 
@@ -84,7 +85,7 @@ private[spark] case class CoalescedRDDPartition(
 private[spark] class CoalescedRDD[T: ClassTag](
     @transient var prev: RDD[T],//需要被合并的RDD
     maxPartitions: Int,//需要合并成多少个partition
-    balanceSlack: Double = 0.10)//平衡参数,1更接近本地,0更接近平衡
+    balanceSlack: Double = 0.10)//平衡参数,1更接近本地,0更接近平衡--所谓平衡是老partition分配到新的parititon要平衡,即老的有10个,新的有5个,则保证每一个新的分区都包含2个老的分区.则使用balanceSlack为0
   extends RDD[T](prev.context, Nil) {  // Nil since we implement getDependencies
 
   require(maxPartitions > 0 || maxPartitions == prev.partitions.length,
@@ -95,7 +96,7 @@ private[spark] class CoalescedRDD[T: ClassTag](
     val pc = new PartitionCoalescer(maxPartitions, prev, balanceSlack)//为老RDD重新规划成一个新的RDD
 
     pc.run().zipWithIndex.map {
-      case (pg, i) =>
+      case (pg, i) => //i表示第几个分区
         val ids = pg.arr.map(_.index).toArray //获取该新partition对应的老partition的集合
         new CoalescedRDDPartition(i, prev, ids, pg.prefLoc)//创建一个新的分区
     }
@@ -105,13 +106,14 @@ private[spark] class CoalescedRDD[T: ClassTag](
    * 计算父RDD中一组partition集合
    */
   override def compute(partition: Partition, context: TaskContext): Iterator[T] = {
-    partition.asInstanceOf[CoalescedRDDPartition].parents.iterator.flatMap { parentPartition =>
-      firstParent[T].iterator(parentPartition, context)
+    //每一个partition对应父rdd的多个partition
+    partition.asInstanceOf[CoalescedRDDPartition].parents.iterator.flatMap { parentPartition => //循环每一个partition,
+      firstParent[T].iterator(parentPartition, context) //读取每一个partition数据,返回迭代器
     }
   }
 
   override def getDependencies: Seq[Dependency[_]] = {
-    Seq(new NarrowDependency(prev) {
+    Seq(new NarrowDependency(prev) { //NarrowDependency 表示一个子类对应多个父类的RDD分区
       def getParents(id: Int): Seq[Int] =
         partitions(id).asInstanceOf[CoalescedRDDPartition].parentsIndices //说明该partition依赖父RDD中一组partition
     })
@@ -194,7 +196,7 @@ private class PartitionCoalescer(maxPartitions: Int, prev: RDD[_], balanceSlack:
   var noLocality = true  // if true if no preferredLocations exists for parent RDD ,true表示在父RDD中没有设置预先考虑在哪个节点的存在partition,
 
   // gets the *current* preferred locations from the DAGScheduler (as opposed to the static ones)
-  //获取该partition的host集合,必须至少有一个(此处有问题,什么逻辑保证必须有一个的)
+  //获取该partition的host集合,必须至少有一个(此处有问题,什么逻辑保证必须有一个的)----逻辑没问题,因为执行这块代码的时候,肯定有推荐节点的情况,即noLocality=false
   def currPrefLocs(part: Partition): Seq[String] = {
     prev.context.getPreferredLocs(prev, part.index).map(tl => tl.host)
   }
@@ -277,7 +279,7 @@ it.foreach(print(_))
    * Initializes targetLen partition groups and assigns a preferredLocation
    * This uses coupon collector to estimate how many preferredLocations it must rotate through
    * until it has seen most of the preferred locations (2 * n log(n))
-   * @param targetLen 创建新的RDD有多少个分区
+   * @param targetLen 创建新的RDD有多少个分区,每一个分区分配一个PartitionGroup对象
    */
   def setupGroups(targetLen: Int) {
     val rotIt = new LocationIterator(prev)
@@ -314,7 +316,7 @@ it.foreach(print(_))
       }
     }
 
-    //说明分组还没有分成功
+    //说明分组还没有分成功---一个host可以分配多个分组
     while (numCreated < targetLen) {  // if we don't have enough partition groups, create duplicates
       var (nxt_replica, nxt_part) = rotIt.next() //继续循环,不保证该partition已经分配成功了
       val pgroup = PartitionGroup(nxt_replica)

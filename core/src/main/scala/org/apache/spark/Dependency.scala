@@ -39,7 +39,8 @@ abstract class Dependency[T] extends Serializable {
  * of partitions of the parent RDD. Narrow dependencies allow for pipelined execution.
  * 依赖的基本实现类
  * 子类RDD的每一个partition对应父类RDD的一组partition,即N:1,N指代的是父RDD多个partition可以与子RDD的某一个partition关联
- * 
+ *
+ * 一对多依赖,比如CoalescedRDD
  * 参数RDD是表示父RDD
  */
 @DeveloperApi
