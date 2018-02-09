@@ -165,6 +165,7 @@ class DAGScheduler(
   // location for a reduce task.
   // Making this larger will focus on fewer locations where most data can be read locally, but
   // may lead to more delay in scheduling if those locations are busy.
+  //该伐值的意义在于reduce端在shuffle过程中获取某一个map的结果,有一个host上存储的map结果过大
   private[scheduler] val REDUCER_PREF_LOCS_FRACTION = 0.2
 
   /**
@@ -874,7 +875,7 @@ class DAGScheduler(
     val taskIdToLocations = try {
       stage match {
         case s: ShuffleMapStage =>
-          partitionsToCompute.map { id => (id, getPreferredLocs(stage.rdd, id))}.toMap
+          partitionsToCompute.map { id => (id, getPreferredLocs(stage.rdd, id))}.toMap //<分区ID,推荐该分区在哪个节点执行>
         case s: ResultStage =>
           val job = s.resultOfJob.get
           partitionsToCompute.map { id =>
@@ -1093,7 +1094,7 @@ class DAGScheduler(
             if (failedEpoch.contains(execId) && smt.epoch <= failedEpoch(execId)) {
               logInfo(s"Ignoring possibly bogus $smt completion from executor $execId")
             } else {
-              shuffleStage.addOutputLoc(smt.partitionId, status)
+              shuffleStage.addOutputLoc(smt.partitionId, status) //添加该shuffle在map端的结果信息
             }
 
             if (runningStages.contains(shuffleStage) && shuffleStage.pendingTasks.isEmpty) {

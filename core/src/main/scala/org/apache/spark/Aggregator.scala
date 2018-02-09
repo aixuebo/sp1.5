@@ -34,6 +34,9 @@ import org.apache.spark.util.collection.{AppendOnlyMap, ExternalAppendOnlyMap}
  *   过程:先从map中查找key,获取对应的C,如果C没有,则说明第一次遇见该key,则将value转换成C,即createCombiner函数
  *        如果从map中查获到key对应的c,则调用mergeValue函数,让C和新的V进行运算,生成C
  * 2.合并过程,让每一个key-c进行合并,最终生成key-C对象
+ *
+ *
+ * 注意:case class默认是可以序列化的，也就是实现了Serializable，因此该类是case class 的原因
  */
 @DeveloperApi
 case class Aggregator[K, V, C] (

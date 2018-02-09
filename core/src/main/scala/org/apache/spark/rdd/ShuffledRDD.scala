@@ -34,6 +34,7 @@ private[spark] class ShuffledRDDPartition(val idx: Int) extends Partition {
  * @tparam K the key class.
  * @tparam V the value class.
  * @tparam C the combiner class.
+ * ShuffledRDD 属于reduce阶段要执行的内容
  */
 // TODO: Make this return RDD[Product2[K, C]] or have some way to configure mutable pairs
 @DeveloperApi
@@ -84,13 +85,15 @@ class ShuffledRDD[K, V, C](
 
   override val partitioner = Some(part)
 
+  //因为reduce阶段是不需要只要太多信息的,只需要知道每一个分区的id即可
   override def getPartitions: Array[Partition] = {
     Array.tabulate[Partition](part.numPartitions)(i => new ShuffledRDDPartition(i))
   }
 
+  //每一个分区是知道id的,因此通过id直接从远程获取数据结果到本地
   override def compute(split: Partition, context: TaskContext): Iterator[(K, C)] = {
     val dep = dependencies.head.asInstanceOf[ShuffleDependency[K, V, C]]
-    SparkEnv.get.shuffleManager.getReader(dep.shuffleHandle, split.index, split.index + 1, context)
+    SparkEnv.get.shuffleManager.getReader(dep.shuffleHandle, split.index, split.index + 1, context) //reduce阶段该如何merge取决于shuffleHandle
       .read()
       .asInstanceOf[Iterator[(K, C)]]
   }

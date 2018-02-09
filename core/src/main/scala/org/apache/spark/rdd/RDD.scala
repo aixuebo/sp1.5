@@ -485,7 +485,14 @@ scala> val a = sc.parallelize(1 to 4, 2) scala> val b = a.flatMap(x => 1 to x) s
         }
       } : Iterator[(Int, T)] //保证每一个partition的内容转换成顺序的intid以及对应的原始对象T,即增加了一个顺序id,让shuffle根据id作为key的时候更均匀的分布在多个节点上,依然不用保证key相同的都在同一个节点上
 
+      //shuffle的过程是根据目标reduce分区数量,在map端将所有元素随机打乱到任意一个reduce分区中
       // include a shuffle step so that our upstream tasks are still distributed
+
+      /**
+ShuffledRDD[K, V, C]
+而泛型的内容是ShuffledRDD[Int, T, T],说明处理后的map端输出是[Int, T],即int和原始元素内容本身。
+reduce的结果是T,即reduce合并的结果也是T,即reduce的结果是[Int,T]
+       */
       new CoalescedRDD(
         new ShuffledRDD[Int, T, T](mapPartitionsWithIndex(distributePartition),
           new HashPartitioner(numPartitions)),//先进行shuffle操作,操作后再进行partition调整

@@ -24,7 +24,7 @@ import org.apache.spark.util.CallSite
 
 /**
  * The ShuffleMapStage represents the intermediate stages in a job.
- * ShuffleMapStage代表job中的一个中间阶段
+ * ShuffleMapStage代表job中的一个中间阶段---运行在driver端
  */
 private[spark] class ShuffleMapStage(
     id: Int,
@@ -45,7 +45,8 @@ private[spark] class ShuffleMapStage(
   //每一个partition是一个List[MapStatus]作为数组的元素
   val outputLocs = Array.fill[List[MapStatus]](numPartitions)(Nil)
 
-  //为该partition添加一个输出
+  //为该partition添加一个输出,即driver上知道一个map任务完成了
+  //参数表示完成的是第几个任务,以及完成的结果
   def addOutputLoc(partition: Int, status: MapStatus): Unit = {
     val prevList = outputLocs(partition)//返回该partition对应的List[MapStatus]元素
     outputLocs(partition) = status :: prevList //将status追加到数组的前面
@@ -71,9 +72,9 @@ private[spark] class ShuffleMapStage(
    * 移除在execId上的结果集
    */
   def removeOutputsOnExecutor(execId: String): Unit = {
-    var becameUnavailable = false //默认变成不可用为false
+    var becameUnavailable = false //true表示有map的结果不可用了
     for (partition <- 0 until numPartitions) {//循环每一个partition
-      val prevList = outputLocs(partition)//找到该partition对应的集合
+      val prevList = outputLocs(partition)//找到该partition对应的任务完成的返回值
       val newList = prevList.filterNot(_.location.executorId == execId) //过滤在execId上的结果集
       outputLocs(partition) = newList //重新设置集合
       if (prevList != Nil && newList == Nil) {

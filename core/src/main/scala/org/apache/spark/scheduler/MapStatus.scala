@@ -39,6 +39,8 @@ private[spark] sealed trait MapStatus {
    * If a block is non-empty, then this method MUST return a non-zero size.  This invariant is
    * necessary for correctness, since block fetchers are allowed to skip zero-size blocks.
    * 估算某一个reduce的数据块所占大小
+   *
+   * 因为每一个ShuffleMapTask在executor上执行后,返回的都是一个文件集合,该文件是为每一个reduce准备好的结果集.因此要有一个方法获取某一个reduce对应的结果集大小,方便reduce节点来抓去数据,根据大小来抓去数据
    */
   def getSizeForBlock(reduceId: Int): Long
 }
