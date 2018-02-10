@@ -28,7 +28,7 @@ package object graphx {
    * A 64-bit vertex identifier that uniquely identifies a vertex within a graph. It does not need
    * to follow any ordering or any constraints other than uniqueness.
    */
-  type VertexId = Long
+  type VertexId = Long //long类型表示一个顶点ID,即顶点ID一定是long类型的
 
   /** Integer identifer of a graph partition. Must be less than 2^30. */
   // TODO: Consider using Char.

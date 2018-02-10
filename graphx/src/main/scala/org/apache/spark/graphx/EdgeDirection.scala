@@ -45,13 +45,16 @@ class EdgeDirection private (private val name: String) extends Serializable {
 
 /**
  * A set of [[EdgeDirection]]s.
+ * 表示边两个顶点的关系
  */
 object EdgeDirection {
-  /** Edges arriving at a vertex. */
-  final val In: EdgeDirection = new EdgeDirection("In")
+  /** Edges arriving at a vertex.
+    * a--->b,说明a是出out,b是进in
+    **/
+  final val In: EdgeDirection = new EdgeDirection("In") //指代B
 
   /** Edges originating from a vertex. */
-  final val Out: EdgeDirection = new EdgeDirection("Out")
+  final val Out: EdgeDirection = new EdgeDirection("Out")//指代A
 
   /** Edges originating from *or* arriving at a vertex of interest. */
   final val Either: EdgeDirection = new EdgeDirection("Either")

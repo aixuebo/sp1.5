@@ -29,6 +29,7 @@ object GraphLoader extends Logging {
   /**
    * Loads a graph from an edge list formatted file where each line contains two integers: a source
    * id and a target id. Skips lines that begin with `#`.
+   * 读取规定格式的文件,文件格式是#表示备注行,非备注行是由source dest两个int组成的边对象
    *
    * If desired the edges can be automatically oriented in the positive
    * direction (source Id < target Id) by setting `canonicalOrientation` to
@@ -57,7 +58,7 @@ object GraphLoader extends Logging {
       sc: SparkContext,
       path: String,
       canonicalOrientation: Boolean = false,
-      numEdgePartitions: Int = -1,
+      numEdgePartitions: Int = -1,//最终产生多少个分区
       edgeStorageLevel: StorageLevel = StorageLevel.MEMORY_ONLY,
       vertexStorageLevel: StorageLevel = StorageLevel.MEMORY_ONLY)
     : Graph[Int, Int] =
@@ -67,21 +68,21 @@ object GraphLoader extends Logging {
     // Parse the edge data table directly into edge partitions
     val lines =
       if (numEdgePartitions > 0) {
-        sc.textFile(path, numEdgePartitions).coalesce(numEdgePartitions)
+        sc.textFile(path, numEdgePartitions).coalesce(numEdgePartitions) //读取该文件,并且产生规定的partition分区数量
       } else {
         sc.textFile(path)
       }
-    val edges = lines.mapPartitionsWithIndex { (pid, iter) =>
+    val edges = lines.mapPartitionsWithIndex { (pid, iter) => //每一个分区该如何操作
       val builder = new EdgePartitionBuilder[Int, Int]
       iter.foreach { line =>
-        if (!line.isEmpty && line(0) != '#') {
+        if (!line.isEmpty && line(0) != '#') { //不是注解
           val lineArray = line.split("\\s+")
           if (lineArray.length < 2) {
             throw new IllegalArgumentException("Invalid line: " + line)
           }
           val srcId = lineArray(0).toLong
           val dstId = lineArray(1).toLong
-          if (canonicalOrientation && srcId > dstId) {
+          if (canonicalOrientation && srcId > dstId) { //canonicalOrientation=true,表示一定边的顺序为 小号码ID 大号码ID的顺序
             builder.add(dstId, srcId, 1)
           } else {
             builder.add(srcId, dstId, 1)

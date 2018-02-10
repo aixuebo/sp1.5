@@ -27,11 +27,12 @@ import scala.reflect._
  * faster than java.util.HashMap, while using much less space overhead.
  *
  * Under the hood, it uses our OpenHashSet implementation.
+ * 其实就是Map
  */
 private[graphx]
 class GraphXPrimitiveKeyOpenHashMap[@specialized(Long, Int) K: ClassTag,
                               @specialized(Long, Int, Double) V: ClassTag](
-    val keySet: OpenHashSet[K], var _values: Array[V])
+    val keySet: OpenHashSet[K], var _values: Array[V]) //参数是一个key的set集合,还有存储value的数组
   extends Iterable[(K, V)]
   with Serializable {
 
@@ -58,10 +59,12 @@ class GraphXPrimitiveKeyOpenHashMap[@specialized(Long, Int) K: ClassTag,
 
   override def size: Int = keySet.size
 
-  /** Get the value for a given key */
+  /** Get the value for a given key
+    * 相当于map的get方法
+    **/
   def apply(k: K): V = {
-    val pos = keySet.getPos(k)
-    _values(pos)
+    val pos = keySet.getPos(k) //获取key对应的存储index
+    _values(pos) //从数组中获取index的值
   }
 
   /** Get the value for a given key, or returns elseValue if it doesn't exist. */
@@ -71,7 +74,7 @@ class GraphXPrimitiveKeyOpenHashMap[@specialized(Long, Int) K: ClassTag,
   }
 
   /** Set the value for a key */
-  def update(k: K, v: V) {
+  def update(k: K, v: V) { //相当于map.put方法
     val pos = keySet.addWithoutResize(k) & OpenHashSet.POSITION_MASK
     _values(pos) = v
     keySet.rehashIfNeeded(k, grow, move)
@@ -79,7 +82,11 @@ class GraphXPrimitiveKeyOpenHashMap[@specialized(Long, Int) K: ClassTag,
   }
 
 
-  /** Set the value for a key */
+  /** Set the value for a key
+    * 对相同的key如果有值存在，要进行合并
+    *
+    * 没有返回值
+    **/
   def setMerge(k: K, v: V, mergeF: (V, V) => V) {
     val pos = keySet.addWithoutResize(k)
     val ind = pos & OpenHashSet.POSITION_MASK
@@ -98,6 +105,7 @@ class GraphXPrimitiveKeyOpenHashMap[@specialized(Long, Int) K: ClassTag,
    * set its value to mergeValue(oldValue).
    *
    * @return the newly updated value.
+   * 返回值是最新的值
    */
   def changeValue(k: K, defaultValue: => V, mergeValue: (V) => V): V = {
     val pos = keySet.addWithoutResize(k)
@@ -116,7 +124,9 @@ class GraphXPrimitiveKeyOpenHashMap[@specialized(Long, Int) K: ClassTag,
     var pos = 0
     var nextPair: (K, V) = computeNextPair()
 
-    /** Get the next value we should return from next(), or null if we're finished iterating */
+    /** Get the next value we should return from next(), or null if we're finished iterating
+      * 寻找下一个key=value的键值对
+      **/
     def computeNextPair(): (K, V) = {
       pos = keySet.nextPos(pos)
       if (pos >= 0) {

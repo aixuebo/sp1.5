@@ -28,18 +28,20 @@ import org.apache.spark.util.collection.SortDataFormat
  * @param srcId The vertex id of the source vertex
  * @param dstId The vertex id of the target vertex
  * @param attr The attribute associated with the edge
+ * 表示一个边
  */
 case class Edge[@specialized(Char, Int, Boolean, Byte, Long, Float, Double) ED] (
-    var srcId: VertexId = 0,
+    var srcId: VertexId = 0,//由两个顶点ID组成
     var dstId: VertexId = 0,
-    var attr: ED = null.asInstanceOf[ED])
-  extends Serializable {
+    var attr: ED = null.asInstanceOf[ED]) //刨除两个long类型ID,剩余的就是属性对象,默认是null
+  extends Serializable { //支持序列化
 
   /**
    * Given one vertex in the edge return the other vertex.
    *
    * @param vid the id one of the two vertices on the edge.
    * @return the id of the other vertex on the edge.
+   * 给定一个顶点,获取另外一个顶点
    */
   def otherVertexId(vid: VertexId): VertexId =
     if (srcId == vid) dstId else { assert(dstId == vid); srcId }
@@ -51,13 +53,16 @@ case class Edge[@specialized(Char, Int, Boolean, Byte, Long, Float, Double) ED] 
    * @param vid the id of one of the two vertices in the edge.
    * @return the relative direction of the edge to the corresponding
    * vertex.
+   * 说明该点是边的什么方向
    */
   def relativeDirection(vid: VertexId): EdgeDirection =
     if (vid == srcId) EdgeDirection.Out else { assert(vid == dstId); EdgeDirection.In }
 }
 
 object Edge {
+  //如何对边集合进行排序
   private[graphx] def lexicographicOrdering[ED] = new Ordering[Edge[ED]] {
+    //先比较src 再比较dst
     override def compare(a: Edge[ED], b: Edge[ED]): Int = {
       if (a.srcId == b.srcId) {
         if (a.dstId == b.dstId) 0
@@ -68,6 +73,7 @@ object Edge {
     }
   }
 
+  //如何排序交换集合数据内容
   private[graphx] def edgeArraySortDataFormat[ED] = new SortDataFormat[Edge[ED], Array[Edge[ED]]] {
     override def getKey(data: Array[Edge[ED]], pos: Int): Edge[ED] = {
       data(pos)

@@ -26,11 +26,11 @@ abstract class EdgeContext[VD, ED, A] {
   def srcId: VertexId
   /** The vertex id of the edge's destination vertex. */
   def dstId: VertexId
-  /** The vertex attribute of the edge's source vertex. */
+  /** The vertex attribute of the edge's source vertex. 顶点的属性*/
   def srcAttr: VD
-  /** The vertex attribute of the edge's destination vertex. */
+  /** The vertex attribute of the edge's destination vertex. 顶点的属性 */
   def dstAttr: VD
-  /** The attribute associated with the edge. */
+  /** The attribute associated with the edge. 边的属性*/
   def attr: ED
 
   /** Sends a message to the source vertex. */

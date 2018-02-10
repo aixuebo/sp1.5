@@ -37,7 +37,7 @@ class EdgePartitionBuilder[@specialized(Long, Int, Double) ED: ClassTag, VD: Cla
   def toEdgePartition: EdgePartition[ED, VD] = {
     val edgeArray = edges.trim().array
     new Sorter(Edge.edgeArraySortDataFormat[ED])
-      .sort(edgeArray, 0, edgeArray.length, Edge.lexicographicOrdering)
+      .sort(edgeArray, 0, edgeArray.length, Edge.lexicographicOrdering) //对边的集合进行排序
     val localSrcIds = new Array[Int](edgeArray.size)
     val localDstIds = new Array[Int](edgeArray.size)
     val data = new Array[ED](edgeArray.size)
