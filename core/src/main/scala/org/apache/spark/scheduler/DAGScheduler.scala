@@ -345,8 +345,8 @@ class DAGScheduler(
     val stage = newShuffleMapStage(rdd, numTasks, shuffleDep, firstJobId, rdd.creationSite)
     if (mapOutputTracker.containsShuffle(shuffleDep.shuffleId)) {
       val serLocs = mapOutputTracker.getSerializedMapOutputStatuses(shuffleDep.shuffleId)
-      val locs = MapOutputTracker.deserializeMapStatuses(serLocs)
-      for (i <- 0 until locs.length) {
+      val locs = MapOutputTracker.deserializeMapStatuses(serLocs) //返回值Array[MapStatus]
+      for (i <- 0 until locs.length) { //循环每一个返回值
         stage.outputLocs(i) = Option(locs(i)).toList // locs(i) will be null if missing
       }
       stage.numAvailableOutputs = locs.count(_ != null)

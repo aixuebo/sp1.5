@@ -155,6 +155,7 @@ class ShuffleMemoryManager protected (
 
 private[spark] object ShuffleMemoryManager {
 
+  //sparkEnv中创建shuffle的管理器---即一个executor上根据有多少个线程来创建shuffle内存管理器
   def create(conf: SparkConf, numCores: Int): ShuffleMemoryManager = {
     val maxMemory = ShuffleMemoryManager.getMaxMemory(conf)
     val pageSize = ShuffleMemoryManager.getPageSize(conf, maxMemory, numCores)
@@ -179,7 +180,7 @@ private[spark] object ShuffleMemoryManager {
   private def getMaxMemory(conf: SparkConf): Long = {
     val memoryFraction = conf.getDouble("spark.shuffle.memoryFraction", 0.2)
     val safetyFraction = conf.getDouble("spark.shuffle.safetyFraction", 0.8)
-    (Runtime.getRuntime.maxMemory * memoryFraction * safetyFraction).toLong
+    (Runtime.getRuntime.maxMemory * memoryFraction * safetyFraction).toLong //使用JVM的进程的运行期总内存的0.16作为shuffle内存
   }
 
   /**
@@ -198,7 +199,7 @@ private[spark] object ShuffleMemoryManager {
     // Because of rounding to next power of 2, we may have safetyFactor as 8 in worst case
     val safetyFactor = 16
     // TODO(davies): don't round to next power of 2
-    val size = ByteArrayMethods.nextPowerOf2(maxMemory / cores / safetyFactor)
+    val size = ByteArrayMethods.nextPowerOf2(maxMemory / cores / safetyFactor) //总内存/core 表示每一个cpu的建议内存数据块大小.然后在/14,即让数据块更小一些,一个cpu可以有16个小块
     val default = math.min(maxPageSize, math.max(minPageSize, size))
     conf.getSizeAsBytes("spark.buffer.pageSize", default)
   }
