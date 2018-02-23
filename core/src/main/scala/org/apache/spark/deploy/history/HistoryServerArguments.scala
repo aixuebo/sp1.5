@@ -22,6 +22,7 @@ import org.apache.spark.util.Utils
 
 /**
  * Command-line parser for the master.
+ * 从命令行参数中解析配置文件路径
  */
 private[history] class HistoryServerArguments(conf: SparkConf, args: Array[String])
   extends Logging {
@@ -35,14 +36,14 @@ private[history] class HistoryServerArguments(conf: SparkConf, args: Array[Strin
         logWarning("Setting log directory through the command line is deprecated as of " +
           "Spark 1.1.0. Please set this through spark.history.fs.logDirectory instead.")
         conf.set("spark.history.fs.logDirectory", value)
-        System.setProperty("spark.history.fs.logDirectory", value)
+        System.setProperty("spark.history.fs.logDirectory", value) //解析日志输出目录
         parse(tail)
 
       case ("--help" | "-h") :: tail =>
         printUsageAndExit(0)
 
       case ("--properties-file") :: value :: tail =>
-        propertiesFile = value
+        propertiesFile = value //解析配置文件
         parse(tail)
 
       case Nil =>
@@ -63,7 +64,7 @@ private[history] class HistoryServerArguments(conf: SparkConf, args: Array[Strin
       |
       |Options:
       |  --properties-file FILE      Path to a custom Spark properties file.
-      |                              Default is conf/spark-defaults.conf.
+      |                              Default is conf/spark-defaults.conf. 配置文件
       |
       |Configuration options can be set by setting the corresponding JVM system property.
       |History Server options are always available; additional options depend on the provider.
@@ -81,7 +82,7 @@ private[history] class HistoryServerArguments(conf: SparkConf, args: Array[Strin
       |FsHistoryProvider options:
       |
       |  spark.history.fs.logDirectory      Directory where app logs are stored
-      |                                     (default: file:/tmp/spark-events)
+      |                                     (default: file:/tmp/spark-events) app的日志存储的目录
       |  spark.history.fs.updateInterval    How often to reload log data from storage
       |                                     (in seconds, default: 10)
       |""".stripMargin)

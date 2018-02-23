@@ -23,32 +23,33 @@ import scala.xml.Node
 
 import org.apache.spark.ui.{WebUIPage, UIUtils}
 
+//分页类
 private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") {
 
-  private val pageSize = 20
+  private val pageSize = 20 //每页展示多少条历史数据
   private val plusOrMinus = 2
 
   def render(request: HttpServletRequest): Seq[Node] = {
-    val requestedPage = Option(request.getParameter("page")).getOrElse("1").toInt
-    val requestedFirst = (requestedPage - 1) * pageSize
+    val requestedPage = Option(request.getParameter("page")).getOrElse("1").toInt //第几页
+    val requestedFirst = (requestedPage - 1) * pageSize //表示该页是从第几条数据开始
     val requestedIncomplete =
-      Option(request.getParameter("showIncomplete")).getOrElse("false").toBoolean
+      Option(request.getParameter("showIncomplete")).getOrElse("false").toBoolean //是否只显示已经完成的任务,true表示不完全
 
     val allApps = parent.getApplicationList()
-      .filter(_.attempts.head.completed != requestedIncomplete)
+      .filter(_.attempts.head.completed != requestedIncomplete) //展示不完全的 还是完全的app
     val allAppsSize = allApps.size
 
-    val actualFirst = if (requestedFirst < allAppsSize) requestedFirst else 0
-    val appsToShow = allApps.slice(actualFirst, actualFirst + pageSize)
+    val actualFirst = if (requestedFirst < allAppsSize) requestedFirst else 0 //从分页位置开始
+    val appsToShow = allApps.slice(actualFirst, actualFirst + pageSize) //获取一个分页的数据
 
-    val actualPage = (actualFirst / pageSize) + 1
-    val last = Math.min(actualFirst + pageSize, allAppsSize) - 1
-    val pageCount = allAppsSize / pageSize + (if (allAppsSize % pageSize > 0) 1 else 0)
+    val actualPage = (actualFirst / pageSize) + 1 //真实当前页
+    val last = Math.min(actualFirst + pageSize, allAppsSize) - 1 //当前页最后一个信息的位置
+    val pageCount = allAppsSize / pageSize + (if (allAppsSize % pageSize > 0) 1 else 0) //总页数
 
     val secondPageFromLeft = 2
     val secondPageFromRight = pageCount - 1
 
-    val hasMultipleAttempts = appsToShow.exists(_.attempts.size > 1)
+    val hasMultipleAttempts = appsToShow.exists(_.attempts.size > 1) //true表示有多个尝试任务
     val appTable =
       if (hasMultipleAttempts) {
         // Sorting is disable here as table sort on rowspan has issues.
@@ -64,7 +65,7 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
       <div class="row-fluid">
         <div class="span12">
           <ul class="unstyled">
-            {providerConfig.map { case (k, v) => <li><strong>{k}:</strong> {v}</li> }}
+            {providerConfig.map { case (k, v) => <li><strong>{k}:</strong> {v}</li> }} //打印配置信息
           </ul>
           {
             // This displays the indices of pages that are within `plusOrMinus` pages of

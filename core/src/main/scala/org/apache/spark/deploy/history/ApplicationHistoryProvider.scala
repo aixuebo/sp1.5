@@ -22,31 +22,35 @@ import java.util.zip.ZipOutputStream
 import org.apache.spark.SparkException
 import org.apache.spark.ui.SparkUI
 
+//用于表示一个app的尝试任务
 private[spark] case class ApplicationAttemptInfo(
-    attemptId: Option[String],
-    startTime: Long,
+    attemptId: Option[String],//尝试任务的ID
+    startTime: Long,//尝试任务的开始时间以及结束时间
     endTime: Long,
     lastUpdated: Long,
     sparkUser: String,
-    completed: Boolean = false)
+    completed: Boolean = false) //是否完成的该尝试任务
 
+//表示一个app任务
 private[spark] case class ApplicationHistoryInfo(
     id: String,
     name: String,
     attempts: List[ApplicationAttemptInfo])
 
+//提供的接口服务
 private[history] abstract class ApplicationHistoryProvider {
 
   /**
    * Returns a list of applications available for the history server to show.
    *
    * @return List of all know applications.
+   * 返回所有的app历史集合
    */
   def getListing(): Iterable[ApplicationHistoryInfo]
 
   /**
    * Returns the Spark UI for a specific application.
-   *
+   * 返回历史上某一个app的尝试任务的连接
    * @param appId The application ID.
    * @param attemptId The application attempt ID (or None if there is no attempt ID).
    * @return The application's UI, or None if application is not found.
@@ -55,6 +59,7 @@ private[history] abstract class ApplicationHistoryProvider {
 
   /**
    * Called when the server is shutting down.
+   * 关闭历史服务
    */
   def stop(): Unit = { }
 
@@ -69,6 +74,7 @@ private[history] abstract class ApplicationHistoryProvider {
    * Writes out the event logs to the output stream provided. The logs will be compressed into a
    * single zip file and written out.
    * @throws SparkException if the logs for the app id cannot be found.
+   * 将事件日志写入到输出流中,该输出流是被压缩的zip流
    */
   @throws(classOf[SparkException])
   def writeEventLogs(appId: String, attemptId: Option[String], zipStream: ZipOutputStream): Unit

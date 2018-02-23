@@ -42,17 +42,19 @@ import org.apache.spark.util.{ShutdownHookManager, SignalLogger, Utils}
  * application's event logs are maintained in the application's own sub-directory. This
  * is the same structure as maintained in the event log write code path in
  * EventLoggingListener.
+ * 表示历史数据的服务对象
  */
 class HistoryServer(
     conf: SparkConf,
     provider: ApplicationHistoryProvider,
     securityManager: SecurityManager,
-    port: Int)
+    port: Int) //服务开启的端口
   extends WebUI(securityManager, port, conf) with Logging with UIRoot {
 
-  // How many applications to retain
+  // How many applications to retain 保持多少个应用在历史记录中
   private val retainedApplications = conf.getInt("spark.history.retainedApplications", 50)
 
+  //一个map集合,即每一个app对应一个SparkUI映射关系
   private val appLoader = new CacheLoader[String, SparkUI] {
     override def load(key: String): SparkUI = {
       val parts = key.split("/")
@@ -66,18 +68,20 @@ class HistoryServer(
   }
 
   private val appCache = CacheBuilder.newBuilder()
-    .maximumSize(retainedApplications)
+    .maximumSize(retainedApplications) //最多保持多少条数据
     .removalListener(new RemovalListener[String, SparkUI] {
-      override def onRemoval(rm: RemovalNotification[String, SparkUI]): Unit = {
+      override def onRemoval(rm: RemovalNotification[String, SparkUI]): Unit = { //注册监听器
         detachSparkUI(rm.getValue())
       }
     })
-    .build(appLoader)
+    .build(appLoader) //使用该map集合保存内存映射的数据
 
+  //创建一个http服务
   private val loaderServlet = new HttpServlet {
     protected override def doGet(req: HttpServletRequest, res: HttpServletResponse): Unit = {
       // Parse the URI created by getAttemptURI(). It contains an app ID and an optional
       // attempt ID (separated by a slash).
+      //请求的标准格式是/history/app/attemptId
       val parts = Option(req.getPathInfo()).getOrElse("").split("/")
       if (parts.length < 2) {
         res.sendError(HttpServletResponse.SC_BAD_REQUEST,
@@ -85,6 +89,7 @@ class HistoryServer(
         return
       }
 
+      //解析请求
       val appId = parts(1)
       val attemptId = if (parts.length >= 3) Some(parts(2)) else None
 
@@ -112,6 +117,7 @@ class HistoryServer(
     }
   }
 
+  //返回该app对应的SparkUI历史数据内容
   def getSparkUI(appKey: String): Option[SparkUI] = {
     Option(appCache.get(appKey))
   }
@@ -165,6 +171,7 @@ class HistoryServer(
    * Returns a list of available applications, in descending order according to their end time.
    *
    * @return List of all known applications.
+   * 返回所有的job集合
    */
   def getApplicationList(): Iterable[ApplicationHistoryInfo] = {
     provider.getListing()
@@ -240,7 +247,7 @@ object HistoryServer extends Logging {
 
     ShutdownHookManager.addShutdownHook { () => server.stop() }
 
-    // Wait until the end of the world... or if the HistoryServer process is manually stopped
+    // Wait until the end of the world... or if the HistoryServer process is manually stopped 服务无限循环,一直到服务手动被停止为止
     while(true) { Thread.sleep(Int.MaxValue) }
   }
 

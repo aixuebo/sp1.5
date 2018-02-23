@@ -57,12 +57,13 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   // Interval between each cleaner checks for event logs to delete
   private val CLEAN_INTERVAL_S = conf.getTimeAsSeconds("spark.history.fs.cleaner.interval", "1d")
 
+  //日志存储的目录
   private val logDir = conf.getOption("spark.history.fs.logDirectory")
     .map { d => Utils.resolveURI(d).toString }
     .getOrElse(DEFAULT_LOG_DIR)
 
   private val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
-  private val fs = Utils.getHadoopFileSystem(logDir, hadoopConf)
+  private val fs = Utils.getHadoopFileSystem(logDir, hadoopConf) //根据目录schema获取操作系统对象
 
   // Used by check event thread and clean log thread.
   // Scheduled thread pool size must be one, otherwise it will have concurrent issues about fs
@@ -80,7 +81,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   @volatile private var applications: mutable.LinkedHashMap[String, FsApplicationHistoryInfo]
     = new mutable.LinkedHashMap()
 
-  // List of application logs to be deleted by event log cleaner.
+  // List of application logs to be deleted by event log cleaner.需要被清理的任务集合
   private var attemptsToClean = new mutable.ListBuffer[FsApplicationAttemptInfo]
 
   /**
@@ -111,14 +112,14 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   private def initialize(): Unit = {
     // Validate the log directory.
     val path = new Path(logDir)
-    if (!fs.exists(path)) {
+    if (!fs.exists(path)) { //目录必须存在
       var msg = s"Log directory specified does not exist: $logDir."
       if (logDir == DEFAULT_LOG_DIR) {
         msg += " Did you configure the correct one through spark.history.fs.logDirectory?"
       }
       throw new IllegalArgumentException(msg)
     }
-    if (!fs.getFileStatus(path).isDir) {
+    if (!fs.getFileStatus(path).isDir) { //必须是目录
       throw new IllegalArgumentException(
         "Logging directory specified is not a directory: %s".format(logDir))
     }
@@ -176,18 +177,19 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
    * Builds the application list based on the current contents of the log directory.
    * Tries to reuse as much of the data already in memory as possible, by not reading
    * applications that haven't been updated since last time the logs were checked.
+   * 定期找到最新的文件更新时间,以及这段时间内产生变化的文件
    */
   private[history] def checkForLogs(): Unit = {
     try {
       val statusList = Option(fs.listStatus(new Path(logDir))).map(_.toSeq)
-        .getOrElse(Seq[FileStatus]())
-      var newLastModifiedTime = lastModifiedTime
-      val logInfos: Seq[FileStatus] = statusList
+        .getOrElse(Seq[FileStatus]()) //获取所有文件内容
+      var newLastModifiedTime = lastModifiedTime //记录最新时间
+      val logInfos: Seq[FileStatus] = statusList //找到更改过的文件集合
         .filter { entry =>
           try {
             getModificationTime(entry).map { time =>
               newLastModifiedTime = math.max(newLastModifiedTime, time)
-              time >= lastModifiedTime
+              time >= lastModifiedTime //说明上次之后该文件已经被更改了
             }.getOrElse(false)
           } catch {
             case e: AccessControlException =>
@@ -202,20 +204,20 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
           val mod1 = getModificationTime(entry1).getOrElse(-1L)
           val mod2 = getModificationTime(entry2).getOrElse(-1L)
           mod1 >= mod2
-      }
+      } //对更改过的文件进行时间排序
 
-      logInfos.grouped(20)
-        .map { batch =>
+      logInfos.grouped(20) //每组20个元素
+        .map { batch => //batch是一个list,表示这一组20个产生的文件对象
           replayExecutor.submit(new Runnable {
             override def run(): Unit = mergeApplicationListing(batch)
-          })
+          }) //submit返回future
         }
-        .foreach { task =>
+        .foreach { task => //因为是future,因此可以get获取到结果集
           try {
             // Wait for all tasks to finish. This makes sure that checkForLogs
             // is not scheduled again while some tasks are already running in
             // the replayExecutor.
-            task.get()
+            task.get() //目的就是等待任务执行完成
           } catch {
             case e: InterruptedException =>
               throw e
@@ -224,7 +226,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
           }
         }
 
-      lastModifiedTime = newLastModifiedTime
+      lastModifiedTime = newLastModifiedTime //更新最新时间
     } catch {
       case e: Exception => logError("Exception in checking for event log updates", e)
     }
@@ -239,6 +241,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
      * This method compresses the files passed in, and writes the compressed data out into the
      * [[OutputStream]] passed in. Each file is written as a new [[ZipEntry]] with its name being
      * the name of the file being compressed.
+     * 将文件file的内容,写入到outputStream中
      */
     def zipFileToStream(file: Path, entryName: String, outputStream: ZipOutputStream): Unit = {
       val fs = FileSystem.get(hadoopConf)
@@ -257,12 +260,12 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         try {
           // If no attempt is specified, or there is no attemptId for attempts, return all attempts
           appInfo.attempts.filter { attempt =>
-            attempt.attemptId.isEmpty || attemptId.isEmpty || attempt.attemptId.get == attemptId.get
-          }.foreach { attempt =>
-            val logPath = new Path(logDir, attempt.logPath)
+            attempt.attemptId.isEmpty || attemptId.isEmpty || attempt.attemptId.get == attemptId.get //找到匹配的尝试任务
+          }.foreach { attempt => //此时已经精准定位到某一个尝试任务了
+            val logPath = new Path(logDir, attempt.logPath) //该任务要存储的路径
             // If this is a legacy directory, then add the directory to the zipStream and add
             // each file to that directory.
-            if (isLegacyLogDirectory(fs.getFileStatus(logPath))) {
+            if (isLegacyLogDirectory(fs.getFileStatus(logPath))) {//说明该路径是目录
               val files = fs.listStatus(logPath)
               zipStream.putNextEntry(new ZipEntry(attempt.logPath + "/"))
               zipStream.closeEntry()
@@ -365,13 +368,13 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       val appsToRetain = new mutable.LinkedHashMap[String, FsApplicationHistoryInfo]()
 
       def shouldClean(attempt: FsApplicationAttemptInfo): Boolean = {
-        now - attempt.lastUpdated > maxAge && attempt.completed
+        now - attempt.lastUpdated > maxAge && attempt.completed //超过最大存留时间 && 任务已经完成的,就要被清理
       }
 
       // Scan all logs from the log directory.
       // Only completed applications older than the specified max age will be deleted.
       applications.values.foreach { app =>
-        val (toClean, toRetain) = app.attempts.partition(shouldClean)
+        val (toClean, toRetain) = app.attempts.partition(shouldClean) //对app的尝试任务进行分组
         attemptsToClean ++= toClean
 
         if (toClean.isEmpty) {
@@ -382,10 +385,10 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         }
       }
 
-      applications = appsToRetain
+      applications = appsToRetain //替换最新的app存留情况
 
       val leftToClean = new mutable.ListBuffer[FsApplicationAttemptInfo]
-      attemptsToClean.foreach { attempt =>
+      attemptsToClean.foreach { attempt => //对app进行清理
         try {
           val path = new Path(logDir, attempt.logPath)
           if (fs.exists(path)) {
@@ -400,7 +403,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         }
       }
 
-      attemptsToClean = leftToClean
+      attemptsToClean = leftToClean //尚未清理掉的app信息
     } catch {
       case t: Exception => logError("Exception in cleaning logs", t)
     }
@@ -408,7 +411,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
   /**
    * Comparison function that defines the sort order for the application listing.
-   *
+   * 对app进行排序
    * @return Whether `i1` should precede `i2`.
    */
   private def compareAppInfo(
@@ -428,6 +431,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
    * may cause multiple running attempts to show up.
    *
    * @return Whether `a1` should precede `a2`.
+   * 对app的尝试任务进行排序
    */
   private def compareAttemptInfo(
       a1: FsApplicationAttemptInfo,
@@ -484,18 +488,19 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
    * the code in previous releases.
    *
    * @return input stream that holds one JSON record per line.
+   * 打开一个目录,读取事件日志文件
    */
   private[history] def openLegacyEventLog(dir: Path): InputStream = {
     val children = fs.listStatus(dir)
     var eventLogPath: Path = null
     var codecName: Option[String] = None
 
-    children.foreach { child =>
+    children.foreach { child => //循环每一个文件
       child.getPath().getName() match {
-        case name if name.startsWith(LOG_PREFIX) =>
+        case name if name.startsWith(LOG_PREFIX) => //找到事件日志文件路径
           eventLogPath = child.getPath()
         case codec if codec.startsWith(COMPRESSION_CODEC_PREFIX) =>
-          codecName = Some(codec.substring(COMPRESSION_CODEC_PREFIX.length()))
+          codecName = Some(codec.substring(COMPRESSION_CODEC_PREFIX.length())) //压缩编码方式
         case _ =>
       }
     }
@@ -520,19 +525,21 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
    * Previously, the event log of an application comprises of multiple files in a directory.
    * As of Spark 1.3, these files are consolidated into a single one that replaces the directory.
    * See SPARK-2261 for more detail.
+   * true表示是目录
    */
   private def isLegacyLogDirectory(entry: FileStatus): Boolean = entry.isDir()
 
   /**
    * Returns the modification time of the given event log. If the status points at an empty
    * directory, `None` is returned, indicating that there isn't an event log at that location.
+   * 获取该文件或者目录的最新时间
    */
   private def getModificationTime(fsEntry: FileStatus): Option[Long] = {
-    if (isLegacyLogDirectory(fsEntry)) {
+    if (isLegacyLogDirectory(fsEntry)) {//true表示是目录
       val statusList = fs.listStatus(fsEntry.getPath)
       if (!statusList.isEmpty) Some(statusList.map(_.getModificationTime()).max) else None
-    } else {
-      Some(fsEntry.getModificationTime())
+    } else { //说明不是目录,而是文件
+      Some(fsEntry.getModificationTime()) //文件的最新修改时间
     }
   }
 
@@ -550,6 +557,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   /**
    * Returns whether the version of Spark that generated logs records app IDs. App IDs were added
    * in Spark 1.1.
+   * 是否有spark version信息
    */
   private def sparkVersionHasAppId(entry: FileStatus): Boolean = {
     if (isLegacyLogDirectory(entry)) {
@@ -568,7 +576,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 }
 
 private[history] object FsHistoryProvider {
-  val DEFAULT_LOG_DIR = "file:/tmp/spark-events"
+  val DEFAULT_LOG_DIR = "file:/tmp/spark-events" //默认存储的本地目录
 
   // Constants used to parse Spark 1.0.0 log directories.
   val LOG_PREFIX = "EVENT_LOG_"
@@ -577,8 +585,9 @@ private[history] object FsHistoryProvider {
   val APPLICATION_COMPLETE = "APPLICATION_COMPLETE"
 }
 
+//表示一个app的某个尝试任务
 private class FsApplicationAttemptInfo(
-    val logPath: String,
+    val logPath: String,//该尝试任务要存储的路径
     val name: String,
     val appId: String,
     attemptId: Option[String],
@@ -590,8 +599,9 @@ private class FsApplicationAttemptInfo(
   extends ApplicationAttemptInfo(
       attemptId, startTime, endTime, lastUpdated, sparkUser, completed)
 
+//表示一个app
 private class FsApplicationHistoryInfo(
     id: String,
     override val name: String,
-    override val attempts: List[FsApplicationAttemptInfo])
+    override val attempts: List[FsApplicationAttemptInfo]) //一个app对应多个尝试任务
   extends ApplicationHistoryInfo(id, name, attempts)

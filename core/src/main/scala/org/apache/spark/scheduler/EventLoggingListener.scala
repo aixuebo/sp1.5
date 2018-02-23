@@ -228,7 +228,7 @@ private[spark] class EventLoggingListener(
 
 private[spark] object EventLoggingListener extends Logging {
   // Suffix applied to the names of files still being written by applications.
-  val IN_PROGRESS = ".inprogress"
+  val IN_PROGRESS = ".inprogress"//处理中的事件名字
   val DEFAULT_LOG_DIR = "/tmp/spark-events"//默认日志存储路径
   val SPARK_VERSION_KEY = "SPARK_VERSION"
   val COMPRESSION_CODEC_KEY = "COMPRESSION_CODEC"
@@ -291,6 +291,7 @@ private[spark] object EventLoggingListener extends Logging {
    * Opens an event log file and returns an input stream that contains the event data.
    *
    * @return input stream that holds one JSON record per line.
+   * 读取事件日志文件
    */
   def openEventLog(log: Path, fs: FileSystem): InputStream = {
     // It's not clear whether FileSystem.open() throws FileNotFoundException or just plain
