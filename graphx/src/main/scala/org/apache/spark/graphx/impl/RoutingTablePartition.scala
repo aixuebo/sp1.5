@@ -35,27 +35,32 @@ object RoutingTablePartition {
    * A message from an edge partition to a vertex specifying the position in which the edge
    * partition references the vertex (src, dst, or both). The edge partition is encoded in the lower
    * 30 bytes of the Int, and the position is encoded in the upper 2 bytes of the Int.
+   * 用于表示每一个顶点在哪个分区
    */
-  type RoutingTableMessage = (VertexId, Int)
+  type RoutingTableMessage = (VertexId, Int) //即每一个顶点ID,pisition | 分区ID 组成的int
 
+  //position参数的含义 第一个bit是1,表示该顶点是边的src;第二个bit是1,表示该顶点是边的dst
   private def toMessage(vid: VertexId, pid: PartitionID, position: Byte): RoutingTableMessage = {
     val positionUpper2 = position << 30
-    val pidLower30 = pid & 0x3FFFFFFF
-    (vid, positionUpper2 | pidLower30)
+    val pidLower30 = pid & 0x3FFFFFFF //30个1
+    (vid, positionUpper2 | pidLower30) //即每一个顶点ID,pisition | 分区ID 组成的int
   }
 
+  //信息还原
   private def vidFromMessage(msg: RoutingTableMessage): VertexId = msg._1
   private def pidFromMessage(msg: RoutingTableMessage): PartitionID = msg._2 & 0x3FFFFFFF
   private def positionFromMessage(msg: RoutingTableMessage): Byte = (msg._2 >> 30).toByte
 
   val empty: RoutingTablePartition = new RoutingTablePartition(Array.empty)
 
-  /** Generate a `RoutingTableMessage` for each vertex referenced in `edgePartition`. */
+  /** Generate a `RoutingTableMessage` for each vertex referenced in `edgePartition`.
+    * 循环一个分区的所有的边
+    **/
   def edgePartitionToMsgs(pid: PartitionID, edgePartition: EdgePartition[_, _])
     : Iterator[RoutingTableMessage] = {
     // Determine which positions each vertex id appears in using a map where the low 2 bits
     // represent src and dst
-    val map = new GraphXPrimitiveKeyOpenHashMap[VertexId, Byte]
+    val map = new GraphXPrimitiveKeyOpenHashMap[VertexId, Byte] //将该分区的所有顶点,标识成该顶点是src还是dst还是都有参与
     edgePartition.iterator.foreach { e =>
       map.changeValue(e.srcId, 0x1, (b: Byte) => (b | 0x1).toByte)
       map.changeValue(e.dstId, 0x2, (b: Byte) => (b | 0x2).toByte)
@@ -63,23 +68,25 @@ object RoutingTablePartition {
     map.iterator.map { vidAndPosition =>
       val vid = vidAndPosition._1
       val position = vidAndPosition._2
-      toMessage(vid, pid, position)
+      toMessage(vid, pid, position) //产生最终的信息,即每一个顶点对应一个RoutingTableMessage对象
     }
   }
 
-  /** Build a `RoutingTablePartition` from `RoutingTableMessage`s. */
+  /** Build a `RoutingTablePartition` from `RoutingTableMessage`s.
+    * numEdgePartitions表示分区数量
+    **/
   def fromMsgs(numEdgePartitions: Int, iter: Iterator[RoutingTableMessage])
     : RoutingTablePartition = {
-    val pid2vid = Array.fill(numEdgePartitions)(new PrimitiveVector[VertexId])
-    val srcFlags = Array.fill(numEdgePartitions)(new PrimitiveVector[Boolean])
-    val dstFlags = Array.fill(numEdgePartitions)(new PrimitiveVector[Boolean])
+    val pid2vid = Array.fill(numEdgePartitions)(new PrimitiveVector[VertexId]) //有多少个分区,就有多少个数组,每一个分区对应一个PrimitiveVector集合,存储该分区的顶点集合
+    val srcFlags = Array.fill(numEdgePartitions)(new PrimitiveVector[Boolean]) //每一个顶点是否是src顶点
+    val dstFlags = Array.fill(numEdgePartitions)(new PrimitiveVector[Boolean]) //每一个顶点是否是dst顶点
     for (msg <- iter) {
-      val vid = vidFromMessage(msg)
-      val pid = pidFromMessage(msg)
+      val vid = vidFromMessage(msg) //顶点ID
+      val pid = pidFromMessage(msg) //分区ID
       val position = positionFromMessage(msg)
-      pid2vid(pid) += vid
-      srcFlags(pid) += (position & 0x1) != 0
-      dstFlags(pid) += (position & 0x2) != 0
+      pid2vid(pid) += vid //存储该分区的顶点ID
+      srcFlags(pid) += (position & 0x1) != 0 //第一个bit是1,表示该顶点是边的src
+      dstFlags(pid) += (position & 0x2) != 0 //第二个bit是1,表示该顶点是边的dst
     }
 
     new RoutingTablePartition(pid2vid.zipWithIndex.map {
@@ -87,7 +94,9 @@ object RoutingTablePartition {
     })
   }
 
-  /** Compact the given vector of Booleans into a BitSet. */
+  /** Compact the given vector of Booleans into a BitSet.
+    * 将boolean向量转换成BitSet对象,属于数据压缩范畴
+    **/
   private def toBitSet(flags: PrimitiveVector[Boolean]): BitSet = {
     val bitset = new BitSet(flags.size)
     var i = 0
@@ -108,19 +117,20 @@ object RoutingTablePartition {
  */
 private[graphx]
 class RoutingTablePartition(
+   //参数数组Array,有多少个分区,就有多少个元素.每一个元素表示一个分区内的内容,包含该分区包含的顶点集合,以及每一个顶点是否是src和dst的bitset对象
     private val routingTable: Array[(Array[VertexId], BitSet, BitSet)]) extends Serializable {
   /** The maximum number of edge partitions this `RoutingTablePartition` is built to join with. */
-  val numEdgePartitions: Int = routingTable.size
+  val numEdgePartitions: Int = routingTable.size //表示有多少个分区
 
   /** Returns the number of vertices that will be sent to the specified edge partition. */
-  def partitionSize(pid: PartitionID): Int = routingTable(pid)._1.size
+  def partitionSize(pid: PartitionID): Int = routingTable(pid)._1.size //获取该分区有多少个顶点
 
   /** Returns an iterator over all vertex ids stored in this `RoutingTablePartition`. */
-  def iterator: Iterator[VertexId] = routingTable.iterator.flatMap(_._1.iterator)
+  def iterator: Iterator[VertexId] = routingTable.iterator.flatMap(_._1.iterator) //循环每一个分区,然后在循环该分区下每一个顶点,即这样的迭代器如果一个顶点在多个分区内,就会产生多次
 
   /** Returns a new RoutingTablePartition reflecting a reversal of all edge directions. */
   def reverse: RoutingTablePartition = {
-    new RoutingTablePartition(routingTable.map {
+    new RoutingTablePartition(routingTable.map { //将dst和src映射进行反转
       case (vids, srcVids, dstVids) => (vids, dstVids, srcVids)
     })
   }
@@ -130,16 +140,16 @@ class RoutingTablePartition(
    * filtered by the position they have in the edge partition.
    */
   def foreachWithinEdgePartition
-      (pid: PartitionID, includeSrc: Boolean, includeDst: Boolean)
-      (f: VertexId => Unit) {
-    val (vidsCandidate, srcVids, dstVids) = routingTable(pid)
-    val size = vidsCandidate.length
-    if (includeSrc && includeDst) {
+      (pid: PartitionID, includeSrc: Boolean, includeDst: Boolean) //对某一个分区进行迭代,找到符合条件的顶点进行迭代,并且计算函数f
+      (f: VertexId => Unit) { //对找到的顶点进行操作,参数是顶点ID,返回值是void
+    val (vidsCandidate, srcVids, dstVids) = routingTable(pid) //找到该分区的数据
+    val size = vidsCandidate.length //该分区有多少个顶点
+    if (includeSrc && includeDst) {//循环所有顶点
       // Avoid checks for performance
       vidsCandidate.iterator.foreach(f)
     } else if (!includeSrc && !includeDst) {
       // Do nothing
-    } else {
+    } else { //只循环src或者dst的顶点
       val relevantVids = if (includeSrc) srcVids else dstVids
       relevantVids.iterator.foreach { i => f(vidsCandidate(i)) }
     }

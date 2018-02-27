@@ -32,7 +32,7 @@ package object graphx {
 
   /** Integer identifer of a graph partition. Must be less than 2^30. */
   // TODO: Consider using Char.
-  type PartitionID = Int
+  type PartitionID = Int //表示分区ID
 
   private[graphx] type VertexSet = OpenHashSet[VertexId]
 }

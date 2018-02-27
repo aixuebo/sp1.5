@@ -97,20 +97,22 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
     partitionBy(partitionStrategy, edges.partitions.size)
   }
 
+  //参数是分区策略,第二个参数是要分配多少个分区
   override def partitionBy(
       partitionStrategy: PartitionStrategy, numPartitions: Int): Graph[VD, ED] = {
-    val edTag = classTag[ED]
-    val vdTag = classTag[VD]
+    val edTag = classTag[ED] //边属性
+    val vdTag = classTag[VD] //顶点属性
+    //表示边的RDD,已经将边进行分区了
     val newEdges = edges.withPartitionsRDD(edges.map { e =>
       val part: PartitionID = partitionStrategy.getPartition(e.srcId, e.dstId, numPartitions)
       (part, (e.srcId, e.dstId, e.attr))
-    }
+    }//此时的RDD已经划分好了分区,以及该边对应的两个顶点ID和边属性
       .partitionBy(new HashPartitioner(numPartitions))
-      .mapPartitionsWithIndex( { (pid, iter) =>
+      .mapPartitionsWithIndex( { (pid, iter) => //循环每一个分区
         val builder = new EdgePartitionBuilder[ED, VD]()(edTag, vdTag)
         iter.foreach { message =>
           val data = message._2
-          builder.add(data._1, data._2, data._3)
+          builder.add(data._1, data._2, data._3) //添加一条边
         }
         val edgePartition = builder.toEdgePartition
         Iterator((pid, edgePartition))

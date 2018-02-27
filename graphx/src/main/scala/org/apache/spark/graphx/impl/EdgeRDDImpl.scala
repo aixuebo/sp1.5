@@ -26,7 +26,7 @@ import org.apache.spark.storage.StorageLevel
 import org.apache.spark.graphx._
 
 class EdgeRDDImpl[ED: ClassTag, VD: ClassTag] private[graphx] (
-    @transient override val partitionsRDD: RDD[(PartitionID, EdgePartition[ED, VD])],
+    @transient override val partitionsRDD: RDD[(PartitionID, EdgePartition[ED, VD])],//持有一个RDD
     val targetStorageLevel: StorageLevel = StorageLevel.MEMORY_ONLY)
   extends EdgeRDD[ED](partitionsRDD.context, List(new OneToOneDependency(partitionsRDD))) {
 
@@ -84,9 +84,11 @@ class EdgeRDDImpl[ED: ClassTag, VD: ClassTag] private[graphx] (
     partitionsRDD.getCheckpointFile
   }
 
-  /** The number of edges in the RDD. */
+  /** The number of edges in the RDD.
+    * 一个多少条边
+    **/
   override def count(): Long = {
-    partitionsRDD.map(_._2.size.toLong).reduce(_ + _)
+    partitionsRDD.map(_._2.size.toLong).reduce(_ + _) //EdgePartition.size.toLong
   }
 
   override def mapValues[ED2: ClassTag](f: Edge[ED] => ED2): EdgeRDDImpl[ED2, VD] =
@@ -107,24 +109,26 @@ class EdgeRDDImpl[ED: ClassTag, VD: ClassTag] private[graphx] (
     val ed3Tag = classTag[ED3]
     this.withPartitionsRDD[ED3, VD](partitionsRDD.zipPartitions(other.partitionsRDD, true) {
       (thisIter, otherIter) =>
-        val (pid, thisEPart) = thisIter.next()
-        val (_, otherEPart) = otherIter.next()
-        Iterator(Tuple2(pid, thisEPart.innerJoin(otherEPart)(f)(ed2Tag, ed3Tag)))
+        val (pid, thisEPart) = thisIter.next() //第一个rdd对应的分区id以及边分区对象
+        val (_, otherEPart) = otherIter.next() //第2个rdd对应的分区id以及边分区对象,因为第二个可能不包含分区id,因此忽略
+        Iterator(Tuple2(pid, thisEPart.innerJoin(otherEPart)(f)(ed2Tag, ed3Tag))) //两个分区内容进行join
     })
   }
 
   def mapEdgePartitions[ED2: ClassTag, VD2: ClassTag](
+  //f的参数是分区ID以及该分区内的边信息-----返回值是对边对象进行重新赋值
       f: (PartitionID, EdgePartition[ED, VD]) => EdgePartition[ED2, VD2]): EdgeRDDImpl[ED2, VD2] = {
-    this.withPartitionsRDD[ED2, VD2](partitionsRDD.mapPartitions({ iter =>
+    this.withPartitionsRDD[ED2, VD2](partitionsRDD.mapPartitions({ iter => //循环该rdd的每一个分区
       if (iter.hasNext) {
-        val (pid, ep) = iter.next()
+        val (pid, ep) = iter.next() //获取每一个边的信息
         Iterator(Tuple2(pid, f(pid, ep)))
       } else {
         Iterator.empty
       }
-    }, preservesPartitioning = true))
+    }, preservesPartitioning = true)) //产生新的RDD
   }
 
+  //产生新的RDD
   private[graphx] def withPartitionsRDD[ED2: ClassTag, VD2: ClassTag](
       partitionsRDD: RDD[(PartitionID, EdgePartition[ED2, VD2])]): EdgeRDDImpl[ED2, VD2] = {
     new EdgeRDDImpl(partitionsRDD, this.targetStorageLevel)

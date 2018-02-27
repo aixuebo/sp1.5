@@ -23,13 +23,17 @@ import org.apache.spark.graphx._
 import org.apache.spark.graphx.util.collection.GraphXPrimitiveKeyOpenHashMap
 import org.apache.spark.util.collection.{SortDataFormat, Sorter, PrimitiveVector}
 
-/** Constructs an EdgePartition from scratch. */
+/** Constructs an EdgePartition from scratch.
+  * 为一个分区内的数据构建边对象
+  **/
 private[graphx]
 class EdgePartitionBuilder[@specialized(Long, Int, Double) ED: ClassTag, VD: ClassTag](
     size: Int = 64) {
-  private[this] val edges = new PrimitiveVector[Edge[ED]](size)
+  private[this] val edges = new PrimitiveVector[Edge[ED]](size) //边的集合
 
-  /** Add a new edge to the partition. */
+  /** Add a new edge to the partition.
+    * 添加一条边,即两个顶点ID以及边属性
+    **/
   def add(src: VertexId, dst: VertexId, d: ED) {
     edges += Edge(src, dst, d)
   }
@@ -37,30 +41,40 @@ class EdgePartitionBuilder[@specialized(Long, Int, Double) ED: ClassTag, VD: Cla
   def toEdgePartition: EdgePartition[ED, VD] = {
     val edgeArray = edges.trim().array
     new Sorter(Edge.edgeArraySortDataFormat[ED])
-      .sort(edgeArray, 0, edgeArray.length, Edge.lexicographicOrdering) //对边的集合进行排序
-    val localSrcIds = new Array[Int](edgeArray.size)
-    val localDstIds = new Array[Int](edgeArray.size)
-    val data = new Array[ED](edgeArray.size)
-    val index = new GraphXPrimitiveKeyOpenHashMap[VertexId, Int]
-    val global2local = new GraphXPrimitiveKeyOpenHashMap[VertexId, Int]
-    val local2global = new PrimitiveVector[VertexId]
-    var vertexAttrs = Array.empty[VD]
+      .sort(edgeArray, 0, edgeArray.length, Edge.lexicographicOrdering) //对边的集合进行排序--按照src顺序排序--内存完成的排序操作
+    val localSrcIds = new Array[Int](edgeArray.size) //存储每一个边的src顶点ID的本地序号
+    val localDstIds = new Array[Int](edgeArray.size) //存储每一个边的dst顶点ID的本地序号
+    val data = new Array[ED](edgeArray.size)//每一个边的属性
+    val index = new GraphXPrimitiveKeyOpenHashMap[VertexId, Int] //表示每一个src的顶点从哪个offset位置开始切换的
+    val global2local = new GraphXPrimitiveKeyOpenHashMap[VertexId, Int] //key是每一个顶点,value是该顶点在本地的唯一序号
+    val local2global = new PrimitiveVector[VertexId] //存储依次添加进来的唯一的顶点ID---即通过序号可以获取顶点ID---与global2local是相反的映射
+    var vertexAttrs = Array.empty[VD] //一共有多少个顶点
     // Copy edges into columnar structures, tracking the beginnings of source vertex id clusters and
     // adding them to the index. Also populate a map from vertex id to a sequential local offset.
     if (edgeArray.length > 0) {
-      index.update(edgeArray(0).srcId, 0)
+      index.update(edgeArray(0).srcId, 0) //将src点设置为0
       var currSrcId: VertexId = edgeArray(0).srcId
-      var currLocalId = -1
+      var currLocalId = -1 //本地的序号
       var i = 0
-      while (i < edgeArray.size) {
+      while (i < edgeArray.size) {//循环所有的边数据
         val srcId = edgeArray(i).srcId
         val dstId = edgeArray(i).dstId
+
+          /**
+           * 当出现一个新的顶点的时候,去map里面先看是否存在,
+           * 如果不存在,
+           * a.则currLocalId+1,说明为该顶点分配本地的一个序号。
+           * b.将新出现的顶点加入到集合中
+           * c.更新该顶点与本地的序号应射关系
+           * 如果存在
+           * 则什么也不做
+           */
         localSrcIds(i) = global2local.changeValue(srcId,
-          { currLocalId += 1; local2global += srcId; currLocalId }, identity)
+          { currLocalId += 1; local2global += srcId; currLocalId }, identity) //更新顶点src对应的int值,以第一次出现为准
         localDstIds(i) = global2local.changeValue(dstId,
           { currLocalId += 1; local2global += dstId; currLocalId }, identity)
-        data(i) = edgeArray(i).attr
-        if (srcId != currSrcId) {
+        data(i) = edgeArray(i).attr //设置每一个边的属性
+        if (srcId != currSrcId) {//说明要切换src顶点了,即产生了一个新的src顶点
           currSrcId = srcId
           index.update(currSrcId, i)
         }
@@ -97,19 +111,19 @@ class ExistingEdgePartitionBuilder[
   def toEdgePartition: EdgePartition[ED, VD] = {
     val edgeArray = edges.trim().array
     new Sorter(EdgeWithLocalIds.edgeArraySortDataFormat[ED])
-      .sort(edgeArray, 0, edgeArray.length, EdgeWithLocalIds.lexicographicOrdering)
+      .sort(edgeArray, 0, edgeArray.length, EdgeWithLocalIds.lexicographicOrdering) //按照src进行排序
     val localSrcIds = new Array[Int](edgeArray.size)
     val localDstIds = new Array[Int](edgeArray.size)
     val data = new Array[ED](edgeArray.size)
-    val index = new GraphXPrimitiveKeyOpenHashMap[VertexId, Int]
+    val index = new GraphXPrimitiveKeyOpenHashMap[VertexId, Int] //每一个src切换的位置
     // Copy edges into columnar structures, tracking the beginnings of source vertex id clusters and
     // adding them to the index
     if (edgeArray.length > 0) {
       index.update(edgeArray(0).srcId, 0)
       var currSrcId: VertexId = edgeArray(0).srcId
       var i = 0
-      while (i < edgeArray.size) {
-        localSrcIds(i) = edgeArray(i).localSrcId
+      while (i < edgeArray.size) {//循环每一个边
+        localSrcIds(i) = edgeArray(i).localSrcId //公用同一个本地id
         localDstIds(i) = edgeArray(i).localDstId
         data(i) = edgeArray(i).attr
         if (edgeArray(i).srcId != currSrcId) {
@@ -125,6 +139,7 @@ class ExistingEdgePartitionBuilder[
   }
 }
 
+//使用边的两个顶点,两个顶点的本地ID,边的属性
 private[impl] case class EdgeWithLocalIds[@specialized ED](
     srcId: VertexId, dstId: VertexId, localSrcId: Int, localDstId: Int, attr: ED)
 

@@ -28,7 +28,7 @@ private[graphx] object VertexPartition {
   /** Construct a `VertexPartition` from the given vertices. */
   def apply[VD: ClassTag](iter: Iterator[(VertexId, VD)])
     : VertexPartition[VD] = {
-    val (index, values, mask) = VertexPartitionBase.initFrom(iter)
+    val (index, values, mask) = VertexPartitionBase.initFrom(iter) //对一个顶点的集合转换成可以映射关系的内存数据结构
     new VertexPartition(index, values, mask)
   }
 
@@ -37,6 +37,7 @@ private[graphx] object VertexPartition {
   /**
    * Implicit conversion to allow invoking `VertexPartitionBase` operations directly on a
    * `VertexPartition`.
+   * 一个隐式转换,将VertexPartition转换成可以更改某一个属性的VertexPartitionOps对象
    */
   implicit def partitionToOps[VD: ClassTag](partition: VertexPartition[VD])
     : VertexPartitionOps[VD] = new VertexPartitionOps(partition)
@@ -45,6 +46,7 @@ private[graphx] object VertexPartition {
    * Implicit evidence that `VertexPartition` is a member of the `VertexPartitionBaseOpsConstructor`
    * typeclass. This enables invoking `VertexPartitionBase` operations on a `VertexPartition` via an
    * evidence parameter, as in [[VertexPartitionBaseOps]].
+   * 一个隐式转换,将VertexPartition转换成可以更改某一个属性的VertexPartitionOps对象
    */
   implicit object VertexPartitionOpsConstructor
     extends VertexPartitionBaseOpsConstructor[VertexPartition] {
@@ -53,13 +55,16 @@ private[graphx] object VertexPartition {
   }
 }
 
-/** A map from vertex id to vertex attribute. */
+/** A map from vertex id to vertex attribute.
+  * 该对象提供的功能是通过顶点ID---映射成顶点属性的过程
+  **/
 private[graphx] class VertexPartition[VD: ClassTag](
     val index: VertexIdToIndexMap,
     val values: Array[VD],
     val mask: BitSet)
   extends VertexPartitionBase[VD]
 
+//VertexPartition的某一个属性有变化的
 private[graphx] class VertexPartitionOps[VD: ClassTag](self: VertexPartition[VD])
   extends VertexPartitionBaseOps[VD, VertexPartition](self) {
 

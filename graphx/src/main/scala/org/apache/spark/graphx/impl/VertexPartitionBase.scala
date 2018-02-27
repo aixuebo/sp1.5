@@ -30,10 +30,10 @@ private[graphx] object VertexPartitionBase {
    * Construct the constituents of a VertexPartitionBase from the given vertices, merging duplicate
    * entries arbitrarily.
    */
-  def initFrom[VD: ClassTag](iter: Iterator[(VertexId, VD)])
-    : (VertexIdToIndexMap, Array[VD], BitSet) = {
+  def initFrom[VD: ClassTag](iter: Iterator[(VertexId, VD)]) //参数是顶点集合的迭代器
+    : (VertexIdToIndexMap, Array[VD], BitSet) = { //返回值顶点ID集合、每一个顶点对应的属性值数组集合、BitSet可以获取key是否存在
     val map = new GraphXPrimitiveKeyOpenHashMap[VertexId, VD]
-    iter.foreach { pair =>
+    iter.foreach { pair => //让数据转换成map数据,key是顶点ID,value是顶点的属性对象
       map(pair._1) = pair._2
     }
     (map.keySet, map._values, map.keySet.getBitSet)
@@ -47,7 +47,7 @@ private[graphx] object VertexPartitionBase {
     : (VertexIdToIndexMap, Array[VD], BitSet) = {
     val map = new GraphXPrimitiveKeyOpenHashMap[VertexId, VD]
     iter.foreach { pair =>
-      map.setMerge(pair._1, pair._2, mergeFunc)
+      map.setMerge(pair._1, pair._2, mergeFunc) //对于key相同出现的,要进行merge合并,即两个重复出现的属性进行运算,产生一个新的属性
     }
     (map.keySet, map._values, map.keySet.getBitSet)
   }
@@ -63,22 +63,30 @@ private[graphx] object VertexPartitionBase {
 private[graphx] abstract class VertexPartitionBase[@specialized(Long, Int, Double) VD: ClassTag]
   extends Serializable {
 
-  def index: VertexIdToIndexMap
-  def values: Array[VD]
+  def index: VertexIdToIndexMap //顶点与属性值位置的映射
+  def values: Array[VD] //顶点的属性值集合
   def mask: BitSet
 
   val capacity: Int = index.capacity
 
   def size: Int = mask.cardinality()
 
-  /** Return the vertex attribute for the given vertex ID. */
-  def apply(vid: VertexId): VD = values(index.getPos(vid))
+  /** Return the vertex attribute for the given vertex ID.
+    * 获取一个顶点的属性对象
+    **/
+  def apply(vid: VertexId): VD = values(index.getPos(vid)) //通过index.getPos(vid)找到该顶点对应的数组序号,从而找到该顶点对应的属性值
 
+  //表示是否包含该顶点
   def isDefined(vid: VertexId): Boolean = {
-    val pos = index.getPos(vid)
-    pos >= 0 && mask.get(pos)
+    val pos = index.getPos(vid) //获取该顶点对应的序号
+    pos >= 0 && mask.get(pos) //true说明该序号是有效的
   }
 
+  //迭代每一个顶点以及顶点属性对象
+  /**
+   * 不断循环每一个有效的顶点ID
+   * 找到该id对应的顶点具体内容,以及该顶点的属性值
+   */
   def iterator: Iterator[(VertexId, VD)] =
     mask.iterator.map(ind => (index.getValue(ind), values(ind)))
 }

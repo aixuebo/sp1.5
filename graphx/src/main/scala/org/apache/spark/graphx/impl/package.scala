@@ -20,5 +20,5 @@ package org.apache.spark.graphx
 import org.apache.spark.util.collection.OpenHashSet
 
 package object impl {
-  private[graphx] type VertexIdToIndexMap = OpenHashSet[VertexId]
+  private[graphx] type VertexIdToIndexMap = OpenHashSet[VertexId] //表示顶点与属性值位置的映射
 }

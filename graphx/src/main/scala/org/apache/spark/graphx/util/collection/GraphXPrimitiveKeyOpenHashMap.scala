@@ -28,6 +28,7 @@ import scala.reflect._
  *
  * Under the hood, it uses our OpenHashSet implementation.
  * 其实就是Map
+ * key存储在OpenHashSet中,因为OpenHashSet当你给他key的时候,他会返回给你一个int,该int就表示该key存储的具体值.通过该int可以在_values中找到对应的map的value值
  */
 private[graphx]
 class GraphXPrimitiveKeyOpenHashMap[@specialized(Long, Int) K: ClassTag,

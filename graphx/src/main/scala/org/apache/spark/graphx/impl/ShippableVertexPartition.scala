@@ -24,10 +24,13 @@ import org.apache.spark.util.collection.{BitSet, PrimitiveVector}
 import org.apache.spark.graphx._
 import org.apache.spark.graphx.util.collection.GraphXPrimitiveKeyOpenHashMap
 
-/** Stores vertex attributes to ship to an edge partition. */
+/** Stores vertex attributes to ship to an edge partition.
+  * 参数存储的是顶点ID和属性集合,分别在两个数组中存储
+  **/
 private[graphx]
 class VertexAttributeBlock[VD: ClassTag](val vids: Array[VertexId], val attrs: Array[VD])
   extends Serializable {
+  //该方法是从两个数组中提取出一个元组,表示顶点ID和顶点属性
   def iterator: Iterator[(VertexId, VD)] =
     (0 until vids.size).iterator.map { i => (vids(i), attrs(i)) }
 }
@@ -53,10 +56,14 @@ object ShippableVertexPartition {
    * and merging duplicate vertex atrribute with mergeFunc.
    */
   def apply[VD: ClassTag](
-      iter: Iterator[(VertexId, VD)], routingTable: RoutingTablePartition, defaultVal: VD,
-      mergeFunc: (VD, VD) => VD): ShippableVertexPartition[VD] = {
+      iter: Iterator[(VertexId, VD)],//顶点集合
+      routingTable: RoutingTablePartition,//顶点的路由对象
+      defaultVal: VD,//顶点属性的默认值
+      mergeFunc: (VD, VD) => VD) //相同顶点ID的属性merge函数
+     : ShippableVertexPartition[VD] = {
     val map = new GraphXPrimitiveKeyOpenHashMap[VertexId, VD]
     // Merge the given vertices using mergeFunc
+    //循环所有的顶点信息,对相同顶点ID的属性值进行merge,产生新的属性值
     iter.foreach { pair =>
       map.setMerge(pair._1, pair._2, mergeFunc)
     }
@@ -102,7 +109,9 @@ class ShippableVertexPartition[VD: ClassTag](
     val routingTable: RoutingTablePartition)
   extends VertexPartitionBase[VD] {
 
-  /** Return a new ShippableVertexPartition with the specified routing table. */
+  /** Return a new ShippableVertexPartition with the specified routing table.
+    * 重新设置路由表
+    **/
   def withRoutingTable(routingTable_ : RoutingTablePartition): ShippableVertexPartition[VD] = {
     new ShippableVertexPartition(index, values, mask, routingTable_)
   }
@@ -111,18 +120,20 @@ class ShippableVertexPartition[VD: ClassTag](
    * Generate a `VertexAttributeBlock` for each edge partition keyed on the edge partition ID. The
    * `VertexAttributeBlock` contains the vertex attributes from the current partition that are
    * referenced in the specified positions in the edge partition.
+   * 获取该分区内所有的顶点集合,以及属性集合
    */
   def shipVertexAttributes(
-      shipSrc: Boolean, shipDst: Boolean): Iterator[(PartitionID, VertexAttributeBlock[VD])] = {
-    Iterator.tabulate(routingTable.numEdgePartitions) { pid =>
-      val initialSize = if (shipSrc && shipDst) routingTable.partitionSize(pid) else 64
+      shipSrc: Boolean, shipDst: Boolean): Iterator[(PartitionID, VertexAttributeBlock[VD])] = { //每一个分区对应一组顶点集合
+    Iterator.tabulate(routingTable.numEdgePartitions) { pid => //循环每一个分区
+      val initialSize = if (shipSrc && shipDst) routingTable.partitionSize(pid) else 64 //初始化该分区有多少个顶点
       val vids = new PrimitiveVector[VertexId](initialSize)
       val attrs = new PrimitiveVector[VD](initialSize)
       var i = 0
+      //循环该分区的所有顶点
       routingTable.foreachWithinEdgePartition(pid, shipSrc, shipDst) { vid =>
         if (isDefined(vid)) {
           vids += vid
-          attrs += this(vid)
+          attrs += this(vid) //调用VertexPartitionBase的apply方法,获取该顶点的属性值
         }
         i += 1
       }
@@ -134,12 +145,13 @@ class ShippableVertexPartition[VD: ClassTag](
    * Generate a `VertexId` array for each edge partition keyed on the edge partition ID. The array
    * contains the visible vertex ids from the current partition that are referenced in the edge
    * partition.
+   * 获取该分区内所有的顶点集合
    */
   def shipVertexIds(): Iterator[(PartitionID, Array[VertexId])] = {
-    Iterator.tabulate(routingTable.numEdgePartitions) { pid =>
-      val vids = new PrimitiveVector[VertexId](routingTable.partitionSize(pid))
+    Iterator.tabulate(routingTable.numEdgePartitions) { pid => //循环每一个分区
+      val vids = new PrimitiveVector[VertexId](routingTable.partitionSize(pid)) //分区内所有顶点集合
       var i = 0
-      routingTable.foreachWithinEdgePartition(pid, true, true) { vid =>
+      routingTable.foreachWithinEdgePartition(pid, true, true) { vid => //循环所有顶点
         if (isDefined(vid)) {
           vids += vid
         }

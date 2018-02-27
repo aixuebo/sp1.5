@@ -51,14 +51,18 @@ object EdgeDirection {
   /** Edges arriving at a vertex.
     * a--->b,说明a是出out,b是进in
     **/
-  final val In: EdgeDirection = new EdgeDirection("In") //指代B
+  final val In: EdgeDirection = new EdgeDirection("In") //指代B---head边
 
   /** Edges originating from a vertex. */
-  final val Out: EdgeDirection = new EdgeDirection("Out")//指代A
+  final val Out: EdgeDirection = new EdgeDirection("Out")//指代A--tail边
 
-  /** Edges originating from *or* arriving at a vertex of interest. */
+  /** Edges originating from *or* arriving at a vertex of interest.
+    * 表示入度+出度
+    **/
   final val Either: EdgeDirection = new EdgeDirection("Either")
 
-  /** Edges originating from *and* arriving at a vertex of interest. */
+  /** Edges originating from *and* arriving at a vertex of interest.
+    * 表示自己又是入度 又是出度
+    **/
   final val Both: EdgeDirection = new EdgeDirection("Both")
 }

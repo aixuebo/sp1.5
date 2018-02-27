@@ -85,7 +85,7 @@ class VertexRDDImpl[VD] private[graphx] (
     partitionsRDD.getCheckpointFile
   }
 
-  /** The number of vertices in the RDD. */
+  /** The number of vertices in the RDD.该rdd有多少个顶点 */
   override def count(): Long = {
     partitionsRDD.map(_.size.toLong).reduce(_ + _)
   }

@@ -26,6 +26,7 @@ import org.apache.spark.util.collection.BitSet
 /**
  * A collection of edges, along with referenced vertex attributes and an optional active vertex set
  * for filtering computation on the edges.
+ * 表示边的集合--追加上顶点的属性值,用于过滤操作
  *
  * The edges are stored in columnar format in `localSrcIds`, `localDstIds`, and `data`. All
  * referenced global vertex ids are mapped to a compact set of local vertex ids according to the
@@ -36,11 +37,11 @@ import org.apache.spark.util.collection.BitSet
  * The edges are clustered by source vertex id, and the mapping from global vertex id to the index
  * of the corresponding edge cluster is stored in `index`.
  *
- * @tparam ED the edge attribute type
- * @tparam VD the vertex attribute type
+ * @tparam ED the edge attribute type 边属性类型
+ * @tparam VD the vertex attribute type 顶点属性类型
  *
  * @param localSrcIds the local source vertex id of each edge as an index into `local2global` and
- *   `vertexAttrs`
+ *   `vertexAttrs` 每一个边在本地的source顶点ID
  * @param localDstIds the local destination vertex id of each edge as an index into `local2global`
  *   and `vertexAttrs`
  * @param data the attribute associated with each edge
@@ -50,17 +51,18 @@ import org.apache.spark.util.collection.BitSet
  * @param local2global an array of global vertex ids where the offsets are local vertex ids
  * @param vertexAttrs an array of vertex attributes where the offsets are local vertex ids
  * @param activeSet an optional active vertex set for filtering computation on the edges
+ * 该对象表示一个分区内的所有边信息
  */
 private[graphx]
 class EdgePartition[
     @specialized(Char, Int, Boolean, Byte, Long, Float, Double) ED: ClassTag, VD: ClassTag](
-    localSrcIds: Array[Int],
-    localDstIds: Array[Int],
-    data: Array[ED],
-    index: GraphXPrimitiveKeyOpenHashMap[VertexId, Int],
-    global2local: GraphXPrimitiveKeyOpenHashMap[VertexId, Int],
-    local2global: Array[VertexId],
-    vertexAttrs: Array[VD],
+    localSrcIds: Array[Int],//存储每一个边的src顶点ID的本地序号
+    localDstIds: Array[Int],//存储每一个边的dst顶点ID的本地序号
+    data: Array[ED],//每一个边的属性集合
+    index: GraphXPrimitiveKeyOpenHashMap[VertexId, Int],//每一个顶点从第几个位置开始切换的
+    global2local: GraphXPrimitiveKeyOpenHashMap[VertexId, Int],//顶点与本地序号的映射
+    local2global: Array[VertexId],//本地序号与顶点的映射
+    vertexAttrs: Array[VD],//顶点的属性集合,序号是本地ID
     activeSet: Option[VertexSet])
   extends Serializable {
 
@@ -73,7 +75,9 @@ class EdgePartition[
       localSrcIds, localDstIds, data, index, global2local, local2global, vertexAttrs, activeSet)
   }
 
-  /** Return a new `EdgePartition` with the specified active set, provided as an iterator. */
+  /** Return a new `EdgePartition` with the specified active set, provided as an iterator.
+    * 设置需要的顶点集合
+    **/
   def withActiveSet(iter: Iterator[VertexId]): EdgePartition[ED, VD] = {
     val activeSet = new VertexSet
     while (iter.hasNext) { activeSet.add(iter.next()) }
@@ -82,20 +86,24 @@ class EdgePartition[
       Some(activeSet))
   }
 
-  /** Return a new `EdgePartition` with updates to vertex attributes specified in `iter`. */
+  /** Return a new `EdgePartition` with updates to vertex attributes specified in `iter`.
+    * 更新顶点的属性
+    **/
   def updateVertices(iter: Iterator[(VertexId, VD)]): EdgePartition[ED, VD] = {
     val newVertexAttrs = new Array[VD](vertexAttrs.length)
     System.arraycopy(vertexAttrs, 0, newVertexAttrs, 0, vertexAttrs.length)
     while (iter.hasNext) {
       val kv = iter.next()
-      newVertexAttrs(global2local(kv._1)) = kv._2
+      newVertexAttrs(global2local(kv._1)) = kv._2 //global2local(kv._1)表示通过顶点ID转换成本地ID的过程
     }
     new EdgePartition(
       localSrcIds, localDstIds, data, index, global2local, local2global, newVertexAttrs,
       activeSet)
   }
 
-  /** Return a new `EdgePartition` without any locally cached vertex attributes. */
+  /** Return a new `EdgePartition` without any locally cached vertex attributes.
+    * 清空顶点属性信息
+    **/
   def withoutVertexAttributes[VD2: ClassTag](): EdgePartition[ED, VD2] = {
     val newVertexAttrs = new Array[VD2](vertexAttrs.length)
     new EdgePartition(
@@ -103,10 +111,14 @@ class EdgePartition[
       activeSet)
   }
 
+  //获取第pos个边对应的src顶点是什么
+  //localSrcIds(pos) 获取该边的src的本地序号 ;local2global获取本地序号对应的真实顶点ID
   @inline private def srcIds(pos: Int): VertexId = local2global(localSrcIds(pos))
 
+  //获取第pos个边对应的dst顶点是什么
   @inline private def dstIds(pos: Int): VertexId = local2global(localDstIds(pos))
 
+  //获取第pos个边对应的边属性
   @inline private def attrs(pos: Int): ED = data(pos)
 
   /** Look up vid in activeSet, throwing an exception if it is None. */
@@ -114,24 +126,30 @@ class EdgePartition[
     activeSet.get.contains(vid)
   }
 
-  /** The number of active vertices, if any exist. */
+  /** The number of active vertices, if any exist.
+    * 获取activeSet.size值
+    **/
   def numActives: Option[Int] = activeSet.map(_.size)
 
   /**
    * Reverse all the edges in this partition.
    *
    * @return a new edge partition with all edges reversed.
+   * 反转,即由a->b转换成b->a的过程
    */
   def reverse: EdgePartition[ED, VD] = {
     val builder = new ExistingEdgePartitionBuilder[ED, VD](
       global2local, local2global, vertexAttrs, activeSet, size)
     var i = 0
-    while (i < size) {
+    while (i < size) {//循环每一个边
+      //获取边的本地序号
       val localSrcId = localSrcIds(i)
       val localDstId = localDstIds(i)
+      //获取真实的顶点ID
       val srcId = local2global(localSrcId)
       val dstId = local2global(localDstId)
       val attr = data(i)
+      //反转一下
       builder.add(dstId, srcId, localDstId, localSrcId, attr)
       i += 1
     }
@@ -149,13 +167,15 @@ class EdgePartition[
    * @tparam ED2 the type of the new attribute
    * @return a new edge partition with the result of the function `f`
    *         applied to each edge
+   * 更新边的属性
    */
-  def map[ED2: ClassTag](f: Edge[ED] => ED2): EdgePartition[ED2, VD] = {
+  def map[ED2: ClassTag](f: Edge[ED] => ED2) //函数是给定每一个边,将其转换新的边,此时能改的就只有边的属性
+     : EdgePartition[ED2, VD] = {
     val newData = new Array[ED2](data.size)
     val edge = new Edge[ED]()
     val size = data.size
     var i = 0
-    while (i < size) {
+    while (i < size) {//循环每一个边
       edge.srcId = srcIds(i)
       edge.dstId = dstIds(i)
       edge.attr = data(i)
@@ -173,9 +193,10 @@ class EdgePartition[
    * order of the edges returned by `EdgePartition.iterator` and
    * should return attributes equal to the number of edges.
    *
-   * @param iter an iterator for the new attribute values
+   * @param iter an iterator for the new attribute values 参数是新边的属性集合
    * @tparam ED2 the type of the new attribute
    * @return a new edge partition with the attribute values replaced
+   * 注意:要求参数的size数量与原始边的size是相同的,因此可以一对一的进行覆盖
    */
   def map[ED2: ClassTag](iter: Iterator[ED2]): EdgePartition[ED2, VD] = {
     // Faster than iter.toArray, because the expected size is known.
@@ -194,22 +215,27 @@ class EdgePartition[
    * vertices match `vpred`.
    */
   def filter(
-      epred: EdgeTriplet[VD, ED] => Boolean,
-      vpred: (VertexId, VD) => Boolean): EdgePartition[ED, VD] = {
+      epred: EdgeTriplet[VD, ED] => Boolean,//如何对边进行过滤
+      vpred: (VertexId, VD) => Boolean) //src的顶点ID以及顶点属性进行过滤、dst的顶点ID以及顶点属性进行过滤
+      : EdgePartition[ED, VD] = {
     val builder = new ExistingEdgePartitionBuilder[ED, VD](
       global2local, local2global, vertexAttrs, activeSet)
     var i = 0
     while (i < size) {
       // The user sees the EdgeTriplet, so we can't reuse it and must create one per edge.
+      //获取每一个边的顶点的本地序号
       val localSrcId = localSrcIds(i)
       val localDstId = localDstIds(i)
       val et = new EdgeTriplet[VD, ED]
+      //通过本地序号还原顶点ID
       et.srcId = local2global(localSrcId)
       et.dstId = local2global(localDstId)
+      //提取顶点属性
       et.srcAttr = vertexAttrs(localSrcId)
       et.dstAttr = vertexAttrs(localDstId)
+      //提取边属性
       et.attr = data(i)
-      if (vpred(et.srcId, et.srcAttr) && vpred(et.dstId, et.dstAttr) && epred(et)) {
+      if (vpred(et.srcId, et.srcAttr) && vpred(et.dstId, et.dstAttr) && epred(et)) { //两者都返回true才允许通过
         builder.add(et.srcId, et.dstId, localSrcId, localDstId, et.attr)
       }
       i += 1
@@ -221,6 +247,7 @@ class EdgePartition[
    * Apply the function f to all edges in this partition.
    *
    * @param f an external state mutating user defined function.
+   * 处理每一个边,没有返回值
    */
   def foreach(f: Edge[ED] => Unit) {
     iterator.foreach(f)
@@ -232,29 +259,34 @@ class EdgePartition[
    *
    * @param merge a commutative associative merge operation
    * @return a new edge partition without duplicate edges
+   * 因为边的集合已经排序好了,因此group by的过程是很容易的,就是一行一行查找即可
+   *
+   * 对两个相同的顶点连接的平行边进行处理
    */
-  def groupEdges(merge: (ED, ED) => ED): EdgePartition[ED, VD] = {
+  def groupEdges(merge: (ED, ED) => ED) //参数函数表示对两个平行边merge出一个新的边
+    : EdgePartition[ED, VD] = {
     val builder = new ExistingEdgePartitionBuilder[ED, VD](
       global2local, local2global, vertexAttrs, activeSet)
-    var currSrcId: VertexId = null.asInstanceOf[VertexId]
+    var currSrcId: VertexId = null.asInstanceOf[VertexId]//当前边对应的两个顶点ID
     var currDstId: VertexId = null.asInstanceOf[VertexId]
-    var currLocalSrcId = -1
+    var currLocalSrcId = -1 ////当前边对应的两个顶点的本地序号
     var currLocalDstId = -1
-    var currAttr: ED = null.asInstanceOf[ED]
+    var currAttr: ED = null.asInstanceOf[ED] //当前处理的边属性
     // Iterate through the edges, accumulating runs of identical edges using the curr* variables and
     // releasing them to the builder when we see the beginning of the next run
     var i = 0
     while (i < size) {
-      if (i > 0 && currSrcId == srcIds(i) && currDstId == dstIds(i)) {
+      if (i > 0 && currSrcId == srcIds(i) && currDstId == dstIds(i)) {//说明当前边与前面的边的两个顶点是相同的,需要merge
         // This edge should be accumulated into the existing run
         currAttr = merge(currAttr, data(i))
-      } else {
+      } else {//说明切换了一个新边了
         // This edge starts a new run of edges
         if (i > 0) {
           // First release the existing run to the builder
           builder.add(currSrcId, currDstId, currLocalSrcId, currLocalDstId, currAttr)
         }
         // Then start accumulating for a new run
+        //设置当前两个顶点,以及两个顶点对应的本地序号,以及边属性
         currSrcId = srcIds(i)
         currDstId = dstIds(i)
         currLocalSrcId = localSrcIds(i)
@@ -279,26 +311,29 @@ class EdgePartition[
    *
    * If there are multiple edges with the same src and dst in `other`, `f` will only be invoked
    * once.
+   * 两个分区进行join操作
    */
   def innerJoin[ED2: ClassTag, ED3: ClassTag]
-      (other: EdgePartition[ED2, _])
-      (f: (VertexId, VertexId, ED, ED2) => ED3): EdgePartition[ED3, VD] = {
+      (other: EdgePartition[ED2, _]) //另外一个分区
+      (f: (VertexId, VertexId, ED, ED2) => ED3) //如何merge,参数分别表示两个顶点,以及两个顶点的边属性,相当于对属性进行merge操作
+     : EdgePartition[ED3, VD] = {
     val builder = new ExistingEdgePartitionBuilder[ED3, VD](
       global2local, local2global, vertexAttrs, activeSet)
-    var i = 0
-    var j = 0
+    var i = 0 //表示this的边序号
+    var j = 0 //表示other的边序号
     // For i = index of each edge in `this`...
-    while (i < size && j < other.size) {
+    while (i < size && j < other.size) { //因为是排序好的,所以非常好遍历
+      //找到此时this的一个边
       val srcId = this.srcIds(i)
       val dstId = this.dstIds(i)
       // ... forward j to the index of the corresponding edge in `other`, and...
       while (j < other.size && other.srcIds(j) < srcId) { j += 1 }
-      if (j < other.size && other.srcIds(j) == srcId) {
+      if (j < other.size && other.srcIds(j) == srcId) {//说明两个集合中src顶点相同的相遇了
         while (j < other.size && other.srcIds(j) == srcId && other.dstIds(j) < dstId) { j += 1 }
-        if (j < other.size && other.srcIds(j) == srcId && other.dstIds(j) == dstId) {
+        if (j < other.size && other.srcIds(j) == srcId && other.dstIds(j) == dstId) {//说明dst顶点相同的也相遇了
           // ... run `f` on the matching edge
           builder.add(srcId, dstId, localSrcIds(i), localDstIds(i),
-            f(srcId, dstId, this.data(i), other.attrs(j)))
+            f(srcId, dstId, this.data(i), other.attrs(j))) //进行merge操作
         }
       }
       i += 1
@@ -310,10 +345,13 @@ class EdgePartition[
    * The number of edges in this partition
    *
    * @return size of the partition
+   * 表示该分区内有多少条边
    */
   val size: Int = localSrcIds.size
 
-  /** The number of unique source vertices in the partition. */
+  /** The number of unique source vertices in the partition.
+    * 该分区内有多少条不同的src顶点
+    **/
   def indexSize: Int = index.size
 
   /**
@@ -323,12 +361,13 @@ class EdgePartition[
    * To improve GC performance the same object is re-used in `next()`.
    *
    * @return an iterator over edges in the partition
+   * 遍历一个分区内所有的边
    */
   def iterator: Iterator[Edge[ED]] = new Iterator[Edge[ED]] {
     private[this] val edge = new Edge[ED]
-    private[this] var pos = 0
+    private[this] var pos = 0 //当前遍历了多少条边了
 
-    override def hasNext: Boolean = pos < EdgePartition.this.size
+    override def hasNext: Boolean = pos < EdgePartition.this.size //说明该有边存在
 
     override def next(): Edge[ED] = {
       edge.srcId = srcIds(pos)
@@ -343,27 +382,31 @@ class EdgePartition[
    * Get an iterator over the edge triplets in this partition.
    *
    * It is safe to keep references to the objects from this iterator.
+   * 提取每一个边的全部信息进行遍历
    */
   def tripletIterator(
-      includeSrc: Boolean = true, includeDst: Boolean = true)
+      includeSrc: Boolean = true, includeDst: Boolean = true) //参数表示是否要提取顶点的属性
       : Iterator[EdgeTriplet[VD, ED]] = new Iterator[EdgeTriplet[VD, ED]] {
-    private[this] var pos = 0
+    private[this] var pos = 0 //遍历当前第几条边了
 
-    override def hasNext: Boolean = pos < EdgePartition.this.size
+    override def hasNext: Boolean = pos < EdgePartition.this.size //是否还有边尚未被遍历到
 
     override def next(): EdgeTriplet[VD, ED] = {
       val triplet = new EdgeTriplet[VD, ED]
+      //获取第几条边的src和dst的本地序号
       val localSrcId = localSrcIds(pos)
       val localDstId = localDstIds(pos)
+      //获取真实的顶点ID
       triplet.srcId = local2global(localSrcId)
       triplet.dstId = local2global(localDstId)
+      //设置src和dst顶点的属性
       if (includeSrc) {
         triplet.srcAttr = vertexAttrs(localSrcId)
       }
       if (includeDst) {
         triplet.dstAttr = vertexAttrs(localDstId)
       }
-      triplet.attr = data(pos)
+      triplet.attr = data(pos) //获取边属性
       pos += 1
       triplet
     }
@@ -381,7 +424,7 @@ class EdgePartition[
    * @return iterator aggregated messages keyed by the receiving vertex id
    */
   def aggregateMessagesEdgeScan[A: ClassTag](
-      sendMsg: EdgeContext[VD, ED, A] => Unit,
+      sendMsg: EdgeContext[VD, ED, A] => Unit,//泛型表示顶点元素类型、边元素类型、发送信息的类型
       mergeMsg: (A, A) => A,
       tripletFields: TripletFields,
       activeness: EdgeActiveness): Iterator[(VertexId, A)] = {
@@ -390,7 +433,8 @@ class EdgePartition[
 
     var ctx = new AggregatingEdgeContext[VD, ED, A](mergeMsg, aggregates, bitset)
     var i = 0
-    while (i < size) {
+    while (i < size) {//循环每一个边
+      //获取该边的顶点的本地序号以及真实的顶点ID
       val localSrcId = localSrcIds(i)
       val srcId = local2global(localSrcId)
       val localDstId = localDstIds(i)
@@ -400,7 +444,7 @@ class EdgePartition[
         else if (activeness == EdgeActiveness.SrcOnly) isActive(srcId)
         else if (activeness == EdgeActiveness.DstOnly) isActive(dstId)
         else if (activeness == EdgeActiveness.Both) isActive(srcId) && isActive(dstId)
-        else if (activeness == EdgeActiveness.Either) isActive(srcId) || isActive(dstId)
+        else if (activeness == EdgeActiveness.Either) isActive(srcId) || isActive(dstId) //有一个活跃即可
         else throw new Exception("unreachable")
       if (edgeIsActive) {
         val srcAttr = if (tripletFields.useSrc) vertexAttrs(localSrcId) else null.asInstanceOf[VD]
