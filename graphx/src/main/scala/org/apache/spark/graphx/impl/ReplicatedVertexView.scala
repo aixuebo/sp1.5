@@ -30,11 +30,12 @@ import org.apache.spark.graphx._
  * triplet view with vertex attributes on only one side, and they may be updated. An active vertex
  * set may additionally be shipped to the edge partitions. Be careful not to store a reference to
  * `edges`, since it may be modified when the attribute shipping level is upgraded.
+ * 对边RDD进行包租航
  */
 private[impl]
 class ReplicatedVertexView[VD: ClassTag, ED: ClassTag](
     var edges: EdgeRDDImpl[ED, VD],
-    var hasSrcId: Boolean = false,
+    var hasSrcId: Boolean = false,//true表示边RDD的src顶点元素已经被装载过了
     var hasDstId: Boolean = false) {
 
   /**
@@ -59,20 +60,22 @@ class ReplicatedVertexView[VD: ClassTag, ED: ClassTag](
    * Upgrade the shipping level in-place to the specified levels by shipping vertex attributes from
    * `vertices`. This operation modifies the `ReplicatedVertexView`, and callers can access `edges`
    * afterwards to obtain the upgraded view.
+   * 要求对边RDD中的边顶点装载一些顶点属性
+   * VertexRDD包含了所有的顶点属性集合,那么边装载的是src还是dst呢?取决于后面两个参数
    */
   def upgrade(vertices: VertexRDD[VD], includeSrc: Boolean, includeDst: Boolean) {
-    val shipSrc = includeSrc && !hasSrcId
+    val shipSrc = includeSrc && !hasSrcId //includeSrc 说明要装载src,hasSrcId=false,说明src没有装载过,则需要装载
     val shipDst = includeDst && !hasDstId
-    if (shipSrc || shipDst) {
+    if (shipSrc || shipDst) {//说明有任意一个没有被装载过,都要去装载
       val shippedVerts: RDD[(Int, VertexAttributeBlock[VD])] =
-        vertices.shipVertexAttributes(shipSrc, shipDst)
+        vertices.shipVertexAttributes(shipSrc, shipDst) //先将顶点RDD按照边进行分组,即同一个顶点可能分布在不同的边里面,因此返回RDD[(PartitionID, VertexAttributeBlock[VD])]
           .setName("ReplicatedVertexView.upgrade(%s, %s) - shippedVerts %s %s (broadcast)".format(
             includeSrc, includeDst, shipSrc, shipDst))
-          .partitionBy(edges.partitioner.get)
-      val newEdges = edges.withPartitionsRDD(edges.partitionsRDD.zipPartitions(shippedVerts) {
-        (ePartIter, shippedVertsIter) => ePartIter.map {
+          .partitionBy(edges.partitioner.get) //按照边的partition进行shuffle,保证每一个边需要的顶点都在边的分区中存在
+      val newEdges = edges.withPartitionsRDD(edges.partitionsRDD.zipPartitions(shippedVerts) {//这样就可以装载顶点数据了
+        (ePartIter, shippedVertsIter) => ePartIter.map { //参数ePartIter表示边的rdd分区,shippedVertsIter表示顶点的rdd分区
           case (pid, edgePartition) =>
-            (pid, edgePartition.updateVertices(shippedVertsIter.flatMap(_._2.iterator)))
+            (pid, edgePartition.updateVertices(shippedVertsIter.flatMap(_._2.iterator))) //shippedVertsIters是RDD[(PartitionID, VertexAttributeBlock[VD])]结构
         }
       })
       edges = newEdges

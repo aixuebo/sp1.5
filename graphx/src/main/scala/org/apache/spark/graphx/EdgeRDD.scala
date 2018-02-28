@@ -41,16 +41,17 @@ abstract class EdgeRDD[ED](
     @transient sc: SparkContext,
     @transient deps: Seq[Dependency[_]]) extends RDD[Edge[ED]](sc, deps) {
 
-  // scalastyle:off structural.type
-  private[graphx] def partitionsRDD: RDD[(PartitionID, EdgePartition[ED, VD])] forSome { type VD }
+  // scalastyle:off structural.type EdgeRDDImpl实现类会传递partitionsRDD
+  private[graphx] def partitionsRDD: RDD[(PartitionID, EdgePartition[ED, VD])] forSome { type VD } //定义一个RDD类型,其实边的RDD就是内部持有的是 RDD[(PartitionID, EdgePartition[ED, VD])]对象
   // scalastyle:on structural.type
 
   override protected def getPartitions: Array[Partition] = partitionsRDD.partitions
 
+  //计算一个分区,产生迭代的内容都是边对象
   override def compute(part: Partition, context: TaskContext): Iterator[Edge[ED]] = {
     val p = firstParent[(PartitionID, EdgePartition[ED, _])].iterator(part, context)
     if (p.hasNext) {
-      p.next()._2.iterator.map(_.copy())
+      p.next()._2.iterator.map(_.copy()) //获取(PartitionID, EdgePartition[ED, _])的第二个属性,即EdgePartition,然后调用EdgePartition的map的方法
     } else {
       Iterator.empty
     }
@@ -101,6 +102,8 @@ object EdgeRDD {
    *
    * @tparam ED the edge attribute type
    * @tparam VD the type of the vertex attributes that may be joined with the returned EdgeRDD
+   * Edge 只是代表一个边对象。RDD[Edge]只是代表一组边对象
+   * 因此参数表示给我一组边对象,我也可以生成边的RDD实例
    */
   def fromEdges[ED: ClassTag, VD: ClassTag](edges: RDD[Edge[ED]]): EdgeRDDImpl[ED, VD] = {
     val edgePartitions = edges.mapPartitionsWithIndex { (pid, iter) =>
@@ -120,7 +123,8 @@ object EdgeRDD {
    * @tparam VD the type of the vertex attributes that may be joined with the returned EdgeRDD
    */
   private[graphx] def fromEdgePartitions[ED: ClassTag, VD: ClassTag](
-      edgePartitions: RDD[(Int, EdgePartition[ED, VD])]): EdgeRDDImpl[ED, VD] = {
+      edgePartitions: RDD[(Int, EdgePartition[ED, VD])]) //参数是每一个partitionId 以及 对应的分区内的边的集合
+     : EdgeRDDImpl[ED, VD] = {
     new EdgeRDDImpl(edgePartitions)
   }
 }

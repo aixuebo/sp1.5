@@ -48,7 +48,7 @@ class EdgeRDDImpl[ED: ClassTag, VD: ClassTag] private[graphx] (
   override val partitioner =
     partitionsRDD.partitioner.orElse(Some(new HashPartitioner(partitions.size)))
 
-  override def collect(): Array[Edge[ED]] = this.map(_.copy()).collect()
+  override def collect(): Array[Edge[ED]] = this.map(_.copy()).collect() //因为this现在是EdgeRDD和EdgeRDDImpl,因此map方法就是EdgeRDD的map方法,即RDD[Edge[ED]]
 
   /**
    * Persists the edge partitions at the specified storage level, ignoring any existing target
@@ -91,17 +91,21 @@ class EdgeRDDImpl[ED: ClassTag, VD: ClassTag] private[graphx] (
     partitionsRDD.map(_._2.size.toLong).reduce(_ + _) //EdgePartition.size.toLong
   }
 
+  //对边进行map方法,更改边的属性
   override def mapValues[ED2: ClassTag](f: Edge[ED] => ED2): EdgeRDDImpl[ED2, VD] =
     mapEdgePartitions((pid, part) => part.map(f))
 
+  //对边进行反转
   override def reverse: EdgeRDDImpl[ED, VD] = mapEdgePartitions((pid, part) => part.reverse)
 
+  //对边进行过滤
   def filter(
       epred: EdgeTriplet[VD, ED] => Boolean,
       vpred: (VertexId, VD) => Boolean): EdgeRDDImpl[ED, VD] = {
     mapEdgePartitions((pid, part) => part.filter(epred, vpred))
   }
 
+  //与另外一个边的RDD进行join
   override def innerJoin[ED2: ClassTag, ED3: ClassTag]
       (other: EdgeRDD[ED2])
       (f: (VertexId, VertexId, ED, ED2) => ED3): EdgeRDDImpl[ED3, VD] = {

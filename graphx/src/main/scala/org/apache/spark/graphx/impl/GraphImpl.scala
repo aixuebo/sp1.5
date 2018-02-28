@@ -36,8 +36,8 @@ import org.apache.spark.graphx.util.BytecodeUtils
  * `replicatedVertexView`, which contains edges and the vertex attributes mentioned by each edge.
  */
 class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
-    @transient val vertices: VertexRDD[VD],
-    @transient val replicatedVertexView: ReplicatedVertexView[VD, ED])
+    @transient val vertices: VertexRDD[VD],//顶点RDD
+    @transient val replicatedVertexView: ReplicatedVertexView[VD, ED]) //边RDD
   extends Graph[VD, ED] with Serializable {
 
   /** Default constructor is provided to support serialization */
@@ -316,7 +316,9 @@ object GraphImpl {
     fromEdgeRDD(EdgeRDD.fromEdges(edges), defaultVertexAttr, edgeStorageLevel, vertexStorageLevel)
   }
 
-  /** Create a graph from EdgePartitions, setting referenced vertices to `defaultVertexAttr`. */
+  /** Create a graph from EdgePartitions, setting referenced vertices to `defaultVertexAttr`.
+    * 从EdgePartition中创建图
+    **/
   def fromEdgePartitions[VD: ClassTag, ED: ClassTag](
       edgePartitions: RDD[(PartitionID, EdgePartition[ED, VD])],
       defaultVertexAttr: VD,
@@ -373,6 +375,7 @@ object GraphImpl {
   /**
    * Create a graph from an EdgeRDD with the correct vertex type, setting missing vertices to
    * `defaultVertexAttr`. The vertices will have the same number of partitions as the EdgeRDD.
+   * 从边的RDD中创建图对象
    */
   private def fromEdgeRDD[VD: ClassTag, ED: ClassTag](
       edges: EdgeRDDImpl[ED, VD],

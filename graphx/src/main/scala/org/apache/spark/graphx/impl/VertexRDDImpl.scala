@@ -27,7 +27,7 @@ import org.apache.spark.storage.StorageLevel
 import org.apache.spark.graphx._
 
 class VertexRDDImpl[VD] private[graphx] (
-    @transient val partitionsRDD: RDD[ShippableVertexPartition[VD]],
+    @transient val partitionsRDD: RDD[ShippableVertexPartition[VD]],//表示顶点的分区分布
     val targetStorageLevel: StorageLevel = StorageLevel.MEMORY_ONLY)
   (implicit override protected val vdTag: ClassTag[VD])
   extends VertexRDD[VD](partitionsRDD.context, List(new OneToOneDependency(partitionsRDD))) {

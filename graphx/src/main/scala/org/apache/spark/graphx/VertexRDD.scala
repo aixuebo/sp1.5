@@ -321,7 +321,7 @@ object VertexRDD {
       case None => vertices.partitionBy(new HashPartitioner(vertices.partitions.size))
     }
     val routingTables = createRoutingTables(edges, vPartitioned.partitioner.get)
-    val vertexPartitions = vPartitioned.zipPartitions(routingTables, preservesPartitioning = true) {
+    val vertexPartitions = vPartitioned.zipPartitions(routingTables, preservesPartitioning = true) {//因为这两个rdd都是以VertexId进行分区的,因此zip是没问题的
       (vertexIter, routingTableIter) =>
         val routingTable =
           if (routingTableIter.hasNext) routingTableIter.next() else RoutingTablePartition.empty
@@ -340,11 +340,12 @@ object VertexRDD {
    * @param edges the [[EdgeRDD]] referring to the vertices to create
    * @param numPartitions the desired number of partitions for the resulting `VertexRDD`
    * @param defaultVal the vertex attribute to use when creating missing vertices
+   * 通过边的RDD创建顶点RDD
    */
   def fromEdges[VD: ClassTag](
       edges: EdgeRDD[_], numPartitions: Int, defaultVal: VD): VertexRDD[VD] = {
     val routingTables = createRoutingTables(edges, new HashPartitioner(numPartitions))
-    val vertexPartitions = routingTables.mapPartitions({ routingTableIter =>
+    val vertexPartitions = routingTables.mapPartitions({ routingTableIter => //循环每一个顶点分区
       val routingTable =
         if (routingTableIter.hasNext) routingTableIter.next() else RoutingTablePartition.empty
       Iterator(ShippableVertexPartition(Iterator.empty, routingTable, defaultVal))
@@ -352,16 +353,37 @@ object VertexRDD {
     new VertexRDDImpl(vertexPartitions)
   }
 
+  //产生新的RDD,该RDD能够保证每一个顶点只在一个分区内出现
   private[graphx] def createRoutingTables(
       edges: EdgeRDD[_], vertexPartitioner: Partitioner): RDD[RoutingTablePartition] = {
     // Determine which vertices each edge partition needs by creating a mapping from vid to pid.
+    //edges.partitionsRDD表示拿到的是边RDD依赖的RDD的某一个分区,分区的内容数据是(PartitionID, EdgePartition[ED, VD])形式的数据
+    //然后对整个分区数据集合调用flatMap方法,处理函数是RoutingTablePartition.edgePartitionToMsgs,即产生一个新的集合,即RDD<RoutingTableMessage>,表示每一个顶点,在某个分区,该分区的意义作为src或者dst存在
     val vid2pid = edges.partitionsRDD.mapPartitions(_.flatMap(
-      Function.tupled(RoutingTablePartition.edgePartitionToMsgs)))
+      Function.tupled(RoutingTablePartition.edgePartitionToMsgs))) //循环每一个边分区,获得该分区内所有的顶点RDD,即RDD[RoutingTableMessage],转化后是RDD[(VertexId, Int)],再转化后是RDD[(Int, Int)]
       .setName("VertexRDD.createRoutingTables - vid2pid (aggregation)")
+    //注意:此时RDD的结果一定是一个分区内的顶点都是相同的分区id
 
-    val numEdgePartitions = edges.partitions.size
-    vid2pid.partitionBy(vertexPartitioner).mapPartitions(
+    val numEdgePartitions = edges.partitions.size //边的分区数
+    //vid2pid.partitionBy(vertexPartitioner)将分区内的数据进行shuffle,因为vid2pid的结构是RDD[(VertexId, Int)],再转化后是RDD[(Int, Int)],因此相当于按照顶点进行了shuffle,保证某一个顶点在一个固定的分区中
+    vid2pid.partitionBy(vertexPartitioner).mapPartitions(//循环每一个分区,即该分区内包含唯一的顶点ID
       iter => Iterator(RoutingTablePartition.fromMsgs(numEdgePartitions, iter)),
       preservesPartitioning = true)
+
+      /**
+       * 简单总结一下:比如1分区有顶点a b c ,2分区有顶点a c e.
+       * 那么经过vid2pid就会知道<a,1,有src存在>  <b,1,有src存在> <c,1,有src存在> <a,2,有src存在> <c,2,有src存在> <e,2,有src存在>
+       * 然后在按照顶点分区,就可以得到结论:
+       * 1.第一个分区内有a和b两个顶点
+       * <a,1,有src存在>
+       * <b,1,有src存在>
+       * <a,2,有src存在>
+       * 2.第二个分区内有c和e两个顶点
+       * <c,1,有src存在>
+       * <c,2,有src存在>
+       * <e,2,有src存在>
+       */
+
+
   }
 }

@@ -89,9 +89,10 @@ object GraphLoader extends Logging {
           }
         }
       }
-      Iterator((pid, builder.toEdgePartition))
+      Iterator((pid, builder.toEdgePartition)) //因为返回结果一定是迭代器,因此相当于new一个迭代器,里面之后一个元素
     }.persist(edgeStorageLevel).setName("GraphLoader.edgeListFile - edges (%s)".format(path))
     edges.count()
+    //注意:此时的数据还尚未按照边重新划分,而是根据输入顶点数据进行的分区
 
     logInfo("It took %d ms to load the edges".format(System.currentTimeMillis - startTime))
 

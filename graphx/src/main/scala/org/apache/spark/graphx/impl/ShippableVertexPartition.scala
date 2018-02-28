@@ -35,6 +35,8 @@ class VertexAttributeBlock[VD: ClassTag](val vids: Array[VertexId], val attrs: A
     (0 until vids.size).iterator.map { i => (vids(i), attrs(i)) }
 }
 
+//表示顶点RDD的某一个分区
+//可以将该RDD分区内的所有顶点按照边需要的顶点进行分组
 private[graphx]
 object ShippableVertexPartition {
   /** Construct a `ShippableVertexPartition` from the given vertices without any routing table. */
@@ -67,7 +69,7 @@ object ShippableVertexPartition {
     iter.foreach { pair =>
       map.setMerge(pair._1, pair._2, mergeFunc)
     }
-    // Fill in missing vertices mentioned in the routing table
+    // Fill in missing vertices mentioned in the routing table 追加iter中缺失的顶点,但是在routingTable路由表中存在的顶点
     routingTable.iterator.foreach { vid =>
       map.changeValue(vid, defaultVal, identity)
     }
@@ -120,10 +122,11 @@ class ShippableVertexPartition[VD: ClassTag](
    * Generate a `VertexAttributeBlock` for each edge partition keyed on the edge partition ID. The
    * `VertexAttributeBlock` contains the vertex attributes from the current partition that are
    * referenced in the specified positions in the edge partition.
-   * 获取该分区内所有的顶点集合,以及属性集合
+   * 获取每一个边分区,有哪些顶点ID以及属性集合
    */
   def shipVertexAttributes(
       shipSrc: Boolean, shipDst: Boolean): Iterator[(PartitionID, VertexAttributeBlock[VD])] = { //每一个分区对应一组顶点集合
+    //先产生边分区个size的迭代器,然后循环每一个迭代器,将自己分区的顶点放在对应的边分区中
     Iterator.tabulate(routingTable.numEdgePartitions) { pid => //循环每一个分区
       val initialSize = if (shipSrc && shipDst) routingTable.partitionSize(pid) else 64 //初始化该分区有多少个顶点
       val vids = new PrimitiveVector[VertexId](initialSize)
@@ -145,9 +148,10 @@ class ShippableVertexPartition[VD: ClassTag](
    * Generate a `VertexId` array for each edge partition keyed on the edge partition ID. The array
    * contains the visible vertex ids from the current partition that are referenced in the edge
    * partition.
-   * 获取该分区内所有的顶点集合
+   * 获取每一个边分区,有哪些顶点ID
    */
   def shipVertexIds(): Iterator[(PartitionID, Array[VertexId])] = {
+    //先产生边分区个size的迭代器,然后循环每一个迭代器,将自己分区的顶点放在对应的边分区中
     Iterator.tabulate(routingTable.numEdgePartitions) { pid => //循环每一个分区
       val vids = new PrimitiveVector[VertexId](routingTable.partitionSize(pid)) //分区内所有顶点集合
       var i = 0
