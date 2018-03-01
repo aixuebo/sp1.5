@@ -88,6 +88,7 @@ class EdgePartition[
 
   /** Return a new `EdgePartition` with updates to vertex attributes specified in `iter`.
     * 更新顶点的属性
+    * 对参数的顶点进行更新,不再参数中的顶点的属性值保持原样
     **/
   def updateVertices(iter: Iterator[(VertexId, VD)]): EdgePartition[ED, VD] = {
     val newVertexAttrs = new Array[VD](vertexAttrs.length)
@@ -262,6 +263,8 @@ class EdgePartition[
    * 因为边的集合已经排序好了,因此group by的过程是很容易的,就是一行一行查找即可
    *
    * 对两个相同的顶点连接的平行边进行处理
+   *
+   * 对边集合操作,将顶点相同的平行边进行合并操作。产生新的边属性,即可能是更改边的权重值
    */
   def groupEdges(merge: (ED, ED) => ED) //参数函数表示对两个平行边merge出一个新的边
     : EdgePartition[ED, VD] = {
@@ -350,7 +353,7 @@ class EdgePartition[
   val size: Int = localSrcIds.size
 
   /** The number of unique source vertices in the partition.
-    * 该分区内有多少条不同的src顶点
+    * 该分区内有多少条不同的src顶点--即有多少条边存在
     **/
   def indexSize: Int = index.size
 
@@ -422,12 +425,14 @@ class EdgePartition[
    * @param activeness criteria for filtering edges based on activeness
    *
    * @return iterator aggregated messages keyed by the receiving vertex id
+   * 对一个分区内的数据进行聚合
    */
   def aggregateMessagesEdgeScan[A: ClassTag](
       sendMsg: EdgeContext[VD, ED, A] => Unit,//泛型表示顶点元素类型、边元素类型、发送信息的类型
-      mergeMsg: (A, A) => A,
-      tripletFields: TripletFields,
-      activeness: EdgeActiveness): Iterator[(VertexId, A)] = {
+      mergeMsg: (A, A) => A,//聚合函数
+      tripletFields: TripletFields,//是否要获取顶点元素
+      activeness: EdgeActiveness) //数据发送方向--边满足什么情况下需要被发送统计值
+      : Iterator[(VertexId, A)] = {//每一轮返回一个统计值
     val aggregates = new Array[A](vertexAttrs.length)
     val bitset = new BitSet(vertexAttrs.length)
 
@@ -447,15 +452,17 @@ class EdgePartition[
         else if (activeness == EdgeActiveness.Either) isActive(srcId) || isActive(dstId) //有一个活跃即可
         else throw new Exception("unreachable")
       if (edgeIsActive) {
+        //获取顶点的属性值
         val srcAttr = if (tripletFields.useSrc) vertexAttrs(localSrcId) else null.asInstanceOf[VD]
         val dstAttr = if (tripletFields.useDst) vertexAttrs(localDstId) else null.asInstanceOf[VD]
+        //设置边的上下文信息
         ctx.set(srcId, dstId, localSrcId, localDstId, srcAttr, dstAttr, data(i))
-        sendMsg(ctx)
+        sendMsg(ctx) //本地节点进行汇总
       }
       i += 1
     }
 
-    bitset.iterator.map { localId => (local2global(localId), aggregates(localId)) }
+    bitset.iterator.map { localId => (local2global(localId), aggregates(localId)) } //返回每一个顶点以及对应的统计值
   }
 
   /**
@@ -478,13 +485,13 @@ class EdgePartition[
     val bitset = new BitSet(vertexAttrs.length)
 
     var ctx = new AggregatingEdgeContext[VD, ED, A](mergeMsg, aggregates, bitset)
-    index.iterator.foreach { cluster =>
-      val clusterSrcId = cluster._1
-      val clusterPos = cluster._2
-      val clusterLocalSrcId = localSrcIds(clusterPos)
+    index.iterator.foreach { cluster => //循环每一个src开始的边
+      val clusterSrcId = cluster._1 //src顶点
+      val clusterPos = cluster._2 //第几个位置开始切换的
+      val clusterLocalSrcId = localSrcIds(clusterPos) //该位置对应的本地序号,即src顶点对应的本地序号
 
       val scanCluster =
-        if (activeness == EdgeActiveness.Neither) true
+        if (activeness == EdgeActiveness.Neither) true //不需要考虑活跃情况
         else if (activeness == EdgeActiveness.SrcOnly) isActive(clusterSrcId)
         else if (activeness == EdgeActiveness.DstOnly) true
         else if (activeness == EdgeActiveness.Both) isActive(clusterSrcId)
@@ -496,9 +503,9 @@ class EdgePartition[
         val srcAttr =
           if (tripletFields.useSrc) vertexAttrs(clusterLocalSrcId) else null.asInstanceOf[VD]
         ctx.setSrcOnly(clusterSrcId, clusterLocalSrcId, srcAttr)
-        while (pos < size && localSrcIds(pos) == clusterLocalSrcId) {
-          val localDstId = localDstIds(pos)
-          val dstId = local2global(localDstId)
+        while (pos < size && localSrcIds(pos) == clusterLocalSrcId) {//说明这些边都是以src开始的
+          val localDstId = localDstIds(pos) //dst顶点的本地序号
+          val dstId = local2global(localDstId) //真实的dst顶点
           val edgeIsActive =
             if (activeness == EdgeActiveness.Neither) true
             else if (activeness == EdgeActiveness.SrcOnly) true
@@ -522,9 +529,9 @@ class EdgePartition[
 }
 
 private class AggregatingEdgeContext[VD, ED, A](
-    mergeMsg: (A, A) => A,
-    aggregates: Array[A],
-    bitset: BitSet)
+    mergeMsg: (A, A) => A,//merge两个结果,产生一个新的结果
+    aggregates: Array[A],//存储结果---每一个本地顶点序号对应一个数组,即通过本地序号就能找到该顶点对应的结果
+    bitset: BitSet) //true的位表示有聚合值
   extends EdgeContext[VD, ED, A] {
 
   private[this] var _srcId: VertexId = _
@@ -556,10 +563,10 @@ private class AggregatingEdgeContext[VD, ED, A](
   }
 
   def setRest(dstId: VertexId, localDstId: Int, dstAttr: VD, attr: ED) {
-    _dstId = dstId
-    _localDstId = localDstId
-    _dstAttr = dstAttr
-    _attr = attr
+    _dstId = dstId //目的地的顶点
+    _localDstId = localDstId //目的地的本地序号
+    _dstAttr = dstAttr //目的地顶点属性
+    _attr = attr //边属性
   }
 
   override def srcId: VertexId = _srcId
@@ -568,6 +575,7 @@ private class AggregatingEdgeContext[VD, ED, A](
   override def dstAttr: VD = _dstAttr
   override def attr: ED = _attr
 
+  //向src节点发送一个值
   override def sendToSrc(msg: A) {
     send(_localSrcId, msg)
   }
@@ -575,6 +583,7 @@ private class AggregatingEdgeContext[VD, ED, A](
     send(_localDstId, msg)
   }
 
+  //说明某个节点产生了一个值
   @inline private def send(localId: Int, msg: A) {
     if (bitset.get(localId)) {
       aggregates(localId) = mergeMsg(aggregates(localId), msg)

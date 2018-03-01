@@ -30,7 +30,7 @@ import org.apache.spark.graphx._
  * triplet view with vertex attributes on only one side, and they may be updated. An active vertex
  * set may additionally be shipped to the edge partitions. Be careful not to store a reference to
  * `edges`, since it may be modified when the attribute shipping level is upgraded.
- * 对边RDD进行包租航
+ * 对边RDD进行包装
  */
 private[impl]
 class ReplicatedVertexView[VD: ClassTag, ED: ClassTag](
@@ -92,10 +92,10 @@ class ReplicatedVertexView[VD: ClassTag, ED: ClassTag](
   def withActiveSet(actives: VertexRDD[_]): ReplicatedVertexView[VD, ED] = {
     val shippedActives = actives.shipVertexIds()
       .setName("ReplicatedVertexView.withActiveSet - shippedActives (broadcast)")
-      .partitionBy(edges.partitioner.get)
+      .partitionBy(edges.partitioner.get) //对顶点进行重新划分分区,让边集合与顶点集合能在一个partition中
 
     val newEdges = edges.withPartitionsRDD(edges.partitionsRDD.zipPartitions(shippedActives) {
-      (ePartIter, shippedActivesIter) => ePartIter.map {
+      (ePartIter, shippedActivesIter) => ePartIter.map {//为边设置活跃的顶点集合
         case (pid, edgePartition) =>
           (pid, edgePartition.withActiveSet(shippedActivesIter.flatMap(_._2.iterator)))
       }
@@ -107,6 +107,7 @@ class ReplicatedVertexView[VD: ClassTag, ED: ClassTag](
    * Return a new `ReplicatedVertexView` where vertex attributes in edge partition are updated using
    * `updates`. This ships a vertex attribute only to the edge partitions where it is in the
    * position(s) specified by the attribute shipping level.
+   * 对参数的顶点进行更新,不再参数中的顶点的属性值保持原样
    */
   def updateVertices(updates: VertexRDD[VD]): ReplicatedVertexView[VD, ED] = {
     val shippedVerts = updates.shipVertexAttributes(hasSrcId, hasDstId)

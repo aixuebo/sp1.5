@@ -32,18 +32,20 @@ import org.apache.spark.graphx.lib._
  *
  * @tparam VD the vertex attribute type
  * @tparam ED the edge attribute type
+ * 对图进行一些额外的操作,因此该对象持有一个图对象即可
  */
 class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Serializable {
 
-  /** The number of edges in the graph. */
+  /** The number of edges in the graph.计算边的数量 */
   @transient lazy val numEdges: Long = graph.edges.count()
 
-  /** The number of vertices in the graph. */
+  /** The number of vertices in the graph.计算顶点的数量 */
   @transient lazy val numVertices: Long = graph.vertices.count()
 
   /**
    * The in-degree of each vertex in the graph.
    * @note Vertices with no in-edges are not returned in the resulting RDD.
+   * 计算每一个顶点的入度
    */
   @transient lazy val inDegrees: VertexRDD[Int] =
     degreesRDD(EdgeDirection.In).setName("GraphOps.inDegrees")
@@ -51,6 +53,7 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
   /**
    * The out-degree of each vertex in the graph.
    * @note Vertices with no out-edges are not returned in the resulting RDD.
+   * 计算每一个顶点的出度
    */
   @transient lazy val outDegrees: VertexRDD[Int] =
     degreesRDD(EdgeDirection.Out).setName("GraphOps.outDegrees")
@@ -58,6 +61,7 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
   /**
    * The degree of each vertex in the graph.
    * @note Vertices with no edges are not returned in the resulting RDD.
+   * 计算每一个顶点的度
    */
   @transient lazy val degrees: VertexRDD[Int] =
     degreesRDD(EdgeDirection.Either).setName("GraphOps.degrees")
@@ -66,13 +70,18 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
    * Computes the neighboring vertex degrees.
    *
    * @param edgeDirection the direction along which to collect neighboring vertex attributes
+   * 计算每一个顶点的度
+   *
+   * 注意:TripletFields.None说明不需要加载边需要的顶点属性值
    */
   private def degreesRDD(edgeDirection: EdgeDirection): VertexRDD[Int] = {
     if (edgeDirection == EdgeDirection.In) {
-      graph.aggregateMessages(_.sendToDst(1), _ + _, TripletFields.None)
+      //因为计算入度,因此在目的地方向的顶点要+1
+      graph.aggregateMessages(_.sendToDst(1), _ + _, TripletFields.None) //聚合函数表示度的数量,因此是int,每次累加加1即可
     } else if (edgeDirection == EdgeDirection.Out) {
       graph.aggregateMessages(_.sendToSrc(1), _ + _, TripletFields.None)
     } else { // EdgeDirection.Either
+      //要不考虑入度还是出度,因此src和dst方向的顶点都要+1
       graph.aggregateMessages(ctx => { ctx.sendToSrc(1); ctx.sendToDst(1) }, _ + _,
         TripletFields.None)
     }

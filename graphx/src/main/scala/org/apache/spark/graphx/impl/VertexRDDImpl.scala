@@ -209,11 +209,14 @@ class VertexRDDImpl[VD] private[graphx] (
     }
   }
 
+  //聚合rdd的内容
   override def aggregateUsingIndex[VD2: ClassTag](
-      messages: RDD[(VertexId, VD2)], reduceFunc: (VD2, VD2) => VD2): VertexRDD[VD2] = {
-    val shuffled = messages.partitionBy(this.partitioner.get)
-    val parts = partitionsRDD.zipPartitions(shuffled, true) { (thisIter, msgIter) =>
-      thisIter.map(_.aggregateUsingIndex(msgIter, reduceFunc))
+      messages: RDD[(VertexId, VD2)],//要参与聚合的rdd数据
+      reduceFunc: (VD2, VD2) => VD2) //reduce上的merge操作
+    : VertexRDD[VD2] = {
+    val shuffled = messages.partitionBy(this.partitioner.get)//顶点rdd进行shuffle,目的是让参数rdd中的顶点分区部署 与 this中顶点部署相同
+    val parts = partitionsRDD.zipPartitions(shuffled, true) { (thisIter, msgIter) => //获取this和参数rdd中同一个分区的两个迭代器
+      thisIter.map(_.aggregateUsingIndex(msgIter, reduceFunc)) //让每一个顶点的属性值重新赋值,即map函数的结果就是重新赋值的结果---我们会发现该最终的结果只是msgIter的属性参与集合后的值
     }
     this.withPartitionsRDD[VD2](parts)
   }

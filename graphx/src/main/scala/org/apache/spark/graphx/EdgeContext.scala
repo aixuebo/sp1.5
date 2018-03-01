@@ -33,7 +33,9 @@ abstract class EdgeContext[VD, ED, A] {
   /** The attribute associated with the edge. 边的属性*/
   def attr: ED
 
-  /** Sends a message to the source vertex. */
+  /** Sends a message to the source vertex.
+    * 表示要向边的src顶点发送一个统计值
+    **/
   def sendToSrc(msg: A): Unit
   /** Sends a message to the destination vertex. */
   def sendToDst(msg: A): Unit

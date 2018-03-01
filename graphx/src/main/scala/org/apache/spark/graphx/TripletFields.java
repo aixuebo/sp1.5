@@ -22,6 +22,7 @@ import java.io.Serializable;
 /**
  * Represents a subset of the fields of an [[EdgeTriplet]] or [[EdgeContext]]. This allows the
  * system to populate only those fields for efficiency.
+ * 用来表达是否要加载顶点和边的属性值信息,毕竟加载顶点的属性值是需要shuffle的
  */
 public class TripletFields implements Serializable {
 
@@ -47,6 +48,7 @@ public class TripletFields implements Serializable {
 
   /**
    * None of the triplet fields are exposed.
+   * 说明不需要加载边和顶点属性值
    */
   public static final TripletFields None = new TripletFields(false, false, false);
 

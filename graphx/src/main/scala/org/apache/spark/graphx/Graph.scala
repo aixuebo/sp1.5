@@ -45,6 +45,7 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
    *
    * @note vertex ids are unique.
    * @return an RDD containing the vertices in this graph
+   * 图中包含的顶点RDD
    */
   @transient val vertices: VertexRDD[VD]
 
@@ -57,7 +58,7 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
    * @see [[Edge]] for the edge type.
    * @see [[Graph#triplets]] to get an RDD which contains all the edges
    * along with their vertex data.
-   *
+   * 图中包含的边RDD
    */
   @transient val edges: EdgeRDD[ED]
 
@@ -76,6 +77,7 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
    * val graph: Graph[Color, Int] = GraphLoader.edgeListFile("hdfs://file.tsv")
    * val numInvalid = graph.triplets.map(e => if (e.src.data == e.dst.data) 1 else 0).sum
    * }}}
+   * 将图的顶点和边进行join的过程,主要让边中的顶点有属性信息
    */
   @transient val triplets: RDD[EdgeTriplet[VD, ED]]
 
@@ -135,6 +137,7 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
    *
    * @param partitionStrategy the partitioning strategy to use when partitioning the edges
    * in the graph.
+   * 对图进行重新的分区划分
    */
   def partitionBy(partitionStrategy: PartitionStrategy): Graph[VD, ED]
 
@@ -144,6 +147,7 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
    * @param partitionStrategy the partitioning strategy to use when partitioning the edges
    * in the graph.
    * @param numPartitions the number of edge partitions in the new graph.
+   * 对图进行重新的分区划分
    */
   def partitionBy(partitionStrategy: PartitionStrategy, numPartitions: Int): Graph[VD, ED]
 
@@ -164,7 +168,7 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
    * val root = 42
    * var bfsGraph = rawGraph.mapVertices[Int]((vid, data) => if (vid == root) 0 else Math.MaxValue)
    * }}}
-   *
+   * 修改图中顶点的属性,即参数是每一个顶点的ID和顶点属性,转换成新的顶点属性的过程
    */
   def mapVertices[VD2: ClassTag](map: (VertexId, VD) => VD2)
     (implicit eq: VD =:= VD2 = null): Graph[VD2, ED]
@@ -184,7 +188,7 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
    *
    * @example This function might be used to initialize edge
    * attributes.
-   *
+   * 修改边的属性
    */
   def mapEdges[ED2: ClassTag](map: Edge[ED] => ED2): Graph[VD, ED2] = {
     mapEdges((pid, iter) => iter.map(map))
@@ -206,7 +210,7 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
    * the new values for each edge in the order of the input iterator
    *
    * @tparam ED2 the new edge data type
-   *
+   * 修改边的属性
    */
   def mapEdges[ED2: ClassTag](map: (PartitionID, Iterator[Edge[ED]]) => Iterator[ED2])
     : Graph[VD, ED2]
@@ -231,7 +235,7 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
    * val graph = rawGraph.mapTriplets[Int]( edge =>
    *   edge.src.data - edge.dst.data)
    * }}}
-   *
+   * 更改顶点属性、边属性,根据TripletFields条件去进行更改
    */
   def mapTriplets[ED2: ClassTag](map: EdgeTriplet[VD, ED] => ED2): Graph[VD, ED2] = {
     mapTriplets((pid, iter) => iter.map(map), TripletFields.All)
@@ -259,7 +263,7 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
    * val graph = rawGraph.mapTriplets[Int]( edge =>
    *   edge.src.data - edge.dst.data)
    * }}}
-   *
+   * 更改顶点属性、边属性,根据TripletFields条件去进行更改
    */
   def mapTriplets[ED2: ClassTag](
       map: EdgeTriplet[VD, ED] => ED2,
@@ -283,7 +287,7 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
    *   function. If not all fields are needed, specifying this can improve performance.
    *
    * @tparam ED2 the new edge data type
-   *
+   * 更改顶点属性、边属性,根据TripletFields条件去进行更改
    */
   def mapTriplets[ED2: ClassTag](
       map: (PartitionID, Iterator[EdgeTriplet[VD, ED]]) => Iterator[ED2],
@@ -292,6 +296,7 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
   /**
    * Reverses all edges in the graph.  If this graph contains an edge from a to b then the returned
    * graph contains an edge from b to a.
+   * 对图的反转
    */
   def reverse: Graph[VD, ED]
 
@@ -314,6 +319,7 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
    *
    * @return the subgraph containing only the vertices and edges that
    * satisfy the predicates
+   * 对图进行过滤,提取符合条件的图的边和顶点,产生新的图
    */
   def subgraph(
       epred: EdgeTriplet[VD, ED] => Boolean = (x => true),
@@ -326,6 +332,9 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
    * @param other the graph to project this graph onto
    * @return a graph with vertices and edges that exist in both the current graph and `other`,
    * with vertex and edge data from the current graph
+  与其他图进行join操作,产生新的图.
+ 即新图所有顶点和边都保留两者相同的数据.但是顶点和边的属性依然使用this图的
+ 相当于other图就是起到了一个过滤的条件
    */
   def mask[VD2: ClassTag, ED2: ClassTag](other: Graph[VD2, ED2]): Graph[VD, ED]
 
@@ -337,6 +346,7 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
    *              for duplicate edges.
    *
    * @return The resulting graph with a single edge for each (source, dest) vertex pair.
+   * 对边集合操作,将顶点相同的平行边进行合并操作。产生新的边属性,即可能是更改边的权重值
    */
   def groupEdges(merge: (ED, ED) => ED): Graph[VD, ED]
 
@@ -347,8 +357,9 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
    * the map phase destined to each vertex.
    *
    * This function is deprecated in 1.2.0 because of SPARK-3936. Use aggregateMessages instead.
+   * 该方法在1.2.0被过期,使用aggregateMessages方法代替该方法
    *
-   * @tparam A the type of "message" to be sent to each vertex
+   * @tparam A the type of "message" to be sent to each vertex 参数A表示要发送给每一个顶点之间的数据类型,比如元组
    *
    * @param mapFunc the user defined map function which returns 0 or
    * more messages to neighboring vertices
@@ -485,6 +496,7 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
    *   (vid, data, optDeg) => optDeg.getOrElse(0)
    * }
    * }}}
+   * 相当于left join的过程,两个顶点进行left join,对顶点的元素值进行merge操作
    */
   def outerJoinVertices[U: ClassTag, VD2: ClassTag](other: RDD[(VertexId, U)])
       (mapFunc: (VertexId, VD, Option[U]) => VD2)(implicit eq: VD =:= VD2 = null)
@@ -582,6 +594,7 @@ object Graph {
    * To improve modularity the Graph type only contains a small set of basic operations.
    * All the convenience operations are defined in the [[GraphOps]] class which may be
    * shared across multiple graph implementations.
+   * 隐式转换,将一个图对象转换成GraphOps对象,GraphOps对象可以对图提供一些操作
    */
   implicit def graphToGraphOps[VD: ClassTag, ED: ClassTag]
       (g: Graph[VD, ED]): GraphOps[VD, ED] = g.ops

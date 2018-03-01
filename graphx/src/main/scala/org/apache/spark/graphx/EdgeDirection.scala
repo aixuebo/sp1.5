@@ -57,12 +57,12 @@ object EdgeDirection {
   final val Out: EdgeDirection = new EdgeDirection("Out")//指代A--tail边
 
   /** Edges originating from *or* arriving at a vertex of interest.
-    * 表示入度+出度
+    * 表示入度+出度,即该顶点是边的入度也要处理,是边的出度也要处理
     **/
   final val Either: EdgeDirection = new EdgeDirection("Either")
 
   /** Edges originating from *and* arriving at a vertex of interest.
-    * 表示自己又是入度 又是出度
+    * 表示该节点是边的入度 又是出度
     **/
   final val Both: EdgeDirection = new EdgeDirection("Both")
 }

@@ -147,10 +147,11 @@ abstract class VertexRDD[VD](
   def diff(other: RDD[(VertexId, VD)]): VertexRDD[VD]
 
   /**
-   * For each vertex present in both `this` and `other`, `diff` returns only those vertices with
-   * differing values; for values that are different, keeps the values from `other`. This is
-   * only guaranteed to work if the VertexRDDs share a common ancestor.
-   *
+   * For each vertex present in both `this` and `other`,
+   * 对两个rdd都存在的顶点进行处理
+   *  `diff` returns only those vertices with differing values; for values that are different, keeps the values from `other`.
+   * diff只是返回不同属性值的顶点,如果值不同,则使用other中的属性值
+   * This is only guaranteed to work if the VertexRDDs share a common ancestor.
    * @param other the other VertexRDD with which to diff against.
    */
   def diff(other: VertexRDD[VD]): VertexRDD[VD]

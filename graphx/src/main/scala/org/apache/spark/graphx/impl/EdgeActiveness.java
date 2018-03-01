@@ -19,16 +19,17 @@ package org.apache.spark.graphx.impl;
 
 /**
  * Criteria for filtering edges based on activeness. For internal use only.
+ * 边的顶点活跃情况状态
  */
 public enum EdgeActiveness {
-  /** Neither the source vertex nor the destination vertex need be active.都不是活跃的 */
-  Neither,
-  /** The source vertex must be active.只有src是活跃的 */
-  SrcOnly,
+  /** Neither the source vertex nor the destination vertex need be active.*/
+  Neither,//表示都不需要和活跃有关系   比如计算出入度的时候,每一个节点计算一次就可以,不需要再迭代操作了
+  /** The source vertex must be active. */
+  SrcOnly,//只有src是活跃的
   /** The destination vertex must be active. */
-  DstOnly,
-  /** Both vertices must be active.src和dsc都是活跃的 */
-  Both,
-  /** At least one vertex must be active. src和dsc至少有一个是活跃的*/
-  Either
+  DstOnly,//只有dst是活跃的
+  /** Both vertices must be active. */
+  Both,//src和dsc必须都是活跃的
+  /** At least one vertex must be active. */
+  Either//src和dsc至少有一个是活跃的
 }
