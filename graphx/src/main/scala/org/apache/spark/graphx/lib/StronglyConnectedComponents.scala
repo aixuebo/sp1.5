@@ -21,7 +21,9 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.graphx._
 
-/** Strongly connected components algorithm implementation. */
+/** Strongly connected components algorithm implementation.
+  * 强连通图的实现
+  **/
 object StronglyConnectedComponents {
 
   /**

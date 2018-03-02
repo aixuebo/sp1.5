@@ -21,7 +21,9 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.graphx._
 
-/** Connected components algorithm. */
+/** Connected components algorithm.
+  * 求图中的连通图
+  **/
 object ConnectedComponents {
   /**
    * Compute the connected component membership of each vertex and return a graph with the vertex
@@ -36,20 +38,21 @@ object ConnectedComponents {
    *         connected component
    */
   def run[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]): Graph[VertexId, ED] = {
-    val ccGraph = graph.mapVertices { case (vid, _) => vid }
+    val ccGraph = graph.mapVertices { case (vid, _) => vid } //将原有图的顶点属性值变成顶点ID
     def sendMessage(edge: EdgeTriplet[VertexId, ED]): Iterator[(VertexId, VertexId)] = {
-      if (edge.srcAttr < edge.dstAttr) {
+      //返回值一定是 (大,小)这种顶点结构
+      if (edge.srcAttr < edge.dstAttr) {//src小
         Iterator((edge.dstId, edge.srcAttr))
-      } else if (edge.srcAttr > edge.dstAttr) {
+      } else if (edge.srcAttr > edge.dstAttr) {//src大
         Iterator((edge.srcId, edge.dstAttr))
-      } else {
+      } else {//如果相等,则不返回
         Iterator.empty
       }
     }
     val initialMessage = Long.MaxValue
-    Pregel(ccGraph, initialMessage, activeDirection = EdgeDirection.Either)(
-      vprog = (id, attr, msg) => math.min(attr, msg),
+    Pregel(ccGraph, initialMessage, activeDirection = EdgeDirection.Either)(//EdgeDirection.Either表示对一条边的两个顶点都要参与计算
+      vprog = (id, attr, msg) => math.min(attr, msg),//获取最小的属性值
       sendMsg = sendMessage,
-      mergeMsg = (a, b) => math.min(a, b))
+      mergeMsg = (a, b) => math.min(a, b))//获取最小的值
   } // end of connectedComponents
 }

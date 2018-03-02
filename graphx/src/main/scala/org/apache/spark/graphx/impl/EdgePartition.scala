@@ -475,6 +475,7 @@ class EdgePartition[
    * @param activeness criteria for filtering edges based on activeness
    *
    * @return iterator aggregated messages keyed by the receiving vertex id
+   * 先扫描src,如果src都不通过,就没有必要扫描src相同的所有边了,就可以直接跳跃到下一个src开始的边
    */
   def aggregateMessagesIndexScan[A: ClassTag](
       sendMsg: EdgeContext[VD, ED, A] => Unit,
@@ -490,6 +491,7 @@ class EdgePartition[
       val clusterPos = cluster._2 //第几个位置开始切换的
       val clusterLocalSrcId = localSrcIds(clusterPos) //该位置对应的本地序号,即src顶点对应的本地序号
 
+      //先扫描src,但是前提是必须要求src为活跃的,如果不是,则都要结果为true,因为没有办法通过索引去优化
       val scanCluster =
         if (activeness == EdgeActiveness.Neither) true //不需要考虑活跃情况
         else if (activeness == EdgeActiveness.SrcOnly) isActive(clusterSrcId)

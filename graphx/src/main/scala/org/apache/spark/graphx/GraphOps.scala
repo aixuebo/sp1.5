@@ -94,6 +94,7 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
    * neighboring vertices
    *
    * @return the set of neighboring ids for each vertex
+   * 获取每一个顶点对应的邻居节点集合---只包含顶点ID
    */
   def collectNeighborIds(edgeDirection: EdgeDirection): VertexRDD[Array[VertexId]] = {
     val nbrs =
@@ -129,6 +130,7 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
    * neighboring vertices
    *
    * @return the vertex set of neighboring vertex attributes for each vertex
+   * 获取每一个顶点对应的邻居节点集合---包含顶点和属性值
    */
   def collectNeighbors(edgeDirection: EdgeDirection): VertexRDD[Array[(VertexId, VD)]] = {
     val nbrs = edgeDirection match {
@@ -170,6 +172,7 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
    * the local edges of vertices
    *
    * @return the local edges for each vertex
+   * 获取每一个顶点相邻的边集合
    */
   def collectEdges(edgeDirection: EdgeDirection): VertexRDD[Array[Edge[ED]]] = {
     edgeDirection match {
@@ -219,7 +222,7 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
    * val graph = rawGraph.joinVertices[Int](outDeg)
    *   ((_, _, outDeg) => outDeg)
    * }}}
-   *
+   * 两个顶点集合做join,对相同顶点的属性值进行merge操作
    */
   def joinVertices[U: ClassTag](table: RDD[(VertexId, U)])(mapFunc: (VertexId, VD, U) => VD)
     : Graph[VD, ED] = {
@@ -257,10 +260,11 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
    *   vpred = (vid: VertexId, deg:Int) => deg > 0
    * )
    * }}}
-   *
+   * 对数据进行过滤操作
+   * 前提先将图进行一次初始化的转换
    */
   def filter[VD2: ClassTag, ED2: ClassTag](
-      preprocess: Graph[VD, ED] => Graph[VD2, ED2],
+      preprocess: Graph[VD, ED] => Graph[VD2, ED2],//前提先将图进行一次初始化的转换
       epred: (EdgeTriplet[VD2, ED2]) => Boolean = (x: EdgeTriplet[VD2, ED2]) => true,
       vpred: (VertexId, VD2) => Boolean = (v: VertexId, d: VD2) => true): Graph[VD, ED] = {
     graph.mask(preprocess(graph).subgraph(epred, vpred))
@@ -268,6 +272,7 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
 
   /**
    * Picks a random vertex from the graph and returns its ID.
+   * 随机找到图的一个顶点
    */
   def pickRandomVertex(): VertexId = {
     val probability = 50.0 / graph.numVertices
@@ -299,6 +304,7 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
    * of the map phase
    *
    * @return the resulting graph with canonical edges
+   * 让边的顶点有顺序
    */
   def convertToCanonicalEdges(
       mergeFunc: (ED, ED) => ED = (e1, e2) => e1): Graph[VD, ED] = {

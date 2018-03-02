@@ -20,7 +20,9 @@ package org.apache.spark.graphx.lib
 import scala.reflect.ClassTag
 import org.apache.spark.graphx._
 
-/** Label Propagation algorithm. */
+/** Label Propagation algorithm.
+  * 标签传播算法
+  **/
 object LabelPropagation {
   /**
    * Run static Label Propagation for detecting communities in networks.
@@ -42,22 +44,28 @@ object LabelPropagation {
    * @return a graph with vertex attributes containing the label of community affiliation
    */
   def run[VD, ED: ClassTag](graph: Graph[VD, ED], maxSteps: Int): Graph[VertexId, ED] = {
-    val lpaGraph = graph.mapVertices { case (vid, _) => vid }
+    val lpaGraph = graph.mapVertices { case (vid, _) => vid } //让顶点的属性为顶点ID
+
+    //对于一个边,返回两个结果---即与该顶点相关联的顶点以及次数
     def sendMessage(e: EdgeTriplet[VertexId, ED]): Iterator[(VertexId, Map[VertexId, Long])] = {
       Iterator((e.srcId, Map(e.dstAttr -> 1L)), (e.dstId, Map(e.srcAttr -> 1L)))
     }
     def mergeMessage(count1: Map[VertexId, Long], count2: Map[VertexId, Long])
       : Map[VertexId, Long] = {
-      (count1.keySet ++ count2.keySet).map { i =>
+      //合并所有的顶点
+      (count1.keySet ++ count2.keySet).map { i => //i表示每一个顶点ID
+        //分别获取顶点对应的次数
         val count1Val = count1.getOrElse(i, 0L)
         val count2Val = count2.getOrElse(i, 0L)
-        i -> (count1Val + count2Val)
+        i -> (count1Val + count2Val) //返回顶点ID--->次数对应的map
       }.toMap
     }
-    def vertexProgram(vid: VertexId, attr: Long, message: Map[VertexId, Long]): VertexId = {
-      if (message.isEmpty) attr else message.maxBy(_._2)._1
+
+    //参数为顶点的ID以及顶点属性,Map[VertexId, Long]表示邻居节点的次数
+    def vertexProgram(vid: VertexId, attr: Long, message: Map[VertexId, Long]): VertexId = {//获取邻居中次数最大的邻居节点
+      if (message.isEmpty) attr else message.maxBy(_._2)._1 //最大的次数对应的VertexId
     }
-    val initialMessage = Map[VertexId, Long]()
+    val initialMessage = Map[VertexId, Long]() //空结果集
     Pregel(lpaGraph, initialMessage, maxIterations = maxSteps)(
       vprog = vertexProgram,
       sendMsg = sendMessage,
