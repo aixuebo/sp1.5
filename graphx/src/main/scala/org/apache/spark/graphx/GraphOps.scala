@@ -97,7 +97,7 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
    */
   def collectNeighborIds(edgeDirection: EdgeDirection): VertexRDD[Array[VertexId]] = {
     val nbrs =
-      if (edgeDirection == EdgeDirection.Either) {
+      if (edgeDirection == EdgeDirection.Either) {//对边两个顶点都要计算邻居
         graph.aggregateMessages[Array[VertexId]](
           ctx => { ctx.sendToSrc(Array(ctx.dstId)); ctx.sendToDst(Array(ctx.srcId)) },
           _ ++ _, TripletFields.None)
