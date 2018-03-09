@@ -23,6 +23,7 @@ import org.apache.spark.graphx._
 
 /** Connected components algorithm.
   * 求图中的连通图
+  * 每一个顶点的属性值都变为相邻边的最小值,那么持有属性值相同的顶点都是连通的
   **/
 object ConnectedComponents {
   /**
@@ -42,15 +43,15 @@ object ConnectedComponents {
     def sendMessage(edge: EdgeTriplet[VertexId, ED]): Iterator[(VertexId, VertexId)] = {
       //返回值一定是 (大,小)这种顶点结构
       if (edge.srcAttr < edge.dstAttr) {//src小
-        Iterator((edge.dstId, edge.srcAttr))
+        Iterator((edge.dstId, edge.srcAttr)) //为dst顶点更新属性值
       } else if (edge.srcAttr > edge.dstAttr) {//src大
-        Iterator((edge.srcId, edge.dstAttr))
+        Iterator((edge.srcId, edge.dstAttr)) //为src顶点更新属性值
       } else {//如果相等,则不返回
         Iterator.empty
       }
     }
     val initialMessage = Long.MaxValue
-    Pregel(ccGraph, initialMessage, activeDirection = EdgeDirection.Either)(//EdgeDirection.Either表示对一条边的两个顶点都要参与计算
+    Pregel(ccGraph, initialMessage, activeDirection = EdgeDirection.Either)(//EdgeDirection.Either表示对一条边的两个顶点都要参与计算,都要参与计算相邻的最小顶点
       vprog = (id, attr, msg) => math.min(attr, msg),//获取最小的属性值
       sendMsg = sendMessage,
       mergeMsg = (a, b) => math.min(a, b))//获取最小的值

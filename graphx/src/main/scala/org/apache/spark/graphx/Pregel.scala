@@ -107,6 +107,10 @@ object Pregel extends Logging {
    * ideally the size of A should not increase.''
    *
    * @return the resulting graph at the end of the computation
+图对象、初始化结果集、边的两个顶点谁参与计算
+参与计算的函数(每一个顶点的ID和属性值与一个计算结果类型-->产生新的属性值)
+sendMsg: EdgeTriplet[VD, ED] => Iterator[(VertexId, A)] 一个边如何产生新的顶点以及每一个顶点新的结果
+merge函数
    *
    */
   def apply[VD: ClassTag, ED: ClassTag, A: ClassTag]
@@ -119,24 +123,28 @@ object Pregel extends Logging {
       mergeMsg: (A, A) => A)
     : Graph[VD, ED] =
   {
+    //对每一个图的顶点和属性值进行计算,参与计算的还有初始化的结果。产生新的图
     var g = graph.mapVertices((vid, vdata) => vprog(vid, vdata, initialMsg)).cache()
     // compute the messages
-    var messages = g.mapReduceTriplets(sendMsg, mergeMsg)
-    var activeMessages = messages.count()
+    //每一个顶点使用sendMsg和merge函数进行map-reduce处理
+    //比如计算连通图的时候,将src=dst相同的顶点取消
+    var messages = g.mapReduceTriplets(sendMsg, mergeMsg) //产生新的图,该新的图用于第二轮计算
+    var activeMessages = messages.count() //计算经过map-reduce后剩余节点数量
     // Loop
     var prevG: Graph[VD, ED] = null
     var i = 0
     while (activeMessages > 0 && i < maxIterations) {
       // Receive the messages and update the vertices.
       prevG = g
-      g = g.joinVertices(messages)(vprog).cache()
+      //此过程相当于对原始的图进行更新,将本次message的计算结果同步到原始图中,即每个阶段计算的结果都要同步给原始图
+      g = g.joinVertices(messages)(vprog).cache() //属于left join,更新原始图的顶点属性,即将新产生的结果更新老顶点集合
 
       val oldMessages = messages
       // Send new messages, skipping edges where neither side received a message. We must cache
       // messages so it can be materialized on the next line, allowing us to uncache the previous
       // iteration.
       messages = g.mapReduceTriplets(
-        sendMsg, mergeMsg, Some((oldMessages, activeDirection))).cache()
+        sendMsg, mergeMsg, Some((oldMessages, activeDirection))).cache() //下一轮参与计算的节点只有oldMessages,即g的图还是总图.但是计算的顶点集合在不断的缩小
       // The call to count() materializes `messages` and the vertices of `g`. This hides oldMessages
       // (depended on by the vertices of g) and the vertices of prevG (depended on by oldMessages
       // and the vertices of g).

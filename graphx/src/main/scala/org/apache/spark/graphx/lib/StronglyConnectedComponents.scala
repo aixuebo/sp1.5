@@ -40,30 +40,31 @@ object StronglyConnectedComponents {
   def run[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED], numIter: Int): Graph[VertexId, ED] = {
 
     // the graph we update with final SCC ids, and the graph we return at the end
-    var sccGraph = graph.mapVertices { case (vid, _) => vid }
+    var sccGraph = graph.mapVertices { case (vid, _) => vid } //初始化将顶点属性值转换成顶点ID,即表示该顶点与哪个顶点强连通
     // graph we are going to work with in our iterations
-    var sccWorkGraph = graph.mapVertices { case (vid, _) => (vid, false) }.cache()
+    var sccWorkGraph = graph.mapVertices { case (vid, _) => (vid, false) }.cache() //每一个顶点的属性变成 (顶点,false)元组对象
 
-    var numVertices = sccWorkGraph.numVertices
+    var numVertices = sccWorkGraph.numVertices //计算顶点的数量
     var iter = 0
     while (sccWorkGraph.numVertices > 0 && iter < numIter) {
       iter += 1
       do {
         numVertices = sccWorkGraph.numVertices
-        sccWorkGraph = sccWorkGraph.outerJoinVertices(sccWorkGraph.outDegrees) {
+        sccWorkGraph = sccWorkGraph.outerJoinVertices(sccWorkGraph.outDegrees) { //图与出度顶点进行join
+          //if说明该顶点有出度或者入度.因此保持他原有的属性值
           (vid, data, degreeOpt) => if (degreeOpt.isDefined) data else (vid, true)
-        }.outerJoinVertices(sccWorkGraph.inDegrees) {
+        }.outerJoinVertices(sccWorkGraph.inDegrees) {//与入度顶点进行join
           (vid, data, degreeOpt) => if (degreeOpt.isDefined) data else (vid, true)
         }.cache()
 
-        // get all vertices to be removed
-        val finalVertices = sccWorkGraph.vertices
-            .filter { case (vid, (scc, isFinal)) => isFinal}
-            .mapValues { (vid, data) => data._1}
+        // get all vertices to be removed 选择可以被起初的所有顶点---即已经是强连通图的顶点
+        val finalVertices = sccWorkGraph.vertices //循环每一个顶点
+            .filter { case (vid, (scc, isFinal)) => isFinal} //只选择顶点的属性值是true的顶点
+            .mapValues { (vid, data) => data._1} //返回顶点Id
 
         // write values to sccGraph
-        sccGraph = sccGraph.outerJoinVertices(finalVertices) {
-          (vid, scc, opt) => opt.getOrElse(scc)
+        sccGraph = sccGraph.outerJoinVertices(finalVertices) { //做left join,更新原始图的属性值
+          (vid, scc, opt) => opt.getOrElse(scc) //优先使用强连通图点
         }
         // only keep vertices that are not final
         sccWorkGraph = sccWorkGraph.subgraph(vpred = (vid, data) => !data._2).cache()

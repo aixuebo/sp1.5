@@ -49,14 +49,17 @@ import org.apache.spark.storage.StorageLevel
 @Experimental
 class RowMatrix @Since("1.0.0") (
     @Since("1.0.0") val rows: RDD[Vector],
-    private var nRows: Long,
-    private var nCols: Int) extends DistributedMatrix with Logging {
+    private var nRows: Long, //有多少行
+    private var nCols: Int) //有多少列
+    extends DistributedMatrix with Logging {
 
   /** Alternative constructor leaving matrix dimensions to be determined automatically. */
   @Since("1.0.0")
   def this(rows: RDD[Vector]) = this(rows, 0L, 0)
 
-  /** Gets or computes the number of columns. */
+  /** Gets or computes the number of columns.
+    * 计算有多少列
+    **/
   @Since("1.0.0")
   override def numCols(): Long = {
     if (nCols <= 0) {
@@ -76,7 +79,7 @@ class RowMatrix @Since("1.0.0") (
   @Since("1.0.0")
   override def numRows(): Long = {
     if (nRows <= 0L) {
-      nRows = rows.count()
+      nRows = rows.count() //计算RDD的count就是行数
       if (nRows == 0L) {
         sys.error("Cannot determine the number of rows because it is not specified in the " +
           "constructor and the rows RDD is empty.")
