@@ -59,6 +59,7 @@ trait DataSourceRegister {
    * }}}
    *
    * @since 1.5.0
+   * 比如jdbc,表示通过jdbc方式读取数据
    */
   def shortName(): String
 }
@@ -84,6 +85,7 @@ trait RelationProvider {
    * Returns a new base relation with the given parameters.
    * Note: the parameters' keywords are case insensitive and this insensitivity is enforced
    * by the Map that is passed to the function.
+   * 创建一个新的关联的数据集
    */
   def createRelation(sqlContext: SQLContext, parameters: Map[String, String]): BaseRelation
 }
@@ -246,6 +248,7 @@ abstract class BaseRelation {
  */
 @DeveloperApi
 trait TableScan {
+  //扫描全表
   def buildScan(): RDD[Row]
 }
 
@@ -258,6 +261,7 @@ trait TableScan {
  */
 @DeveloperApi
 trait PrunedScan {
+  //扫描数据,参数是select要的列 返回符合条件的数据集合
   def buildScan(requiredColumns: Array[String]): RDD[Row]
 }
 
@@ -277,6 +281,7 @@ trait PrunedScan {
  */
 @DeveloperApi
 trait PrunedFilteredScan {
+  //扫描数据,参数是select要的列  以及where过滤条件,返回符合条件的数据集合
   def buildScan(requiredColumns: Array[String], filters: Array[Filter]): RDD[Row]
 }
 
@@ -315,6 +320,7 @@ trait InsertableRelation {
  */
 @Experimental
 trait CatalystScan {
+  //扫描数据,参数是select要的列  以及where过滤条件,返回符合条件的数据集合
   def buildScan(requiredColumns: Seq[Attribute], filters: Seq[Expression]): RDD[Row]
 }
 
@@ -486,7 +492,7 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
     if (_partitionSpec == null) {
       _partitionSpec = maybePartitionSpec
         .flatMap {
-          case spec if spec.partitions.nonEmpty =>
+          case spec if spec.partitions.nonEmpty => //说明设置了分区具体的值
             Some(spec.copy(partitionColumns = spec.partitionColumns.asNullable))
           case _ =>
             None
@@ -495,14 +501,14 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
           // We only know the partition columns and their data types. We need to discover
           // partition values.
           userDefinedPartitionColumns.map { partitionSchema =>
-            val spec = discoverPartitions()
-            val partitionColumnTypes = spec.partitionColumns.map(_.dataType)
-            val castedPartitions = spec.partitions.map { case p @ Partition(values, path) =>
-              val literals = partitionColumnTypes.zipWithIndex.map { case (dt, i) =>
-                Literal.create(values.get(i, dt), dt)
+            val spec = discoverPartitions() //发现分区
+            val partitionColumnTypes = spec.partitionColumns.map(_.dataType) //返回分区的数据类型
+            val castedPartitions = spec.partitions.map { case p @ Partition(values, path) => //具体每一个分区信息
+              val literals = partitionColumnTypes.zipWithIndex.map { case (dt, i) => //每一个分区字段数据类型 以及第几个分区字段
+                Literal.create(values.get(i, dt), dt) //返回值和类型
               }
               val castedValues = partitionSchema.zip(literals).map { case (field, literal) =>
-                Cast(literal, field.dataType).eval()
+                Cast(literal, field.dataType).eval() //对属性进行强转
               }
               p.copy(values = InternalRow.fromSeq(castedValues))
             }
@@ -511,9 +517,9 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
         }
         .getOrElse {
           if (sqlContext.conf.partitionDiscoveryEnabled()) {
-            discoverPartitions()
+            discoverPartitions() //自己发现分区
           } else {
-            PartitionSpec(StructType(Nil), Array.empty[Partition])
+            PartitionSpec(StructType(Nil), Array.empty[Partition]) //定义说明没有分区
           }
         }
     }
@@ -537,6 +543,7 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
    * discovered.  Note that they should always be nullable.
    *
    * @since 1.4.0
+   * 分区的数据结构---可以用户自定义
    */
   final def partitionColumns: StructType =
     userDefinedPartitionColumns.getOrElse(partitionSpec.partitionColumns)
@@ -574,7 +581,7 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
     val dataSchemaColumnNames = dataSchema.map(_.name.toLowerCase).toSet
     StructType(dataSchema ++ partitionColumns.filterNot { column =>
       dataSchemaColumnNames.contains(column.name.toLowerCase)
-    })
+    })//追加分区的列作为sql可以查询
   }
 
   final private[sql] def buildScan(

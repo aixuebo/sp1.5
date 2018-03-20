@@ -22,6 +22,7 @@ import com.fasterxml.jackson.core.{JsonParser, JsonToken}
 private object JacksonUtils {
   /**
    * Advance the parser until a null or a specific token is found
+   * 参数stopOn 表示是否找不到就停止
    */
   def nextUntil(parser: JsonParser, stopOn: JsonToken): Boolean = {
     parser.nextToken() match {//不断的迭代json,找到下一个json的拆分点

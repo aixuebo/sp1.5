@@ -30,6 +30,7 @@ import org.apache.spark.sql.types._
 
 /**
  * A parser for foreign DDL commands.
+ * 该类用于解析DDL的sql解析器
  */
 class DDLParser(parseQuery: String => LogicalPlan) //该sql解析的是正常的sql
   extends AbstractSparkSQLParser with DataTypeParser with Logging {
@@ -46,6 +47,7 @@ class DDLParser(parseQuery: String => LogicalPlan) //该sql解析的是正常的
 
   // Keyword is a convention with AbstractSparkSQLParser, which will scan all of the `Keyword`
   // properties via reflection the class in runtime for constructing the SqlLexical object
+  //关键字
   protected val CREATE = Keyword("CREATE")
   protected val TEMPORARY = Keyword("TEMPORARY")
   protected val TABLE = Keyword("TABLE")

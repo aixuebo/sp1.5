@@ -49,7 +49,8 @@ private[sql] object JacksonParser {
   def apply(
       json: RDD[String],
       schema: StructType,//每一行对象对应的scheme数据格式
-      columnNameOfCorruptRecords: String): RDD[InternalRow] = {
+      columnNameOfCorruptRecords: String)  //出现问题的时候,将该字段设置成异常信息
+     : RDD[InternalRow] = {
     parseJson(json, schema, columnNameOfCorruptRecords)
   }
 
@@ -201,7 +202,8 @@ private[sql] object JacksonParser {
   private def parseJson(
       json: RDD[String],
       schema: StructType,//json集合对应的数据结构
-      columnNameOfCorruptRecords: String): RDD[InternalRow] = {//返回值是InternalRow组成的对象
+      columnNameOfCorruptRecords: String) //出现问题的时候,将该字段设置成异常信息
+     : RDD[InternalRow] = {//返回值是InternalRow组成的对象
 
     //参数record表示一行的原始内容
     def failedRecord(record: String): Seq[InternalRow] = {

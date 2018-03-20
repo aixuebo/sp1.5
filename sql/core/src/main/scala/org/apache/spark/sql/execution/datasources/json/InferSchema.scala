@@ -48,7 +48,8 @@ private[sql] object InferSchema {
   def apply(
       json: RDD[String],
       samplingRatio: Double = 1.0,//抽样比例
-      columnNameOfCorruptRecords: String): StructType = {
+      columnNameOfCorruptRecords: String) //出现问题的时候,将该字段设置成异常信息
+     : StructType = {
     require(samplingRatio > 0, s"samplingRatio ($samplingRatio) should be greater than 0")
 
     //返回抽样后的RDD结果
@@ -71,7 +72,7 @@ private[sql] object InferSchema {
             StructType(Seq(StructField(columnNameOfCorruptRecords, StringType)))
         }
       }
-    }.treeAggregate[DataType](StructType(Seq()))(compatibleRootType, compatibleRootType)
+    }.treeAggregate[DataType](StructType(Seq()))(compatibleRootType, compatibleRootType) //用于聚合成通用的字段类型
 
     //对最终的结果进行规范化
     canonicalizeType(rootType) match {

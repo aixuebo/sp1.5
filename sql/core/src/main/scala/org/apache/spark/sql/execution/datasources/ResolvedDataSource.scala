@@ -57,7 +57,7 @@ object ResolvedDataSource extends Logging {
     val provider = backwardCompatibilityMap.getOrElse(provider0, provider0)
     val provider2 = s"$provider.DefaultSource"
     val loader = Utils.getContextOrSparkClassLoader
-    val serviceLoader = ServiceLoader.load(classOf[DataSourceRegister], loader)
+    val serviceLoader = ServiceLoader.load(classOf[DataSourceRegister], loader) //加载所有的DataSourceRegister
 
     serviceLoader.iterator().filter(_.shortName().equalsIgnoreCase(provider)).toList match {
       /** the provider format did not match any given registered aliases */

@@ -38,10 +38,11 @@ Partition(
  */
 private[sql] case class Partition(values: InternalRow, path: String) //表示一个分区路径
 
+//第一个字段表示分区字段name以及类型,第二个字段表示具体的分区信息,比如有10个分区,那么size=10,每一个表示具体的分区字段对应的值,以及具体路径
 private[sql] case class PartitionSpec(partitionColumns: StructType, partitions: Seq[Partition]) //分区的数据类型   以及 分区的集合
 
 private[sql] object PartitionSpec {
-  val emptySpec = PartitionSpec(StructType(Seq.empty[StructField]), Seq.empty[Partition])
+  val emptySpec = PartitionSpec(StructType(Seq.empty[StructField]), Seq.empty[Partition]) //空分区
 }
 
 private[sql] object PartitioningUtils {
@@ -49,6 +50,7 @@ private[sql] object PartitioningUtils {
   // depend on Hive.
   private[sql] val DEFAULT_PARTITION_NAME = "__HIVE_DEFAULT_PARTITION__"
 
+  //属性集合 和 值的集合
   private[sql] case class PartitionValues(columnNames: Seq[String], literals: Seq[Literal]) {
     require(columnNames.size == literals.size)
   }
@@ -82,8 +84,9 @@ private[sql] object PartitioningUtils {
       defaultPartitionName: String,
       typeInference: Boolean): PartitionSpec = {
     // First, we need to parse every partition's path and see if we can find partition values.
+    //可能的分区信息
     val pathsWithPartitionValues = paths.flatMap { path =>
-      parsePartition(path, defaultPartitionName, typeInference).map(path -> _)
+      parsePartition(path, defaultPartitionName, typeInference).map(path -> _) //解析每一个路径
     }
 
     if (pathsWithPartitionValues.isEmpty) {
@@ -129,6 +132,7 @@ private[sql] object PartitioningUtils {
    *       Literal.create("hello", StringType),
    *       Literal.create(3.14, FloatType)))
    * }}}
+   * 返回解析path后的分区属性集合,以及每一个分区对应的值
    */
   private[sql] def parsePartition(
       path: Path,
@@ -146,24 +150,25 @@ private[sql] object PartitioningUtils {
         return None
       }
 
-      val maybeColumn = parsePartitionColumn(chopped.getName, defaultPartitionName, typeInference)
-      maybeColumn.foreach(columns += _)
-      chopped = chopped.getParent
+      val maybeColumn = parsePartitionColumn(chopped.getName, defaultPartitionName, typeInference) //可能是分区的列---chopped.getName是path的方法,因此是等于从最后一个位置开始向前迭代
+      maybeColumn.foreach(columns += _) //追加分区元组
+      chopped = chopped.getParent //向前迭代下一个/路径位置
       finished = maybeColumn.isEmpty || chopped.getParent == null
     }
 
     if (columns.isEmpty) {
       None
     } else {
-      val (columnNames, values) = columns.reverse.unzip
+      val (columnNames, values) = columns.reverse.unzip //对元组进行拆分,成属性集合以及值的集合
       Some(PartitionValues(columnNames, values))
     }
   }
 
+  //单独解析一个key=value形式的分区字段
   private def parsePartitionColumn(
       columnSpec: String,
       defaultPartitionName: String,
-      typeInference: Boolean): Option[(String, Literal)] = {
+      typeInference: Boolean): Option[(String, Literal)] = {//分区key 和 分区值(类型和具体的值)
     val equalSignIndex = columnSpec.indexOf('=')
     if (equalSignIndex == -1) {
       None
@@ -193,16 +198,17 @@ private[sql] object PartitioningUtils {
     if (pathsWithPartitionValues.isEmpty) {
       Seq.empty
     } else {
-      val distinctPartColNames = pathsWithPartitionValues.map(_._2.columnNames).distinct
+      val distinctPartColNames = pathsWithPartitionValues.map(_._2.columnNames).distinct //收集属性集合,然后过滤重复,必须确保最终所有的属性集合是相同的,即只有一种属性集合
+      //确保只有一种属性集合
       assert(
         distinctPartColNames.size == 1,
         listConflictingPartitionColumns(pathsWithPartitionValues))
 
       // Resolves possible type conflicts for each column
-      val values = pathsWithPartitionValues.map(_._2)
-      val columnCount = values.head.columnNames.size
+      val values = pathsWithPartitionValues.map(_._2) //获取属性的name集合
+      val columnCount = values.head.columnNames.size //多少个分区属性
       val resolvedValues = (0 until columnCount).map { i =>
-        resolveTypeConflicts(values.map(_.literals(i)))
+        resolveTypeConflicts(values.map(_.literals(i))) //映射每一个分区属性的值和类型
       }
 
       // Fills resolved literals back to each partition
@@ -212,12 +218,15 @@ private[sql] object PartitioningUtils {
     }
   }
 
+  //计算冲突的属性集合
   private[sql] def listConflictingPartitionColumns(
       pathWithPartitionValues: Seq[(Path, PartitionValues)]): String = {
     val distinctPartColNames = pathWithPartitionValues.map(_._2.columnNames).distinct
 
     def groupByKey[K, V](seq: Seq[(K, V)]): Map[K, Iterable[V]] =
-      seq.groupBy { case (key, _) => key }.mapValues(_.map { case (_, value) => value })
+      //按照key分组,得到key 以及 Seq[(K, V)集合
+      seq.groupBy { case (key, _) => key }
+      .mapValues(_.map { case (_, value) => value }) //得到不同的value
 
     val partColNamesToPaths = groupByKey(pathWithPartitionValues.map {
       case (path, partValues) => partValues.columnNames -> path

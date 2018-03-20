@@ -29,6 +29,7 @@ import org.apache.spark.sql.{DataFrame, Row}
 
 /**
  * Util functions for JDBC tables.
+ * 访问jdbc的工具类,不需要分布式,单节点就可以跑
  */
 object JdbcUtils extends Logging {
 
@@ -58,6 +59,7 @@ object JdbcUtils extends Logging {
   /**
    * Returns a PreparedStatement that inserts a row into table via conn.
    * 组装成insert的预编译对象
+   * ----应该修改一下,添加一些字段,因为现在的sql表示的是全表的所有字段都要添加一遍,有时候需求是添加一部分字段进入数据库的
    */
   def insertStatement(conn: Connection, table: String, rddSchema: StructType): PreparedStatement = {
     val sql = new StringBuilder(s"INSERT INTO $table VALUES (")

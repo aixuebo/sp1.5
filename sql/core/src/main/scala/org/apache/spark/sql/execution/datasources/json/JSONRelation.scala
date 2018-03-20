@@ -43,12 +43,12 @@ import org.apache.spark.util.SerializableConfiguration
 
 class DefaultSource extends HadoopFsRelationProvider with DataSourceRegister {
 
-  override def shortName(): String = "json"
+  override def shortName(): String = "json" //读取json文件,即让json文件可以通过select sql的方式读取
 
   override def createRelation(
       sqlContext: SQLContext,
-      paths: Array[String],
-      dataSchema: Option[StructType],
+      paths: Array[String],//json数据存储路径
+      dataSchema: Option[StructType],//可能的数据结构--即json的格式给出来,有该值了就不需要推测数据的schema了
       partitionColumns: Option[StructType],
       parameters: Map[String, String]): HadoopFsRelation = {
     val samplingRatio = parameters.get("samplingRatio").map(_.toDouble).getOrElse(1.0) //默认是1.0,抽样比例
@@ -58,17 +58,18 @@ class DefaultSource extends HadoopFsRelationProvider with DataSourceRegister {
 }
 
 private[sql] class JSONRelation(
-    val inputRDD: Option[RDD[String]],//输入内容RDD
+    val inputRDD: Option[RDD[String]],//输入内容RDD--该内容是json字符串
     val samplingRatio: Double,//抽样比例
-    val maybeDataSchema: Option[StructType],//可能的数据结构
-    val maybePartitionSpec: Option[PartitionSpec],
-    override val userDefinedPartitionColumns: Option[StructType],
+    val maybeDataSchema: Option[StructType],//可能的数据结构--即json的格式给出来,有该值了就不需要推测数据的schema了
+    val maybePartitionSpec: Option[PartitionSpec],//给定查询具体的分区
+    override val userDefinedPartitionColumns: Option[StructType],//覆盖父类的属性,自定义分区字段
     override val paths: Array[String] = Array.empty[String])//加载的数据路径
   (@transient val sqlContext: SQLContext)
   extends HadoopFsRelation(maybePartitionSpec) {
 
   /** Constraints to be imposed on schema to be stored.
     * 校验约束信息
+    * 参数schema是json一行数据对应的schema集合
     **/
   private def checkConstraints(schema: StructType): Unit = {
     if (schema.fieldNames.length != schema.fieldNames.distinct.length) {//fieldNames名字不能重复
@@ -100,7 +101,7 @@ private[sql] class JSONRelation(
       classOf[Text]).map(_._2.toString) // get the text line
   }
 
-  //获取数据的Schema,即StructType类型
+  //获取json数据的Schema,即StructType类型
   override lazy val dataSchema = {
     val jsonSchema = maybeDataSchema.getOrElse {//如果没有设置可能的数据结构
       val files = cachedLeafStatuses().filterNot { status => //过滤需要的文件内容
@@ -152,6 +153,7 @@ private[sql] class JSONRelation(
       partitionColumns)
   }
 
+  //数据输出的时候,预先做什么
   override def prepareJobForWrite(job: Job): OutputWriterFactory = {
     new OutputWriterFactory {
       override def newInstance(
@@ -164,6 +166,7 @@ private[sql] class JSONRelation(
   }
 }
 
+//最终生成的也是json内容
 private[json] class JsonOutputWriter(
     path: String,//文件输出的目录
     dataSchema: StructType,//文件输出的格式
@@ -174,10 +177,10 @@ private[json] class JsonOutputWriter(
   // create the Generator without separator inserted between 2 records
   val gen = new JsonFactory().createGenerator(writer).setRootValueSeparator(null) //json解析对象
 
-  val result = new Text()
+  val result = new Text()//写入具体的json字符串
 
   private val recordWriter: RecordWriter[NullWritable, Text] = {
-    new TextOutputFormat[NullWritable, Text]() {
+    new TextOutputFormat[NullWritable, Text]() {//最终存储到hdfs上的内容就是json字符串
       override def getDefaultWorkFile(context: TaskAttemptContext, extension: String): Path = {
         val configuration = SparkHadoopUtil.get.getConfigurationFromJobContext(context)
         val uniqueWriteJobId = configuration.get("spark.sql.sources.writeJobUUID")

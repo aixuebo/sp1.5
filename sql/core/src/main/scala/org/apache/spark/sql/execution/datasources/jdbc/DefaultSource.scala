@@ -26,7 +26,9 @@ class DefaultSource extends RelationProvider with DataSourceRegister {
 
   override def shortName(): String = "jdbc"
 
-  /** Returns a new base relation with the given parameters. */
+  /** Returns a new base relation with the given parameters.
+    * 通过参数返回一个连接器
+    **/
   override def createRelation(
       sqlContext: SQLContext,
       parameters: Map[String, String]): BaseRelation = {
@@ -49,13 +51,13 @@ class DefaultSource extends RelationProvider with DataSourceRegister {
     val partitionInfo = if (partitionColumn == null) {
       null
     } else {
-      JDBCPartitioningInfo(
+      JDBCPartitioningInfo(//如何拆分jdbc数据到多个分区中查询
         partitionColumn,
         lowerBound.toLong,
         upperBound.toLong,
         numPartitions.toInt)
     }
-    val parts = JDBCRelation.columnPartition(partitionInfo) //分区
+    val parts = JDBCRelation.columnPartition(partitionInfo) //分区集合
     val properties = new Properties() // Additional properties that we will pass to getConnection
     parameters.foreach(kv => properties.setProperty(kv._1, kv._2)) //创建Properties对象
 

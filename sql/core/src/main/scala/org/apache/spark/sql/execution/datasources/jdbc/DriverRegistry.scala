@@ -32,6 +32,7 @@ import org.apache.spark.util.Utils
  */
 object DriverRegistry extends Logging {
 
+  //class对应的driver的实现类
   private val wrapperMap: mutable.Map[String, DriverWrapper] = mutable.Map.empty
 
   //注册一个driver
@@ -53,6 +54,7 @@ object DriverRegistry extends Logging {
     }
   }
 
+  //解析url,找到对应的driver需要的class
   def getDriverClassName(url: String): String = DriverManager.getDriver(url) match {
     case wrapper: DriverWrapper => wrapper.wrapped.getClass.getCanonicalName
     case driver => driver.getClass.getCanonicalName

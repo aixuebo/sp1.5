@@ -164,7 +164,7 @@ private[sql] object JDBCRDD extends Logging {
    * columns中指定的StructField对应的数据结构
    */
   private def pruneSchema(schema: StructType, columns: Array[String]): StructType = {
-    val fieldMap = Map(schema.fields map { x => x.metadata.getString("name") -> x }: _*) //映射成fieldNmae到StructField的映射
+    val fieldMap = Map(schema.fields map { x => x.metadata.getString("name") -> x }: _*) //根据表结构schema,返回Map<属性Name,属性对象StructField>
     new StructType(columns map { name => fieldMap(name) }) //返回columns中指定的StructField对应的数据结构
   }
 
@@ -220,7 +220,7 @@ private[sql] object JDBCRDD extends Logging {
       parts: Array[Partition]) //数据源
      : RDD[InternalRow] = {
     val dialect = JdbcDialects.get(url)
-    val quotedColumns = requiredColumns.map(colName => dialect.quoteIdentifier(colName))
+    val quotedColumns = requiredColumns.map(colName => dialect.quoteIdentifier(colName)) //select选择的列集合
     new JDBCRDD(
       sc,
       getConnector(driver, url, properties),
@@ -266,12 +266,14 @@ private[sql] class JDBCRDD(
 
   /**
    * Converts value to SQL expression.
+   * 去除''单引号字符
    */
   private def compileValue(value: Any): Any = value match {
-    case stringValue: String => s"'${escapeSql(stringValue)}'"
+    case stringValue: String => s"'${escapeSql(stringValue)}'" //比如原始内容是'aa',经过修改为'''aa'''
     case _ => value
   }
 
+  //去除''单引号字符
   private def escapeSql(value: String): String =
     if (value == null) null else StringUtils.replace(value, "'", "''")
 
@@ -293,17 +295,18 @@ private[sql] class JDBCRDD(
    * 创建where条件
    */
   private val filterWhereClause: String = {
+    //将filters集合转换成字符串的集合,过滤掉null的
     val filterStrings = filters map compileFilter filter (_ != null) //设置where条件集合
     if (filterStrings.size > 0) {
       val sb = new StringBuilder("WHERE ")
       filterStrings.foreach(x => sb.append(x).append(" AND ")) //添加where条件
-      sb.substring(0, sb.length - 5)
+      sb.substring(0, sb.length - 5) //减去最后的" AND "字节内容
     } else ""
   }
 
   /**
    * A WHERE clause representing both `filters`, if any, and the current partition.
-   * 添加where条件
+   * 添加where条件---添加一个分区要查询的内容
    */
   private def getWhereClause(part: JDBCPartition): String = {
     if (part.whereClause != null && filterWhereClause.length > 0) {
@@ -338,6 +341,7 @@ private[sql] class JDBCRDD(
    * 类型转换
    */
   def getConversions(schema: StructType): Array[JDBCConversion] = {
+    //给定的字段类型集合,转换成JDBCConversion的子类
     schema.fields.map(sf => sf.dataType match {
       case BooleanType => BooleanConversion
       case DateType => DateConversion
@@ -356,17 +360,18 @@ private[sql] class JDBCRDD(
 
   /**
    * Runs the SQL query against the JDBC driver.
+   * 计算一个分区的数据---实现RDD的方法
    */
   override def compute(thePart: Partition, context: TaskContext): Iterator[InternalRow] =
-    new Iterator[InternalRow] {
+    new Iterator[InternalRow] {//返回一个懒加载的迭代器
     var closed = false
     var finished = false
     var gotNext = false
     var nextValue: InternalRow = null
 
-    context.addTaskCompletionListener{ context => close() }
-    val part = thePart.asInstanceOf[JDBCPartition]
-    val conn = getConnection()
+    context.addTaskCompletionListener{ context => close() } //添加监听器,任务完成的时候要关闭数据库连接
+    val part = thePart.asInstanceOf[JDBCPartition] //处理哪个分区
+    val conn = getConnection() //连接数据库
 
     // H2's JDBC driver does not support the setSchema() method.  We pass a
     // fully-qualified table name in the SELECT statement.  I don't know how to
