@@ -248,7 +248,7 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
     start1 | insert | cte
 
   protected lazy val start1: Parser[LogicalPlan] =
-    (select | ("(" ~> select <~ ")")) * //纯粹的一个完整的sql 或者子查询中完成的sql   *表示若干个
+    (select | ("(" ~> select <~ ")")) * //纯粹的一个完整的sql 或者子查询中完成的sql   *表示若干个,即子查询是(select)模式的子查询
     ( UNION ~ ALL        ^^^ { (q1: LogicalPlan, q2: LogicalPlan) => Union(q1, q2) }//union操作  两个select进行union
     | INTERSECT          ^^^ { (q1: LogicalPlan, q2: LogicalPlan) => Intersect(q1, q2) }//两个集合做交集
     | EXCEPT             ^^^ { (q1: LogicalPlan, q2: LogicalPlan) => Except(q1, q2)} //获取两个集合的差集

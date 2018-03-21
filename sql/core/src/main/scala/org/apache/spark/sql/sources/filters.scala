@@ -89,6 +89,7 @@ case class In(attribute: String, values: Array[Any]) extends Filter
  * A filter that evaluates to `true` iff the attribute evaluates to null.
  *
  * @since 1.3.0
+ * 表示is null 为true
  */
 case class IsNull(attribute: String) extends Filter
 
@@ -96,6 +97,7 @@ case class IsNull(attribute: String) extends Filter
  * A filter that evaluates to `true` iff the attribute evaluates to a non-null value.
  *
  * @since 1.3.0
+ * 表示 is not null 为true
  */
 case class IsNotNull(attribute: String) extends Filter
 

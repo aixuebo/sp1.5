@@ -164,6 +164,10 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    * Because it inserts data to an existing table, format or options will be ignored.
    *
    * @since 1.4.0
+   * 将DataFrame的内容插入到给定的表中
+   * 注意 要求给定的表的schema与DataFrame的schema要相同即可
+   *
+   * 参数为database.tableName形式
    */
   def insertInto(tableName: String): Unit = {
     insertInto(new SqlParser().parseTableIdentifier(tableName))
@@ -210,17 +214,17 @@ final class DataFrameWriter private[sql](df: DataFrame) {
       case (true, SaveMode.Ignore) =>
         // Do nothing
 
-      case (true, SaveMode.ErrorIfExists) =>
+      case (true, SaveMode.ErrorIfExists) => //状态是表存在的时候不允许保存,因此要抛异常
         throw new AnalysisException(s"Table $tableIdent already exists.")
 
-      case (true, SaveMode.Append) =>
+      case (true, SaveMode.Append) => //说明是追加数据,因此表的schema要与df的schema数据保持一致
         // If it is Append, we just ask insertInto to handle it. We will not use insertInto
         // to handle saveAsTable with Overwrite because saveAsTable can change the schema of
         // the table. But, insertInto with Overwrite requires the schema of data be the same
         // the schema of the table.
         insertInto(tableIdent)
 
-      case _ =>
+      case _ => //因为不是追加,而是覆盖,因此不要求表的schema和df的schema一致,甚至表不存在也没问题,可以自己创建对应的表
         val cmd =
           CreateTableUsingAsSelect(
             tableIdent,

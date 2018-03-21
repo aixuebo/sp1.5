@@ -57,7 +57,7 @@ class Analyzer(
     }
   }
 
-  //循环次数策略
+  //循环固定次数的策略
   val fixedPoint = FixedPoint(maxIterations)
 
   /**
@@ -68,12 +68,14 @@ class Analyzer(
 
   //批处理集合
   lazy val batches: Seq[Batch] = Seq(
+  //替换
     Batch("Substitution", fixedPoint,
       CTESubstitution ::
       WindowsSubstitution ::
       Nil : _*),
 
 
+  //分解
     Batch("Resolution", fixedPoint,
       ResolveRelations ::
       ResolveReferences ::
@@ -269,7 +271,7 @@ class Analyzer(
       }
     }
 
-    def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+    def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {//resolveOperators方法接收一个偏函数,偏函数必须只能是处理InsertIntoTable和UnresolvedRelation类型的LogicalPlan
       case i @ InsertIntoTable(u: UnresolvedRelation, _, _, _, _) =>
         i.copy(table = EliminateSubQueries(getTable(u)))
       case u: UnresolvedRelation =>

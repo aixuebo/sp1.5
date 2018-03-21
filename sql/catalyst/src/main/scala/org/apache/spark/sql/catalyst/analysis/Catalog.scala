@@ -48,7 +48,7 @@ trait Catalog {
 
   //查获表名对应的逻辑计划,并且为表设置别名
   def lookupRelation(
-      tableIdentifier: Seq[String],
+      tableIdentifier: Seq[String],//存储的是数据库名字 以及表名字对应的集合
       alias: Option[String] = None): LogicalPlan
 
   /**
@@ -183,7 +183,7 @@ class SimpleCatalog(val conf: CatalystConf) extends Catalog {
 trait OverrideCatalog extends Catalog {
 
   // TODO: This doesn't work when the database changes...
-  val overrides = new mutable.HashMap[(Option[String], String), LogicalPlan]()
+  val overrides = new mutable.HashMap[(Option[String], String), LogicalPlan]() //key是元组,由数据库和表名组成的元组
 
   override def registerTable(
                               tableIdentifier: Seq[String],

@@ -68,13 +68,15 @@ private[sql] case class InsertIntoHadoopFsRelation(
     val hadoopConf = sqlContext.sparkContext.hadoopConfiguration
     val outputPath = new Path(relation.paths.head)
     val fs = outputPath.getFileSystem(hadoopConf)
-    val qualifiedOutputPath = outputPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
+    val qualifiedOutputPath = outputPath.makeQualified(fs.getUri, fs.getWorkingDirectory) //输出目录
 
     val pathExists = fs.exists(qualifiedOutputPath)
+
+    //true表示要追加操作,false表示不要追加操作
     val doInsertion = (mode, pathExists) match {
       case (SaveMode.ErrorIfExists, true) =>
         throw new AnalysisException(s"path $qualifiedOutputPath already exists.")
-      case (SaveMode.Overwrite, true) =>
+      case (SaveMode.Overwrite, true) => //覆盖,则删除该目录
         Utils.tryOrIOException {
           if (!fs.delete(qualifiedOutputPath, true /* recursively */)) {
             throw new IOException(s"Unable to clear output " +
@@ -90,7 +92,7 @@ private[sql] case class InsertIntoHadoopFsRelation(
         throw new IllegalStateException(s"unsupported save mode $s ($exists)")
     }
     // If we are appending data to an existing dir.
-    val isAppend = pathExists && (mode == SaveMode.Append)
+    val isAppend = pathExists && (mode == SaveMode.Append) //路径存在,并且是追加操作
 
     if (doInsertion) {
       val job = new Job(hadoopConf)

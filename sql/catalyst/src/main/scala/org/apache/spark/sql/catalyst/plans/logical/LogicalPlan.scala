@@ -47,8 +47,12 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
    * children and then itself (post-order). When `rule` does not apply to a given node, it is left
    * unchanged.  This function is similar to `transformUp`, but skips sub-trees that have already
    * been marked as analyzed.
+   * 会递归调用所有子节点,让他们参与规则处理
    *
-   * @param rule the function use to transform this nodes children 参数是一个偏函数,即从一个LogicalPlan转换成一个LogicalPlan的过程
+   * @param rule the function use to transform this nodes children 他会对他的子节点进行变换
+   * 参数是一个偏函数,即从一个LogicalPlan转换成一个LogicalPlan的过程
+   *
+   * resolveOperators方法接收一个偏函数,偏函数必须只能是处理某种类型的LogicalPlan,返回也是LogicalPlan
    */
   def resolveOperators(rule: PartialFunction[LogicalPlan, LogicalPlan]): LogicalPlan = {
     if (!analyzed) {//没有分析过,才去分析
@@ -59,7 +63,7 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
         }
       } else {
         CurrentOrigin.withOrigin(origin) {
-          rule.applyOrElse(afterRuleOnChildren, identity[LogicalPlan])
+          rule.applyOrElse(afterRuleOnChildren, identity[LogicalPlan]) //如果afterRuleOnChildren满足rule偏函数规则,则处理,不满足则返回规则本身
         }
       }
     } else {//分析过了直接返回

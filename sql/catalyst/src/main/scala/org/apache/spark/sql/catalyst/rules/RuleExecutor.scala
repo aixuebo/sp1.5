@@ -84,18 +84,19 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
    * 对计划进行更改,按照一定规则进行更改计划
    */
   def execute(plan: TreeType): TreeType = {
-    var curPlan = plan
+    var curPlan = plan //开始传入进来的逻辑计划
 
     batches.foreach { batch => //循环所有批次
-      val batchStartPlan = curPlan //该批次开始时候的计划快照
+      val batchStartPlan = curPlan //该批次开始时候的计划快照----目的是与最终批次处理后生成的计划做对比,看是否更改了计划
       var iteration = 1 //迭代次数
       var lastPlan = curPlan //每一个规则后,最新的计划
       var continue = true
 
       // Run until fix point (or the max number of iterations as specified in the strategy.
       while (continue) {
+        //处理该批次的所有规则,按照顺序依次处理--最终产生最新的逻辑计划
         curPlan = batch.rules.foldLeft(curPlan) { //循环一个批次里面的所有规则,让该计划通过每一个规则,转换成新的计划
-          case (plan, rule) => //合并后的新的计划 以及 每一个规则
+          case (plan, rule) => //合并后的新的逻辑计划 以及 每一个规则
             val startTime = System.nanoTime()
             val result = rule(plan) //对该计划使用该规则
             val runTime = System.nanoTime() - startTime //计算规则的运行时间
@@ -135,8 +136,10 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
           |${sideBySide(plan.treeString, curPlan.treeString).mkString("\n")}
         """.stripMargin)
       } else {
-        logTrace(s"Batch ${batch.name} has no effect.")
+        logTrace(s"Batch ${batch.name} has no effect.") //说明该批次 第一次迭代都没有成功修改逻辑计划
       }
+
+      //继续循环下一个批次
     }
 
     curPlan
