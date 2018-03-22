@@ -40,7 +40,7 @@ import org.apache.spark.sql.execution.metric.SQLMetrics
  */
 @DeveloperApi
 case class Aggregate(
-    partial: Boolean,
+    partial: Boolean,//true表示局部聚合,不需要shuffle操作,本地聚合即可
     groupingExpressions: Seq[Expression],
     aggregateExpressions: Seq[NamedExpression],
     child: SparkPlan)
@@ -154,6 +154,7 @@ case class Aggregate(
         Iterator(resultProjection(aggregateResults))
       }
     } else {
+      //返回查询结果,是一个RDD---在子类rdd基础上继续算
       child.execute().mapPartitions { iter =>
         val hashTable = new HashMap[InternalRow, Array[AggregateFunction1]]
         val groupingProjection = new InterpretedMutableProjection(groupingExpressions, child.output)

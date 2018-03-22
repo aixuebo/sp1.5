@@ -158,6 +158,7 @@ class SimpleCatalog(val conf: CatalystConf) extends Catalog {
     // If an alias was specified by the lookup, wrap the plan in a subquery so that attributes are
     // properly qualified with this alias.
     alias.map(a => Subquery(a, tableWithQualifiers)).getOrElse(tableWithQualifiers) //因为别名存在,则设置别名
+    //最终的结果为Subquery(别名,Subquery(真实表名,LogicalPlan))
   }
 
   //返回在当前数据库下所有table名字和是否是临时表的元组

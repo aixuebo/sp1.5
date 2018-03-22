@@ -55,6 +55,7 @@ trait PredicateHelper {
 
   /**
    * id = 1 and (id = 2 and id = 3)  and (id = 4 and id = 5)
+   * 将相同都是and的where条件,转换成一个集合,即多层最后转换成一层了
    * @param condition
    * @return
    */
@@ -69,6 +70,7 @@ trait PredicateHelper {
   /**
    * id = 1 or (id = 2 and id = 3)  or (id = 4 and id = 5)
    * 最终被拆分成三部分组成的集合,即使用or拆分
+   * 将相同都是or的where条件,转换成一个集合,即多层最后转换成一层了
    * @param condition
    * @return
    */

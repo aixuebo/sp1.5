@@ -35,33 +35,33 @@ object DefaultOptimizer extends Optimizer {
 
   //预先设置的规则的批次集合
   val batches =
-    // SubQueries are only needed for analysis and can be removed before execution.
+    // SubQueries are only needed for analysis and can be removed before execution. 一旦分析结束后,子查询就没有用的,可以取消掉了
     Batch("Remove SubQueries", FixedPoint(100),//最大循环次数是100
       EliminateSubQueries) :: //该批次下有一个规则EliminateSubQueries
     Batch("Aggregate", FixedPoint(100),
-      ReplaceDistinctWithAggregate,
-      RemoveLiteralFromGroupExpressions) ::
+      ReplaceDistinctWithAggregate,//将DISTINCT的sql进行转换,即SELECT DISTINCT f1, f2 FROM t  ==>  SELECT f1, f2 FROM t GROUP BY f1, f2
+      RemoveLiteralFromGroupExpressions) :: //比如group by id,name,6,因此6这样的常量就可以被省略了
     Batch("Operator Optimizations", FixedPoint(100),
       // Operator push down
-      SetOperationPushDown,
-      SamplePushDown,
-      PushPredicateThroughJoin,
-      PushPredicateThroughProject,
+      SetOperationPushDown,//过滤不需要的select字段,过滤不满足where条件的数据
+      SamplePushDown,//对抽样的数据,where条件先过滤,以及只选择select目标的列
+      PushPredicateThroughJoin,//对jon过程进行where优先过滤操作
+      PushPredicateThroughProject,//当where条件用到的字段都在fields中存在的时候,可以转换成Project(filter)形式
       PushPredicateThroughGenerate,
-      ColumnPruning,
+      ColumnPruning,//尝试消除不需要读取的列
       // Operator combine
-      ProjectCollapsing,
-      CombineFilters,
-      CombineLimits,
+      ProjectCollapsing,//合并两个select合并成1个
+      CombineFilters,//合并两个相临的filter过滤操作,合并成1个。
+      CombineLimits,//合并两个limit操作,合并成一个，选择最小的即可
       // Constant folding
-      NullPropagation,
-      OptimizeIn,
-      ConstantFolding,
-      LikeSimplification,
-      BooleanSimplification,
-      RemovePositive,
-      SimplifyFilters,
-      SimplifyCasts,
+      NullPropagation,//如果值是null,该如何处理
+      OptimizeIn,//优化in 操作,比如id in (1,2,3) 将结果集优化成set代替,效果会更好
+      ConstantFolding,//使用一个常量 代替一个表达式
+      LikeSimplification,//优化like,有时候不需要正则表达式,只需要字符串的start  end contain等操作即可
+      BooleanSimplification,//移除各种表达式的组装,让其更加简单,比如一组表达式用and语法构建,可以简略一下
+      RemovePositive,//移除+号
+      SimplifyFilters,//移除一些filter,因为有一些where条件永远是true,那么就没有意义,永远是false说明没有结果
+      SimplifyCasts,//移除cast语法,因为数据类型本来就是对的,因此没必要加入cast语法
       SimplifyCaseConversionExpressions) ::
     Batch("Decimal Optimizations", FixedPoint(100),
       DecimalAggregates) ::
@@ -90,11 +90,15 @@ object SamplePushDown extends Rule[LogicalPlan] {
 /**
  * Pushes operations to either side of a Union, Intersect or Except.
  * 对Union, Intersect or Except.三种集合的操作,进行助词下推
+ *
+ * 谓词下推
+ * 将外层的where条件 更快的加入到较底层的查询模块中,从而能够提早进行数据过滤以及有可能更好地利用索引。
  */
 object SetOperationPushDown extends Rule[LogicalPlan] {
 
   /**
    * Maps Attributes from the left side to the corresponding Attribute on the right side.
+   * 让union的左边和右边两个逻辑计划对应的select字段 一一映射上
    */
   private def buildRewrites(bn: BinaryNode): AttributeMap[Attribute] = {
     assert(bn.isInstanceOf[Union] || bn.isInstanceOf[Intersect] || bn.isInstanceOf[Except]) //只是支持这三种情况
@@ -119,14 +123,14 @@ object SetOperationPushDown extends Rule[LogicalPlan] {
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    // Push down filter into union
+    // Push down filter into union 提前进行where过滤,减少查询的数据量
     case Filter(condition, u @ Union(left, right)) => //union后,进行where过滤掉,此时进行助词下推操作
       val rewrites = buildRewrites(u)
       Union(
         Filter(condition, left),
         Filter(pushToRight(condition, rewrites), right))
 
-    // Push down projection into union
+    // Push down projection into union  即不需要查询不需要的列
     case Project(projectList, u @ Union(left, right)) => //对union的结果,在进行select的情况,直接将select的内容推送到union即可
       val rewrites = buildRewrites(u)
       Union(
@@ -199,6 +203,9 @@ object ColumnPruning extends Rule[LogicalPlan] {
         Project(projectList, g.copy(child = Project(neededChildOutput.toSeq, g.child)))
       }
 
+    /**
+     * 表示select aaa from ( select xxx,sum(xx) from xx group by xxx) b,清理b中没必要输出的列
+     */
     case p @ Project(projectList, a @ Aggregate(groupingExpressions, aggregateExpressions, child))
         if (a.outputSet -- p.references).nonEmpty =>
       Project(
@@ -209,6 +216,7 @@ object ColumnPruning extends Rule[LogicalPlan] {
           child))
 
     // Eliminate unneeded attributes from either side of a Join.
+     //表示select aaa from ( select * from xx join bbb ) b,清理b中没必要输出的列
     case Project(projectList, Join(left, right, joinType, condition)) =>
       // Collect the list of all references required either above or to evaluate the condition.
       val allReferences: AttributeSet =
@@ -230,15 +238,16 @@ object ColumnPruning extends Rule[LogicalPlan] {
       Join(left, prunedChild(right, allReferences), LeftSemi, condition)
 
     // Push down project through limit, so that we may have chance to push it further.
+      //相当于对结果集 进行limit 10,然后对10条结果选择一些列打印出来---->优化成  对结果集的某些列先输出,然后在输出limit 10行
     case Project(projectList, Limit(exp, child)) =>
       Limit(exp, Project(projectList, child))
 
     // Push down project if possible when the child is sort
-    case p @ Project(projectList, s @ Sort(_, _, grandChild))
-      if s.references.subsetOf(p.outputSet) =>
-      s.copy(child = Project(projectList, grandChild))
+    case p @ Project(projectList, s @ Sort(_, _, grandChild)) //对order by排序后的结果进行select选择某些字段
+      if s.references.subsetOf(p.outputSet) => //说明排序的字段都在select中存在
+      s.copy(child = Project(projectList, grandChild)) //先对结果不排序前进行选择select若干个字段,然后在进行order by排序操作
 
-    // Eliminate no-op Projects
+    // Eliminate no-op Projects 相当于select * from (select * from biao )b 因此没必要多这最外层的查询
     case Project(projectList, child) if child.output == projectList => child //消除自己引用自己,因为列都一样,所以就不需要嵌套这一层
   }
 
@@ -272,22 +281,22 @@ object ProjectCollapsing extends Rule[LogicalPlan] {
       // We only collapse these two Projects if their overlapped expressions are all
       // deterministic.
       val hasNondeterministic = projectList1.exists(_.collect {
-        case a: Attribute if aliasMap.contains(a) => aliasMap(a).child
-      }.exists(!_.deterministic))
+        case a: Attribute if aliasMap.contains(a) => aliasMap(a).child //如果该字段在里面select中存在,则被里面的替换掉
+      }.exists(!_.deterministic))//说明元素存在不确定的表达式
 
-      if (hasNondeterministic) {
+      if (hasNondeterministic) {//说明存在不确定的表达式
         p //保持原样,即不进行合并操作
-      } else {
+      } else {//说明没有不确定的表达式
         // Substitute any attributes that are produced by the child projection, so that we safely
         // eliminate it.
-        // e.g., 'SELECT c + 1 FROM (SELECT a + b AS C ...' produces 'SELECT a + b + 1 ...' 我们将c+1,转换成a+b+1
+        // e.g., 'SELECT c + 1 FROM (SELECT a + b AS C ...' produces 'SELECT a + b + 1 ...' 我们将c+1,转换成a+b+1,因此取消了一层select
         // TODO: Fix TransformBase to avoid the cast below.
         val substitutedProjection = projectList1.map(_.transform {
-          case a: Attribute => aliasMap.getOrElse(a, a)
+          case a: Attribute => aliasMap.getOrElse(a, a) //外层的select字段使用里面的进行代替
         }).asInstanceOf[Seq[NamedExpression]]
         // collapse 2 projects may introduce unnecessary Aliases, trim them here.
         val cleanedProjection = substitutedProjection.map(p =>
-          CleanupAliases.trimNonTopLevelAliases(p).asInstanceOf[NamedExpression]
+          CleanupAliases.trimNonTopLevelAliases(p).asInstanceOf[NamedExpression] //有点没看懂,但是大概意思是了解了
         )
         Project(cleanedProjection, child)
       }
@@ -313,7 +322,7 @@ object LikeSimplification extends Rule[LogicalPlan] {
 
   //name like '%xxxx%'
   def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
-    case Like(l, Literal(utf, StringType)) =>
+    case Like(l, Literal(utf, StringType)) => //针对字符串形式的进行优化
       utf.toString match {
         case startsWith(pattern) if !pattern.endsWith("\\") => //将字符串转换成startsWith方法
           StartsWith(l, Literal(pattern))
@@ -341,7 +350,7 @@ object NullPropagation extends Rule[LogicalPlan] {
     case q: LogicalPlan => q transformExpressionsUp {
       case e @ Count(Literal(null, _)) => Cast(Literal(0L), e.dataType) //count(null)转换成0
       case e @ IsNull(c) if !c.nullable => Literal.create(false, BooleanType) // name is null,并且表达式c不是null,因此可以转换成false常量即可
-      case e @ IsNotNull(c) if !c.nullable => Literal.create(true, BooleanType)
+      case e @ IsNotNull(c) if !c.nullable => Literal.create(true, BooleanType) //直接转换成true
       case e @ GetArrayItem(Literal(null, _), _) => Literal.create(null, e.dataType)
       case e @ GetArrayItem(_, Literal(null, _)) => Literal.create(null, e.dataType)
       case e @ GetMapValue(Literal(null, _), _) => Literal.create(null, e.dataType) //创建一个null对象
@@ -400,6 +409,7 @@ object NullPropagation extends Rule[LogicalPlan] {
 /**
  * Replaces [[Expression Expressions]] that can be statically evaluated with
  * equivalent [[Literal]] values.
+ * 使用一个常量 代替一个表达式
  */
 object ConstantFolding extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
@@ -407,10 +417,10 @@ object ConstantFolding extends Rule[LogicalPlan] {
       // Skip redundant folding of literals. This rule is technically not necessary. Placing this
       // here avoids running the next rule for Literal values, which would create a new Literal
       // object and running eval unnecessarily.
-      case l: Literal => l
+      case l: Literal => l //本身就是常量,则不变
 
       // Fold expressions that are foldable.
-      case e if e.foldable => Literal.create(e.eval(EmptyRow), e.dataType)
+      case e if e.foldable => Literal.create(e.eval(EmptyRow), e.dataType) //说明该表达式可以转换成常量
     }
   }
 }
@@ -423,7 +433,7 @@ object ConstantFolding extends Rule[LogicalPlan] {
 object OptimizeIn extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case q: LogicalPlan => q transformExpressionsDown {
-      case In(v, list) if !list.exists(!_.isInstanceOf[Literal]) && list.size > 10 =>
+      case In(v, list) if !list.exists(!_.isInstanceOf[Literal]) && list.size > 10 => //in的元素数量>10,并且in里面的都是常量
         val hSet = list.map(e => e.eval(EmptyRow)) //获取list中的值的内容集合.将集合内容转换成set对象
         InSet(v, HashSet() ++ hSet)
     }
@@ -432,27 +442,27 @@ object OptimizeIn extends Rule[LogicalPlan] {
 
 /**
  * Simplifies boolean expressions:
- * 1. Simplifies expressions whose answer can be determined without evaluating both sides.
- * 2. Eliminates / extracts common factors.
- * 3. Merge same expressions
+ * 1. Simplifies expressions whose answer can be determined without evaluating both sides.当一个true确定了,那么就可以选择另外一个即可
+ * 2. Eliminates / extracts common factors.抽取或者取消公共部分
+ * 3. Merge same expressions 合并相同的表达式,选择一个即可
  * 4. Removes `Not` operator.
  */
 object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case q: LogicalPlan => q transformExpressionsUp {
       case and @ And(left, right) => (left, right) match { //两个表达式 and 操作
-        // true && r  =>  r
+        // true && r  因此只要看r即可
         case (Literal(true, BooleanType), r) => r //只看r即可
-        // l && true  =>  l
+        // l && true  =>  l 同理只看l即可
         case (l, Literal(true, BooleanType)) => l //只看前面left表达式即可
-        // false && r  =>  false
+        // false && r  =>  false ---直接返回false
         case (Literal(false, BooleanType), _) => Literal(false) //一旦有一个false,则结果就是false
-        // l && false  =>  false
+        // l && false  =>  false ---直接返回false
         case (_, Literal(false, BooleanType)) => Literal(false) //一旦有一个false,则结果就是false
-        // a && a  =>  a
+        // a && a  =>  a 说明表达式相同的,选择哪个都可以
         case (l, r) if l fastEquals r => l //说明表达式相同,因此选择一个即可
         // (a || b) && (a || c)  =>  a || (b && c) 提取公共条件
-        case _ =>
+        case _ => //上面的备注可以看到,说明是复杂的关系,因此提取一下公共部分
           // 1. Split left and right to get the disjunctive predicates,
           //   i.e. lhs = (a, b), rhs = (a, c)
           // 2. Find the common predict between lhsSet and rhsSet, i.e. common = (a)
@@ -468,7 +478,7 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
             val ldiff = lhs.filterNot(e => common.exists(e.semanticEquals(_))) //过滤掉公共的,剩余的left条件
             val rdiff = rhs.filterNot(e => common.exists(e.semanticEquals(_))) //过滤掉公共的,剩余的right条件
             if (ldiff.isEmpty || rdiff.isEmpty) {
-              // (a || b || c || ...) && (a || b) => (a || b)
+              // (a || b || c || ...) && (a || b) => (a || b)  说明与c已经没关系了
               common.reduce(Or)
             } else {
               // (a || b || c || ...) && (a || b || d || ...) =>
@@ -516,6 +526,7 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
           }
       }  // end of Or(left, right)
 
+        //去除not语法
       case not @ Not(exp) => exp match {
         // not(true)  =>  false
         case Literal(true, BooleanType) => Literal(false) //因为是取反,因此true就变成false
@@ -536,6 +547,7 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
 
       // if (true) a else b  =>  a
       // if (false) a else b  =>  b
+       //将if语法直接转换成具体的函数,不需要在判断了----前提是if中的选择已经确定了,其实很多时候是根据数据来判断的,因此这一步优化空间不是很大,除非判断条件是某个具体的时间什么的
       case e @ If(Literal(v, _), trueValue, falseValue) => if (v == true) trueValue else falseValue //把判断条件直接转换成true或者false对应的条件
     }
   }
@@ -557,6 +569,7 @@ object CombineFilters extends Rule[LogicalPlan] {
  * Removes filters that can be evaluated trivially.  This is done either by eliding the filter for
  * cases where it will always evaluate to `true`, or substituting a dummy empty relation when the
  * filter will always evaluate to `false`.
+ * 移除一些filter,因为有一些where条件永远是true,那么就没有意义,永远是false说明没有结果
  */
 object SimplifyFilters extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
@@ -580,7 +593,7 @@ object SimplifyFilters extends Rule[LogicalPlan] {
 object PushPredicateThroughProject extends Rule[LogicalPlan] with PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     //原始sql含义:select * from grandChild 子查询表,然后where 条件
-    case filter @ Filter(condition, project @ Project(fields, grandChild)) =>
+    case filter @ Filter(condition, project @ Project(fields, grandChild)) => //当where条件用到的字段都在fields中存在的时候,可以转换成Project(filter)形式
       // Create a map of Aliases to their values from the child projection.
       // e.g., 'SELECT a + b AS c, d ...' produces Map(c -> a + b).我们可以获取c等于a+b
       val aliasMap = AttributeMap(fields.collect {
@@ -605,7 +618,7 @@ object PushPredicateThroughProject extends Rule[LogicalPlan] with PredicateHelpe
         } else {
           // Push down the small conditions without nondeterministic expressions.
           val pushedCondition = deterministic.map(replaceAlias(_, aliasMap)).reduce(And)
-          Filter(nondeterministic.reduce(And),
+          Filter(nondeterministic.reduce(And),//剩余非静态的方法不能被转换
             project.copy(child = Filter(pushedCondition, grandChild)))
         }
       }
@@ -673,6 +686,17 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     // push the where condition down into join filter
+    /**
+select *
+from
+(
+	select *
+	from aaa
+	right join
+	bbb on aaa.id = bbb.id
+)
+where aaa.name = '' and bbb.name = '' and bbb.age > 20
+     */
     case f @ Filter(filterCondition, Join(left, right, joinType, joinCondition)) => //针对join表后的数据进行where处理
       val (leftFilterConditions, rightFilterConditions, commonFilterCondition) =
         split(splitConjunctivePredicates(filterCondition), left, right) //拆分where条件,分三部分:左边表的条件、右边表的条件、公共条件
@@ -684,13 +708,13 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
             reduceLeftOption(And).map(Filter(_, left)).getOrElse(left) //不断将两个相邻的条件用and连接起来,然后最终在进行一个filter过滤,在Left表基础上进行过滤
           val newRight = rightFilterConditions.
             reduceLeftOption(And).map(Filter(_, right)).getOrElse(right) //与left同理
-          val newJoinCond = (commonFilterCondition ++ joinCondition).reduceLeftOption(And) //公共的条件与原始join的条件进行合并,产生新的join条件
+          val newJoinCond = (commonFilterCondition ++ joinCondition).reduceLeftOption(And) //公共的条件与原始join的条件进行合并,产生新的join条件---此时可能有aaa.age>20这种表达式,但是不适合join操作,因为spark的join不适合操作非等的,因此不知道这个怎么处理的
 
           Join(newLeft, newRight, Inner, newJoinCond) //组成新的join条件
         case RightOuter =>
           // push down the right side only `where` condition
           //select * from (select * from biao1 right join biao2 on biao1.id = biao2.id) a where a.id = xxx
-          //为什么左边的条件不进行过滤呢,好奇怪
+          //为什么左边的条件不进行过滤呢,好奇怪---答案是因为是right join,以right为准,因此right过滤的一定是对的,真对left过滤的可能是不对的,应该是对join的结果进一步过滤才对,因此不参与计算left
           val newLeft = left
           val newRight = rightFilterConditions.
             reduceLeftOption(And).map(Filter(_, right)).getOrElse(right) //属于right表的条件用and连接起来,对right原是表进行过滤
@@ -712,6 +736,12 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
         case FullOuter => f // DO Nothing for Full Outer Join 不做任何优化
       }
 
+    /**
+  select *
+	from aaa
+	right join
+	bbb on aaa.id = bbb.id and aaa.name = '' and bbb.name = ''
+  */
     // push down the join filter into sub query scanning if applicable
     case f @ Join(left, right, joinType, joinCondition) => //就是一个简单的join表,对on后面的语法进行拆分
       val (leftJoinConditions, rightJoinConditions, commonJoinCondition) =
@@ -731,6 +761,13 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
           // push down the left side only join filter for left side sub query
           //select * from biao1 right join biao2 on biao1.id = biao2.id and b.id = xxx and a.id = xxx
           //因为on语法是在reduce端操作的,
+          /**
+           * 其实我的理解是完全在这里可以合并的,但是没有合并可能是在语义上让其更严格
+
+          right join 表示以为right为准,即right应该全部要,而left是可以过滤的。因此先对left进行过滤。
+          对结果在进行right上的过滤
+
+           */
           val newLeft = leftJoinConditions.
             reduceLeftOption(And).map(Filter(_, left)).getOrElse(left) //left表进行where补充,变成子查询
           val newRight = right
@@ -773,7 +810,7 @@ object RemovePositive extends Rule[LogicalPlan] {
 /**
  * Combines two adjacent [[Limit]] operators into one, merging the
  * expressions into one single expression.
- * 合并两个limit操作,合并成一个
+ * 合并两个limit操作,合并成一个，选择最小的即可
  */
 object CombineLimits extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {

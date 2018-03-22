@@ -77,7 +77,7 @@ class Analyzer(
 
   //分解
     Batch("Resolution", fixedPoint,
-      ResolveRelations ::
+      ResolveRelations :: //校验table的合法性
       ResolveReferences ::
       ResolveGroupingAnalytics ::
       ResolveSortReferences ::
@@ -85,7 +85,7 @@ class Analyzer(
       ResolveFunctions ::
       ResolveAliases ::
       ExtractWindowExpressions ::
-      GlobalAggregates ::
+      GlobalAggregates :: //select中有聚合函数的时候,将Project转换成Aggregate
       ResolveAggregateFunctions ::
       HiveTypeCoercion.typeCoercionRules ++
       extendedResolutionRules : _*),
@@ -260,6 +260,7 @@ class Analyzer(
 
   /**
    * Replaces [[UnresolvedRelation]]s with concrete relations from the catalog.
+   * 从catalog中找到未解析的table,使用具体的table去代替他
    */
   object ResolveRelations extends Rule[LogicalPlan] {
     def getTable(u: UnresolvedRelation): LogicalPlan = {
@@ -288,7 +289,7 @@ class Analyzer(
       case p: LogicalPlan if !p.childrenResolved => p
 
       // If the projection list contains Stars, expand it.
-      case p @ Project(projectList, child) if containsStar(projectList) =>
+      case p @ Project(projectList, child) if containsStar(projectList) => //表达式集合中有*,则返回true
         Project(
           projectList.flatMap {
             case s: Star => s.expand(child.output, resolver)
@@ -415,6 +416,7 @@ class Analyzer(
 
     /**
      * Returns true if `exprs` contains a [[Star]].
+     * 表达式集合中有*,则返回true
      */
     def containsStar(exprs: Seq[Expression]): Boolean =
       exprs.exists(_.collect { case _: Star => true }.nonEmpty)
@@ -445,10 +447,11 @@ class Analyzer(
    * clause.  This rule detects such queries and adds the required attributes to the original
    * projection, so that they will be available during sorting. Another projection is added to
    * remove these attributes after sorting.
+   * 处理order by语法
    */
   object ResolveSortReferences extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-      case s @ Sort(ordering, global, p @ Project(projectList, child))
+      case s @ Sort(ordering, global, p @ Project(projectList, child)) //order by 的字段集合、是否全局排序、依赖的逻辑计划
           if !s.resolved && p.resolved =>
         val (newOrdering, missing) = resolveAndFindMissing(ordering, p, child)
 
@@ -522,6 +525,7 @@ class Analyzer(
 
   /**
    * Turns projections that contain aggregate expressions into aggregations.
+   * select中有聚合函数的时候,将Project转换成Aggregate
    */
   object GlobalAggregates extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
@@ -529,6 +533,7 @@ class Analyzer(
         Aggregate(Nil, projectList, child)
     }
 
+    //说明表达式中有聚合函数
     def containsAggregates(exprs: Seq[Expression]): Boolean = {
       exprs.foreach(_.foreach {
         case agg: AggregateExpression => return true
@@ -556,7 +561,7 @@ class Analyzer(
         def resolvedAggregateFilter =
           resolvedOperator
             .asInstanceOf[Aggregate]
-            .aggregateExpressions.head
+            .aggregateExpressions.head //因为只查询了一个having表达式,因此返回head即可
 
         // If resolution was successful and we see the filter has an aggregate in it, add it to
         // the original aggregate operator.
@@ -962,8 +967,8 @@ class Analyzer(
    */
   object PullOutNondeterministic extends Rule[LogicalPlan] {
     override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-      case p if !p.resolved => p // Skip unresolved nodes.
-      case p: Project => p
+      case p if !p.resolved => p // Skip unresolved nodes.没有解析的要被跳过
+      case p: Project => p //select和where having的表达式也跳过
       case f: Filter => f
 
       // todo: It's hard to write a general rule to pull out nondeterministic expressions
@@ -994,8 +999,17 @@ class Analyzer(
 /**
  * Removes [[Subquery]] operators from the plan. Subqueries are only required to provide
  * scoping information for attributes and can be removed once analysis is complete.
- * 消灭子查询
+ * 消灭子查询,因为子查询仅仅是要求提供属性信息的作用域,一旦分析结束了,自然没有留下来的意义了
+ *
  * 从计划中删除子查询的计划
+ 比如
+ select
+ from a
+ left join
+ (
+ select * from ccc where id > 500
+) b on a.id = b.id
+ 只需要知道a和子查询select * from ccc where id > 500对应的逻辑计划即可,不需要有b了
  */
 object EliminateSubQueries extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {

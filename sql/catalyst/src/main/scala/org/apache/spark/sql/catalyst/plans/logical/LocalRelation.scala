@@ -22,9 +22,10 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, analysis}
 import org.apache.spark.sql.types.{StructField, StructType}
 
+//表示本地的一个数据集合
 object LocalRelation {
 
-  //根据输出的属性集合,创建空的表,即没有数据的表
+  //根据输出的属性集合,创建空的表,即没有数据的表---只有schema
   def apply(output: Attribute*): LocalRelation = new LocalRelation(output)
 
   //根据输出的属性集合,创建空的表,即没有数据的表

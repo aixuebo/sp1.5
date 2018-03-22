@@ -27,6 +27,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types._
 
 //文字对象由值和类型组成
+//表示常量
 object Literal {
   //参数v就是具体的值
   def apply(v: Any): Literal = v match {
