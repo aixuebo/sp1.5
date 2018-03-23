@@ -56,6 +56,7 @@ object HiveTypeCoercion {
 
   // See https://cwiki.apache.org/confluence/display/Hive/LanguageManual+Types.
   // The conversion for integral and floating point types have a linear widening hierarchy:
+  //表示数字类型的对象的集合--并且按照顺序存储
   private val numericPrecedence =
     IndexedSeq(
       ByteType,
@@ -70,10 +71,11 @@ object HiveTypeCoercion {
    * This handles all numeric types except fixed-precision decimals interacting with each other or
    * with primitive types, because in that case the precision and scale of the result depends on
    * the operation. Those rules are implemented in [[HiveTypeCoercion.DecimalPrecision]].
+   * 找到兼容两个类型 最好的兼容类型
    */
   val findTightestCommonTypeOfTwo: (DataType, DataType) => Option[DataType] = {
-    case (t1, t2) if t1 == t2 => Some(t1)
-    case (NullType, t1) => Some(t1)
+    case (t1, t2) if t1 == t2 => Some(t1) //相同类型,则用什么都无所谓
+    case (NullType, t1) => Some(t1) //如果与null类型比较,则忽略null类型
     case (t1, NullType) => Some(t1)
 
     case (t1: IntegralType, t2: DecimalType) if t2.isWiderThan(t1) =>
@@ -82,17 +84,19 @@ object HiveTypeCoercion {
       Some(t1)
 
     // Promote numeric types to the highest of the two
-    case (t1, t2) if Seq(t1, t2).forall(numericPrecedence.contains) =>
-      val index = numericPrecedence.lastIndexWhere(t => t == t1 || t == t2)
+    case (t1, t2) if Seq(t1, t2).forall(numericPrecedence.contains) => //都是数字类型
+      val index = numericPrecedence.lastIndexWhere(t => t == t1 || t == t2) //则获取最大的数字类型即可
       Some(numericPrecedence(index))
 
     case _ => None
   }
 
-  /** Similar to [[findTightestCommonType]], but can promote all the way to StringType. */
+  /** Similar to [[findTightestCommonType]], but can promote all the way to StringType.
+    * 公共类型能否转换成String类型
+    **/
   private def findTightestCommonTypeToString(left: DataType, right: DataType): Option[DataType] = {
     findTightestCommonTypeOfTwo(left, right).orElse((left, right) match {
-      case (StringType, t2: AtomicType) if t2 != BinaryType && t2 != BooleanType => Some(StringType)
+      case (StringType, t2: AtomicType) if t2 != BinaryType && t2 != BooleanType => Some(StringType) //二进制类型除外,他是不能转换成String的
       case (t1: AtomicType, StringType) if t1 != BinaryType && t1 != BooleanType => Some(StringType)
       case _ => None
     })
@@ -101,6 +105,7 @@ object HiveTypeCoercion {
   /**
    * Similar to [[findTightestCommonType]], if can not find the TightestCommonType, try to use
    * [[findTightestCommonTypeToString]] to find the TightestCommonType.
+   * 将参数集合中所有的类型进行查找,找到最通用的数据类型，并且是String类型
    */
   private def findTightestCommonTypeAndPromoteToString(types: Seq[DataType]): Option[DataType] = {
     types.foldLeft[Option[DataType]](Some(NullType))((r, c) => r match {
@@ -113,6 +118,7 @@ object HiveTypeCoercion {
   /**
    * Find the tightest common type of a set of types by continuously applying
    * `findTightestCommonTypeOfTwo` on these types.
+   * 将参数集合中所有的类型进行查找,找到最通用的数据类型
    */
   private def findTightestCommonType(types: Seq[DataType]): Option[DataType] = {
     types.foldLeft[Option[DataType]](Some(NullType))((r, c) => r match {

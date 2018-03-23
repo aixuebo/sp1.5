@@ -107,6 +107,7 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
    * Runs [[transformUp]] with `rule` on all expressions present in this query operator.
    * @param rule the rule to be applied to every expression in this operator.
    * @return
+   * 操作表达式部分
    */
   def transformExpressionsUp(rule: PartialFunction[Expression, Expression]): this.type = {
     var changed = false

@@ -29,6 +29,7 @@ sealed trait WindowSpec
 
 /**
  * The specification for a window function.
+ * 定义一个窗口函数
  * @param partitionSpec It defines the way that input rows are partitioned.
  * @param orderSpec It defines the ordering of rows in a partition.
  * @param frameSpecification It defines the window frame in a partition.
@@ -36,7 +37,7 @@ sealed trait WindowSpec
 case class WindowSpecDefinition(
     partitionSpec: Seq[Expression],
     orderSpec: Seq[SortOrder],
-    frameSpecification: WindowFrame) extends Expression with WindowSpec with Unevaluable {
+    frameSpecification: WindowFrame) extends Expression with WindowSpec with Unevaluable { //窗口函数是一个表达式
 
   def validate: Option[String] = frameSpecification match {
     case UnspecifiedFrame =>
@@ -82,6 +83,7 @@ case class WindowSpecDefinition(
 /**
  * A Window specification reference that refers to the [[WindowSpecDefinition]] defined
  * under the name `name`.
+ * 表示定义一个窗口函数
  */
 case class WindowSpecReference(name: String) extends WindowSpec
 
@@ -94,8 +96,10 @@ sealed trait FrameType
  * RowFrame treats rows in a partition individually. When a [[ValuePreceding]]
  * or a [[ValueFollowing]] is used as its [[FrameBoundary]], the value is considered
  * as a physical offset.
+ * 该模式代表的是以行为独立单位的模式
  * For example, `ROW BETWEEN 1 PRECEDING AND 1 FOLLOWING` represents a 3-row frame,
  * from the row precedes the current row to the row follows the current row.
+ * 比如 ROW BETWEEN 1 PRECEDING AND 1 FOLLOWING 表示的是3行，即当前行、前一行、后一行组成的窗口周期
  */
 case object RowFrame extends FrameType
 
@@ -107,20 +111,25 @@ case object RowFrame extends FrameType
  * For example, assuming the value of the current row's `ORDER BY` expression `expr` is `v`,
  * `RANGE BETWEEN 1 PRECEDING AND 1 FOLLOWING` represents a frame containing rows whose values
  * `expr` are in the range of [v-1, v+1].
+ * 比如order by v,然后定义RANGE BETWEEN 1 PRECEDING AND 1 FOLLOWING`,则表示连续三个不同v之间的模式
  *
  * If `ORDER BY` clause is not defined, all rows in the partition is considered as peers
  * of the current row.
+ * 如果没有order by，则表示所有的行都是一个分区
  */
 case object RangeFrame extends FrameType
 
 /**
  * The trait used to represent the type of a Window Frame Boundary.
+ * 定义窗口的百年姐
  */
 sealed trait FrameBoundary {
   def notFollows(other: FrameBoundary): Boolean
 }
 
-/** UNBOUNDED PRECEDING boundary. */
+/** UNBOUNDED PRECEDING boundary.
+  * 表示最前面
+  **/
 case object UnboundedPreceding extends FrameBoundary {
   def notFollows(other: FrameBoundary): Boolean = other match {
     case UnboundedPreceding => true
@@ -133,11 +142,15 @@ case object UnboundedPreceding extends FrameBoundary {
   override def toString: String = "UNBOUNDED PRECEDING"
 }
 
-/** <value> PRECEDING boundary. */
+/** <value> PRECEDING boundary.
+  * 表示向前多少行都满足条件
+  **/
 case class ValuePreceding(value: Int) extends FrameBoundary {
   def notFollows(other: FrameBoundary): Boolean = other match {
-    case UnboundedPreceding => false
+
+    case UnboundedPreceding => false //最开始肯定是不满足条件了
     case ValuePreceding(anotherValue) => value >= anotherValue
+      //以下都包含了向前多少行,因此都返回true
     case CurrentRow => true
     case vf: ValueFollowing => true
     case UnboundedFollowing => true
@@ -159,7 +172,9 @@ case object CurrentRow extends FrameBoundary {
   override def toString: String = "CURRENT ROW"
 }
 
-/** <value> FOLLOWING boundary. */
+/** <value> FOLLOWING boundary.
+  * 向后多少行
+  **/
 case class ValueFollowing(value: Int) extends FrameBoundary {
   def notFollows(other: FrameBoundary): Boolean = other match {
     case UnboundedPreceding => false
@@ -304,9 +319,11 @@ case class UnresolvedWindowExpression(
   override lazy val resolved = false
 }
 
+//表示一个窗口表达式
 case class WindowExpression(
     windowFunction: WindowFunction,
-    windowSpec: WindowSpecDefinition) extends Expression with Unevaluable {
+    windowSpec: WindowSpecDefinition) //表示一个窗口的定义
+    extends Expression with Unevaluable {
 
   override def children: Seq[Expression] = windowFunction :: windowSpec :: Nil
 

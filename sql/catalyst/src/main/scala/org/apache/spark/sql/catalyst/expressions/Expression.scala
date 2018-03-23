@@ -55,11 +55,14 @@ abstract class Expression extends TreeNode[Expression] {
    * executed.
    * 在执行查询之前，如果表达式是静态求值的候选项，则返回true
    *
+   * 有时候表达式的值是根据具体行数据决定的,此时该值都是false
+如果在执行查询前该表达式的值是可以计算的,则返回true
+
    * The following conditions are used to determine suitability for constant folding:
-   *  - A [[Coalesce]] is foldable if all of its children are foldable
+   *  - A [[Coalesce]] is foldable if all of its children are foldable 合并---所有子表达式都是已经查询前确定了,那么该表达式一定也是确定的
    *  - A [[BinaryExpression]] is foldable if its both left and right child are foldable
    *  - A [[Not]], [[IsNull]], or [[IsNotNull]] is foldable if its child is foldable
-   *  - A [[Literal]] is foldable
+   *  - A [[Literal]] is foldable 常量一定是确定的
    *  - A [[Cast]] or [[UnaryMinus]] is foldable if its child is foldable
    */
   def foldable: Boolean = false
@@ -69,16 +72,16 @@ abstract class Expression extends TreeNode[Expression] {
    * children.
    * 如果一个表达式总是返回相同的结果,则说明是确定的
    * Note that this means that an expression should be considered as non-deterministic if:
-   * - if it relies on some mutable internal state, or
-   * - if it relies on some implicit input that is not part of the children expression list.
-   * - if it has non-deterministic child or children.
+   * - if it relies on some mutable internal state, or 如果该表达式依赖内部的可变的状态,则说明是false
+   * - if it relies on some implicit input that is not part of the children expression list.表达式依赖一些隐士的输入,他不是子表达式的一部分
+   * - if it has non-deterministic child or children.他的子表达式就是不确定的
    *
    * An example would be `SparkPartitionID` that relies on the partition id returned by TaskContext.
    * By default leaf expressions are deterministic as Nil.forall(_.deterministic) returns true.
    */
   def deterministic: Boolean = children.forall(_.deterministic)
 
-  def nullable: Boolean //判断value是否是null  true表示此时是null
+  def nullable: Boolean //判断value是否允许是null  true表示允许是null
 
   //表达式依赖的属性集合
   def references: AttributeSet = AttributeSet(children.flatMap(_.references.iterator))
@@ -191,7 +194,7 @@ abstract class Expression extends TreeNode[Expression] {
 /**
  * An expression that cannot be evaluated. Some expressions don't live past analysis or optimization
  * time (e.g. Star). This trait is used by those expressions.
- * 不能求值的表达式,比如 *
+ * 不能求值的表达式,比如 *,窗口函数
  */
 trait Unevaluable extends Expression {
 
@@ -228,6 +231,7 @@ trait Nondeterministic extends Expression {
   }
 
   //将一行数据进行处理,比如二元表达式,就是两个表达式同时对该行数据进行处理,返回的值作为参数进行二元运算,最终返回一个结果就是返回值
+  //因为不知道有多少个参数,因此不确定性的表达式自己内部逻辑全实现即可
   protected def evalInternal(input: InternalRow): Any
 }
 
@@ -274,6 +278,8 @@ abstract class UnaryExpression extends Expression {
    * nullability, they can override this method to save null-check code.  If we need full control
    * of evaluation process, we should override [[eval]].
    * 具体一元方式是子类实现
+即一元表达式的具体子类只需要关注自己这一层接收的参数如何处理就可以。不需要关注参数怎么来的。
+参数是具体的计算后的值。
    */
   protected def nullSafeEval(input: Any): Any =
     sys.error(s"UnaryExpressions must override either eval or nullSafeEval")
@@ -326,6 +332,7 @@ abstract class UnaryExpression extends Expression {
  * An expression with two inputs and one output. The output is by default evaluated to null
  * if any input is evaluated to null.
  * 二元表达式,即两个输入 一个输出
+ * 比如 case class Contains(left: Expression, right: Expression) extends BinaryExpression with StringPredicate {
  */
 abstract class BinaryExpression extends Expression {
 
@@ -343,6 +350,8 @@ abstract class BinaryExpression extends Expression {
    * Default behavior of evaluation according to the default nullability of BinaryExpression.
    * If subclass of BinaryExpression override nullable, probably should also override this.
    * 同一样数据InternalRow 分别参与两个表达式运算,得到的值后在进行综合运算
+   * 注意:有任意一个是null参与的二元运算,结果都是null,不需要参与具体的计算了
+   * Contains中两个参数必须存在,如果一个参数为null,我们就可以说他们一定返回null,除非特例,子类需要重新写eval方法
    */
   override def eval(input: InternalRow): Any = {
     val value1 = left.eval(input)
@@ -428,14 +437,15 @@ abstract class BinaryOperator extends BinaryExpression with ExpectsInputTypes {
   /**
    * Expected input type from both left/right child expressions, similar to the
    * [[ImplicitCastInputTypes]] trait.
+   * 输入的数据类型
    */
   def inputType: AbstractDataType
 
-  def symbol: String
+  def symbol: String //语法规则,比如+ - 等
 
   override def toString: String = s"($left $symbol $right)"
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(inputType, inputType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(inputType, inputType) //二元的类型必须都相同
 
   //进行参数的有效性校验
   override def checkInputDataTypes(): TypeCheckResult = {
@@ -461,6 +471,7 @@ private[sql] object BinaryOperator {
  * An expression with three inputs and one output. The output is by default evaluated to null
  * if any input is evaluated to null.
  * 三个输入,一个输出
+ * 比如 SubstringIndex(strExpr: Expression, delimExpr: Expression, countExpr: Expression) extends TernaryExpression with ImplicitCastInputTypes
  */
 abstract class TernaryExpression extends Expression {
 
@@ -472,6 +483,8 @@ abstract class TernaryExpression extends Expression {
    * Default behavior of evaluation according to the default nullability of TernaryExpression.
    * If subclass of BinaryExpression override nullable, probably should also override this.
    * 将三个表达式都对同一个输入数据进行解析,然后执行nullSafeEval方法,返回新的值
+   *
+   * 注意:三个参数的值必须都是具体的值,一旦有一个是null,则返回的都是null
    */
   override def eval(input: InternalRow): Any = {
     val exprs = children

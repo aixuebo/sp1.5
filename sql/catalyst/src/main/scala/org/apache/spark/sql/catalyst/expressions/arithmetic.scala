@@ -69,6 +69,11 @@ case class UnaryPositive(child: Expression) extends UnaryExpression with Expects
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String =
     defineCodeGen(ctx, ev, c => c)
 
+  /**
+具体一元方式是子类实现
+即一元表达式的具体子类只需要关注自己这一层接收的参数如何处理就可以。不需要关注参数怎么来的。
+参数是具体的计算后的值。
+   */
   protected override def nullSafeEval(input: Any): Any = input //返回表达式对应的值
 }
 

@@ -26,6 +26,7 @@ import org.apache.spark.annotation.Experimental
 /**
  * :: Experimental ::
  * The base class for implementing user-defined aggregate functions (UDAF).
+ * 如何定义一个UDAF函数
  */
 @Experimental
 abstract class UserDefinedAggregateFunction extends Serializable {
@@ -43,6 +44,7 @@ abstract class UserDefinedAggregateFunction extends Serializable {
    *
    * The name of a field of this [[StructType]] is only used to identify the corresponding
    * input argument. Users can choose names to identify the input arguments.
+   * 定义udaf的输入参数的schema
    */
   def inputSchema: StructType
 
@@ -65,12 +67,14 @@ abstract class UserDefinedAggregateFunction extends Serializable {
 
   /**
    * The [[DataType]] of the returned value of this [[UserDefinedAggregateFunction]].
+   * UDAF聚合函数的返回值
    */
   def dataType: DataType
 
   /**
    * Returns true iff this function is deterministic, i.e. given the same input,
    * always return the same output.
+   * 相同的输入总是返回相同的输出,则该方法返回true
    */
   def deterministic: Boolean
 
@@ -87,24 +91,28 @@ abstract class UserDefinedAggregateFunction extends Serializable {
    * Updates the given aggregation buffer `buffer` with new input data from `input`.
    *
    * This is called once per input row.
+   * 每一行调用一次该方法,去更新buffer的内容---属于map方法
    */
   def update(buffer: MutableAggregationBuffer, input: Row): Unit
 
   /**
    * Merges two aggregation buffers and stores the updated buffer values back to `buffer1`.
    *
-   * This is called when we merge two partially aggregated data together.
+   * This is called when we merge two partially aggregated data together.用于合并两个局部的集合的时候调用该方法
+   * 属于reduce的方法
    */
   def merge(buffer1: MutableAggregationBuffer, buffer2: Row): Unit
 
   /**
    * Calculates the final result of this [[UserDefinedAggregateFunction]] based on the given
    * aggregation buffer.
+   * 计算最终的值
    */
   def evaluate(buffer: Row): Any
 
   /**
    * Creates a [[Column]] for this UDAF using given [[Column]]s as input arguments.
+   * 创建一个UDAF列,该列的意义就是计算UDAF
    */
   @scala.annotation.varargs
   def apply(exprs: Column*): Column = {

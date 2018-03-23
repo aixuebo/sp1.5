@@ -29,12 +29,31 @@ import org.apache.spark.sql.catalyst.expressions._
  * Use the static methods in [[Window]] to create a [[WindowSpec]].
  *
  * @since 1.4.0
+ 网上demo
+ import sys
+from pyspark.sql.window import Window
+import pyspark.sql.functions as func
+windowSpec = \
+  Window
+    .partitionBy(df['category']) \
+    .orderBy(df['revenue'].desc()) \
+    .rangeBetween(-sys.maxsize, sys.maxsize)
+dataFrame = sqlContext.table("productRevenue")
+revenue_difference = \
+  (func.max(dataFrame['revenue']).over(windowSpec) - dataFrame['revenue'])
+dataFrame.select(
+  dataFrame['product'],
+  dataFrame['category'],
+  dataFrame['revenue'],
+  revenue_difference.alias("revenue_difference"))
+
+ 计算一个分组下最大的销售额与每一个销售额的差
  */
 @Experimental
-class WindowSpec private[sql](
-    partitionSpec: Seq[Expression],
-    orderSpec: Seq[SortOrder],
-    frame: catalyst.expressions.WindowFrame) {
+class WindowSpec private[sql](//定义一个窗口函数
+    partitionSpec: Seq[Expression],//按照什么表达式去分类
+    orderSpec: Seq[SortOrder],//分类中排序规则
+    frame: catalyst.expressions.WindowFrame) {//该分类的组
 
   /**
    * Defines the partitioning columns in a [[WindowSpec]].
@@ -42,12 +61,13 @@ class WindowSpec private[sql](
    */
   @scala.annotation.varargs
   def partitionBy(colName: String, colNames: String*): WindowSpec = {
-    partitionBy((colName +: colNames).map(Column(_)): _*)
+    partitionBy((colName +: colNames).map(Column(_)): _*) //将若干个列进行组装成集合
   }
 
   /**
    * Defines the partitioning columns in a [[WindowSpec]].
    * @since 1.4.0
+   * 按照若干个列进行分组
    */
   @scala.annotation.varargs
   def partitionBy(cols: Column*): WindowSpec = {
@@ -57,6 +77,7 @@ class WindowSpec private[sql](
   /**
    * Defines the ordering columns in a [[WindowSpec]].
    * @since 1.4.0
+   * 按照若干个列排序
    */
   @scala.annotation.varargs
   def orderBy(colName: String, colNames: String*): WindowSpec = {
@@ -71,10 +92,10 @@ class WindowSpec private[sql](
   def orderBy(cols: Column*): WindowSpec = {
     val sortOrder: Seq[SortOrder] = cols.map { col =>
       col.expr match {
-        case expr: SortOrder =>
+        case expr: SortOrder => //说明本身就是order by xxx desc 这种全结构的语法
           expr
         case expr: Expression =>
-          SortOrder(expr, Ascending)
+          SortOrder(expr, Ascending) //默认升序排序
       }
     }
     new WindowSpec(partitionSpec, sortOrder, frame)
@@ -118,8 +139,8 @@ class WindowSpec private[sql](
     val boundaryStart = start match {
       case 0 => CurrentRow
       case Long.MinValue => UnboundedPreceding
-      case x if x < 0 => ValuePreceding(-start.toInt)
-      case x if x > 0 => ValueFollowing(start.toInt)
+      case x if x < 0 => ValuePreceding(-start.toInt) //向前查start个
+      case x if x > 0 => ValueFollowing(start.toInt) //向后若干个
     }
 
     val boundaryEnd = end match {
@@ -137,6 +158,8 @@ class WindowSpec private[sql](
 
   /**
    * Converts this [[WindowSpec]] into a [[Column]] with an aggregate expression.
+   * 对应hive的语法是SUM(pv) OVER(PARTITION BY cookieid ORDER BY createtime ROWS BETWEEN 3 PRECEDING AND CURRENT ROW) 表示当前行+往前3行的值进行sum,表示对窗口函数周期内的数据进行sum
+   * 首先参数列就是一个聚合函数列,即sum(pv),只是该sum后面接的是一个聚合函数窗口
    */
   private[sql] def withAggregate(aggregate: Column): Column = {
     val windowExpr = aggregate.expr match {

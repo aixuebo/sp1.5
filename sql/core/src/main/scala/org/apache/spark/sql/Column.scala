@@ -951,6 +951,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    *
    * @group expr_ops
    * @since 1.4.0
+   * 对应hive的语法是SUM(pv) OVER(PARTITION BY cookieid ORDER BY createtime ROWS BETWEEN 3 PRECEDING AND CURRENT ROW) 表示当前行+往前3行的值进行sum,表示对窗口函数周期内的数据进行sum
    */
   def over(window: expressions.WindowSpec): Column = window.withAggregate(this)
 

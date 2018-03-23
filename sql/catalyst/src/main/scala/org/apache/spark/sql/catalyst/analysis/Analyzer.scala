@@ -80,14 +80,14 @@ class Analyzer(
       ResolveRelations :: //校验table的合法性
       ResolveReferences ::
       ResolveGroupingAnalytics ::
-      ResolveSortReferences ::
+      ResolveSortReferences :: //处理order by中字段在孙子中的时候,该如何处理
       ResolveGenerate ::
       ResolveFunctions ::
       ResolveAliases ::
       ExtractWindowExpressions ::
       GlobalAggregates :: //select中有聚合函数的时候,将Project转换成Aggregate
       ResolveAggregateFunctions ::
-      HiveTypeCoercion.typeCoercionRules ++
+      HiveTypeCoercion.typeCoercionRules ++ //对数据类型进行兼容转换
       extendedResolutionRules : _*),
 
     Batch("Nondeterministic", Once,
@@ -423,7 +423,7 @@ class Analyzer(
   }
 
   private def resolveSortOrders(ordering: Seq[SortOrder], plan: LogicalPlan, throws: Boolean) = {
-    ordering.map { order =>
+    ordering.map { order => //循环每一个order by的属性
       // Resolve SortOrder in one round.
       // If throws == false or the desired attribute doesn't exist
       // (like try to resolve `a.b` but `a` doesn't exist), fail and return the origin one.
@@ -451,6 +451,28 @@ class Analyzer(
    */
   object ResolveSortReferences extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+      /**
+
+      select aa,bb,cc
+     from biao
+     (
+       select aa,bb,cc
+       from biao
+     )c
+     order by aa,cc
+       修改成
+select aa,bb
+from
+(
+     select aa,bb,cc
+     from biao
+     (
+       select aa,bb,cc
+       from biao
+     )c
+     order by aa,cc
+)
+       */
       case s @ Sort(ordering, global, p @ Project(projectList, child)) //order by 的字段集合、是否全局排序、依赖的逻辑计划
           if !s.resolved && p.resolved =>
         val (newOrdering, missing) = resolveAndFindMissing(ordering, p, child)
@@ -458,9 +480,9 @@ class Analyzer(
         // If this rule was not a no-op, return the transformed plan, otherwise return the original.
         if (missing.nonEmpty) {
           // Add missing attributes and then project them away after the sort.
-          Project(p.output,
+          Project(p.output,//多加一层select的目的就是让原始输出保持不变,即不影响原始输出
             Sort(newOrdering, global,
-              Project(projectList ++ missing, child)))
+              Project(projectList ++ missing, child))) //添加缺失的属性
         } else {
           logDebug(s"Failed to find $missing in ${p.output.mkString(", ")}")
           s // Nothing we can do here. Return original plan.
@@ -471,18 +493,28 @@ class Analyzer(
      * Given a child and a grandchild that are present beneath a sort operator, try to resolve
      * the sort ordering and returns it with a list of attributes that are missing from the
      * child but are present in the grandchild.
+     * 查找order by需要的字段在子节点中不存在,但是在孙子节点中存在的属性集合
+     * 比如下面的cc就没办法排序,要把他找到
+     select aa,bb
+     from biao
+     (
+       select aa,bb,cc
+       from biao
+     )c
+     order by aa,cc
      */
     def resolveAndFindMissing(
-        ordering: Seq[SortOrder],
-        child: LogicalPlan,
-        grandchild: LogicalPlan): (Seq[SortOrder], Seq[Attribute]) = {
+        ordering: Seq[SortOrder],//参与order by排序的字段集合
+        child: LogicalPlan,//子节点
+        grandchild: LogicalPlan) //孙子节点
+       : (Seq[SortOrder], Seq[Attribute]) = {//返回排序的所有属性  以及 缺失的属性
       val newOrdering = resolveSortOrders(ordering, grandchild, throws = true)
       // Construct a set that contains all of the attributes that we need to evaluate the
-      // ordering.
+      // ordering.我们需要排序的所有属性
       val requiredAttributes = AttributeSet(newOrdering.filter(_.resolved))
       // Figure out which ones are missing from the projection, so that we can add them and
       // remove them after the sort.
-      val missingInProject = requiredAttributes -- child.output
+      val missingInProject = requiredAttributes -- child.output //子集合输出中缺失的属性
       // It is important to return the new SortOrders here, instead of waiting for the standard
       // resolving process as adding attributes to the project below can actually introduce
       // ambiguity that was not present before.
@@ -500,7 +532,7 @@ class Analyzer(
           case u if !u.childrenResolved => u // Skip until children are resolved.
           case u @ UnresolvedFunction(name, children, isDistinct) =>
             withPosition(u) {
-              registry.lookupFunction(name, children) match {
+              registry.lookupFunction(name, children) match {//获取函数的实例
                 // We get an aggregate function built based on AggregateFunction2 interface.
                 // So, we wrap it in AggregateExpression2.
                 case agg2: AggregateFunction2 => AggregateExpression2(agg2, Complete, isDistinct)
@@ -508,7 +540,7 @@ class Analyzer(
                 // and COUTN(DISTINCT ...).
                 case sumDistinct: SumDistinct => sumDistinct
                 case countDistinct: CountDistinct => countDistinct
-                // DISTINCT is not meaningful with Max and Min.
+                // DISTINCT is not meaningful with Max and Min. 将其转换成max和min函数即可,不用考虑是否是isDistinct
                 case max: Max if isDistinct => max
                 case min: Min if isDistinct => min
                 // For other aggregate functions, DISTINCT keyword is not supported for now.
@@ -742,9 +774,11 @@ class Analyzer(
    *    it into the plan tree.
    */
   object ExtractWindowExpressions extends Rule[LogicalPlan] {
+    //true表示说select中包含窗口函数表达式
     private def hasWindowFunction(projectList: Seq[NamedExpression]): Boolean =
       projectList.exists(hasWindowFunction)
 
+    //说明表达式有窗口函数表达式
     private def hasWindowFunction(expr: NamedExpression): Boolean = {
       expr.find {
         case window: WindowExpression => true
@@ -754,7 +788,10 @@ class Analyzer(
 
     /**
      * From a Seq of [[NamedExpression]]s, extract expressions containing window expressions and
-     * other regular expressions that do not contain any window expression. For example, for
+     * other regular expressions that do not contain any window expression.
+     * 从表达式集合中拆分出窗口表达式 和 正常常规的表达式
+     *
+     * For example, for
      * `col1, Sum(col2 + col3) OVER (PARTITION BY col4 ORDER BY col5)`, we will extract
      * `col1`, `col2 + col3`, `col4`, and `col5` out and replace their appearances in
      * the window expression as attribute references. So, the first returned value will be
@@ -763,6 +800,7 @@ class Analyzer(
      *
      * @return (seq of expressions containing at lease one window expressions,
      *          seq of non-window expressions)
+     * 对参数的表达式集合进行拆分,按照是否是窗口表达式进行拆分
      */
     private def extract(
         expressions: Seq[NamedExpression]): (Seq[NamedExpression], Seq[NamedExpression]) = {
@@ -915,7 +953,7 @@ class Analyzer(
       // a resolved Aggregate will not have Window Functions.
       case f @ Filter(condition, a @ Aggregate(groupingExprs, aggregateExprs, child))
         if child.resolved &&
-           hasWindowFunction(aggregateExprs) &&
+           hasWindowFunction(aggregateExprs) && //说明select中包含窗口函数
            a.expressions.forall(_.resolved) =>
         val (windowExpressions, aggregateExpressions) = extract(aggregateExprs)
         // Create an Aggregate operator to evaluate aggregation functions.

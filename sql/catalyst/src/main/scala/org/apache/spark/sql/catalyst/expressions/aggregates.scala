@@ -50,9 +50,9 @@ trait AggregateExpression1 extends AggregateExpression {
  * Represents an aggregation that has been rewritten to be performed in two steps.
  *
  * @param finalEvaluation an aggregate expression that evaluates to same final result as the
- *                        original aggregation.
+ *                        original aggregation. 一个正常的聚合函数,即同样输入保证能获取同样输出的聚合函数
  * @param partialEvaluations A sequence of [[NamedExpression]]s that can be computed on partial
- *                           data sets and are required to compute the `finalEvaluation`.
+ *                           data sets and are required to compute the `finalEvaluation`.一组参数表达式集合,用于参与计算,即finalEvaluation的参数
  */
 case class SplitEvaluation(
     finalEvaluation: Expression,
