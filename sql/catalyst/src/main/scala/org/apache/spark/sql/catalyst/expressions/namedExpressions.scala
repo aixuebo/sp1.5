@@ -65,10 +65,13 @@ trait NamedExpression extends Expression {
    * 1. Empty Seq: when an attribute doesn't have a qualifier,
    *    e.g. top level attributes aliased in the SELECT clause, or column from a LocalRelation.
    * 2. Single element: either the table name or the alias name of the table.
+    * 只能是两种情况之一
+    * 要么是没有内容,表示该字段属于根节点对应的表,比如select name from user
+    * 要么是有一个值,表示别名,比如select a.name from user a
    */
   def qualifiers: Seq[String]
 
-  def toAttribute: Attribute
+  def toAttribute: Attribute //将其转换成一个属性对象
 
   /** Returns the metadata when an expression is a reference to another expression with metadata. */
   def metadata: Metadata = Metadata.empty
@@ -94,7 +97,7 @@ abstract class Attribute extends LeafExpression with NamedExpression {
   def withQualifiers(newQualifiers: Seq[String]): Attribute //设置别名前缀,即该属性属于哪个别名表的属性
   def withName(newName: String): Attribute //属性名字
 
-  override def toAttribute: Attribute = this
+  override def toAttribute: Attribute = this //返回本身
   def newInstance(): Attribute //创建一个属性对象
 
 }
