@@ -70,7 +70,7 @@ object PhysicalOperation extends PredicateHelper {
    * Collects projects and filters, in-lining/substituting aliases if necessary.  Here are two
    * examples for alias in-lining/substitution.  Before:
    * {{{
-   *   SELECT c1 FROM (SELECT key AS c1 FROM t1) t2 WHERE c1 > 10
+   *   SELECT c1 FROM (SELECT key AS c1 FROM t1) t2 WHERE c1 > 10   原来c1来自于t2,即c1对应的别名对象为Alias(t2,c1)---改成Alias(t1,c1)
    *   SELECT c1 AS c2 FROM (SELECT key AS c1 FROM t1) t2 WHERE c1 > 10
    * }}}
    * After:
@@ -103,6 +103,7 @@ object PhysicalOperation extends PredicateHelper {
   def substitute(aliases: Map[Attribute, Expression])(expr: Expression): Expression = {
     expr.transform {
       case a @ Alias(ref: AttributeReference, name) =>
+        //别名对应的child对象,重新对别名命名
         aliases.get(ref).map(Alias(_, name)(a.exprId, a.qualifiers)).getOrElse(a)
 
       case a: AttributeReference =>

@@ -31,9 +31,10 @@ private class ShuffledRowRDDPartition(val idx: Int) extends Partition {
 /**
  * A dummy partitioner for use with records whose partition ids have been pre-computed (i.e. for
  * use on RDDs of (Int, Row) pairs where the Int is a partition id in the expected range).
+ * 一个不吭声的partitioner,因为该数据的key就是已经计算好的分区，因此直接就返回key对应的分区即可
  */
 private class PartitionIdPassthrough(override val numPartitions: Int) extends Partitioner {
-  override def getPartition(key: Any): Int = key.asInstanceOf[Int]
+  override def getPartition(key: Any): Int = key.asInstanceOf[Int] //key就是分区id
 }
 
 /**
@@ -48,15 +49,15 @@ private class PartitionIdPassthrough(override val numPartitions: Int) extends Pa
  * @param numPartitions the number of post-shuffle partitions.
  */
 class ShuffledRowRDD(
-    @transient var prev: RDD[Product2[Int, InternalRow]],
+    @transient var prev: RDD[Product2[Int, InternalRow]],//key就是已经知道了该一行数据属于哪个分区
     serializer: Serializer,
     numPartitions: Int)
   extends RDD[InternalRow](prev.context, Nil) {
 
-  private val part: Partitioner = new PartitionIdPassthrough(numPartitions)
+  private val part: Partitioner = new PartitionIdPassthrough(numPartitions) //不依赖numPartitions数量
 
   override def getDependencies: Seq[Dependency[_]] = {
-    List(new ShuffleDependency[Int, InternalRow, InternalRow](prev, part, Some(serializer)))
+    List(new ShuffleDependency[Int, InternalRow, InternalRow](prev, part, Some(serializer))) //表示shuffle过程,key是分区id,value和合并后的结果依然是row对象
   }
 
   override val partitioner = Some(part)
@@ -67,10 +68,10 @@ class ShuffledRowRDD(
 
   override def compute(split: Partition, context: TaskContext): Iterator[InternalRow] = {
     val dep = dependencies.head.asInstanceOf[ShuffleDependency[Int, InternalRow, InternalRow]]
-    SparkEnv.get.shuffleManager.getReader(dep.shuffleHandle, split.index, split.index + 1, context)
+    SparkEnv.get.shuffleManager.getReader(dep.shuffleHandle, split.index, split.index + 1, context) //从远程加载该partition的数据
       .read()
-      .asInstanceOf[Iterator[Product2[Int, InternalRow]]]
-      .map(_._2)
+      .asInstanceOf[Iterator[Product2[Int, InternalRow]]] //知道该分区对应的数据结构是分区id与一行数据
+      .map(_._2) //返回一行数据
   }
 
   override def clearDependencies() {

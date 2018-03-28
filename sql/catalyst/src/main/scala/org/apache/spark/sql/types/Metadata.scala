@@ -215,6 +215,7 @@ object Metadata {
  * :: DeveloperApi ::
  *
  * Builder for [[Metadata]]. If there is a key collision, the latter will overwrite the former.
+ * 用于存储表的备注信息,或者列的备注信息
  */
 @DeveloperApi
 class MetadataBuilder {

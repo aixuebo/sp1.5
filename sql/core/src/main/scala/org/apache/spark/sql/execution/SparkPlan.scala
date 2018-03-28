@@ -93,7 +93,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     metrics(name).asInstanceOf[LongSQLMetric]
 
   // TODO: Move to `DistributedPlan`
-  /** Specifies how data is partitioned across different nodes in the cluster. */
+  /** Specifies how data is partitioned across different nodes in the cluster.数据如何被拆分到不同的节点运算 */
   def outputPartitioning: Partitioning = UnknownPartitioning(0) // TODO: WRONG WIDTH!
 
   /** Specifies any partition requirements on the input data for this operator. */
@@ -179,8 +179,8 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     execute()//该方法执行sql查询
       .mapPartitions { iter => //该部分是将执行结果在每一个节点进行转换
       val converter = CatalystTypeConverters.createToScalaConverter(schema)
-      iter.map(converter(_).asInstanceOf[Row])
-    }.collect() //该方法是将最终的结果抓去到本地
+      iter.map(converter(_).asInstanceOf[Row])//将一行数据转换成具体的值
+    }.collect() //该方法是将最终的结果抓去到本地----产生一个action行为
   }
 
   /**

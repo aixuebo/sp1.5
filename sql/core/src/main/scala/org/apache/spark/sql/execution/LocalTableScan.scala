@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 
 /**
  * Physical plan node for scanning data from a local collection.
+ * 物理计划----从本地集合中扫描数据
  */
 private[sql] case class LocalTableScan(
     output: Seq[Attribute],
@@ -34,11 +35,13 @@ private[sql] case class LocalTableScan(
 
   protected override def doExecute(): RDD[InternalRow] = rdd
 
+  //获取全部结果数据---因为是本地数据集合.因此不需要分布式去获取数据
   override def executeCollect(): Array[Row] = {
-    val converter = CatalystTypeConverters.createToScalaConverter(schema)
-    rows.map(converter(_).asInstanceOf[Row]).toArray
+    val converter = CatalystTypeConverters.createToScalaConverter(schema) //根据输出定义的数据格式,转换成scala的格式
+    rows.map(converter(_).asInstanceOf[Row]).toArray //因为知道了scala的格式,因此一行数据可以被解析成row对应的一行数据,因此组成了一组数据
   }
 
+  //获取limit个数据
   override def executeTake(limit: Int): Array[Row] = {
     val converter = CatalystTypeConverters.createToScalaConverter(schema)
     rows.map(converter(_).asInstanceOf[Row]).take(limit).toArray

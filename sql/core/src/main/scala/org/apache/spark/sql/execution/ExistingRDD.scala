@@ -106,7 +106,7 @@ private[sql] case class PhysicalRDD(
 
   protected override def doExecute(): RDD[InternalRow] = rdd
 
-  override def simpleString: String = "Scan " + extraInformation + output.mkString("[", ",", "]")
+  override def simpleString: String = "Scan " + extraInformation + output.mkString("[", ",", "]") //说明要去扫描哪张表,扫描哪些字段
 }
 
 private[sql] object PhysicalRDD {

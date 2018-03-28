@@ -179,6 +179,10 @@ case class Alias(child: Expression, name: String)(
  *                   qualified way. Consider the examples tableName.name, subQueryAlias.name.
  *                   tableName and subQueryAlias are possible qualifiers.
  * 代表一个属性StructField的详细信息
+ *
+ * 我猜想 select a.name b from biao a  或者 select str(a.name) b from biao a
+ * name 是b,dataType是String,即第一部分参数都描述select这个字段的
+ * 第二部分描述的是该字段锁对应的表达式,即a.name,或者str(a.name)
  */
 case class AttributeReference(
     name: String,//属性名字
