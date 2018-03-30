@@ -530,7 +530,7 @@ from
       case q: LogicalPlan =>
         q transformExpressions {
           case u if !u.childrenResolved => u // Skip until children are resolved.
-          case u @ UnresolvedFunction(name, children, isDistinct) =>
+          case u @ UnresolvedFunction(name, children, isDistinct) => //说明是一个函数表达式
             withPosition(u) {
               registry.lookupFunction(name, children) match {//获取函数的实例
                 // We get an aggregate function built based on AggregateFunction2 interface.
@@ -548,7 +548,7 @@ from
                 case other: AggregateExpression1 if isDistinct =>
                   failAnalysis(s"$name does not support DISTINCT keyword.")
                 // If it does not have DISTINCT keyword, we will return it as is.
-                case other => other
+                case other => other //说明是普通函数
               }
             }
         }

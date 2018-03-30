@@ -136,7 +136,7 @@ object UnresolvedAttribute {
 }
 
 //表示一个函数名字 + 一组表达式集合
-//即从未定义过的函数
+//即还尚未校验的函数--后续需要去被校验
 case class UnresolvedFunction(
     name: String,//函数名字
     children: Seq[Expression],//函数需要的表达式集合

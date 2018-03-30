@@ -111,7 +111,6 @@ case class Min(child: Expression) extends UnaryExpression with PartialAggregate1
 
 //求最小值的聚合函数
 //expr是一个表达式,用于计算当前行,将当前行转换成一个值
-//
 case class MinFunction(expr: Expression, base: AggregateExpression1) extends AggregateFunction1 {
   def this() = this(null, null) // Required for serialization.
 
