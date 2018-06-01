@@ -39,10 +39,11 @@ import org.apache.spark.{SparkConf, SparkEnv}
  * object.
  */
 private[joins] sealed trait HashedRelation {
-  def get(key: InternalRow): Seq[InternalRow]
+  def get(key: InternalRow): Seq[InternalRow] //如何给一个key返回相同key的row集合
 
   // This is a helper method to implement Externalizable, and is used by
   // GeneralHashedRelation and UniqueKeyHashedRelation
+  //将数组写入到输出流中
   protected def writeBytes(out: ObjectOutput, serialized: Array[Byte]): Unit = {
     out.writeInt(serialized.length) // Write the length of serialized bytes first
     out.write(serialized)
@@ -50,6 +51,7 @@ private[joins] sealed trait HashedRelation {
 
   // This is a helper method to implement Externalizable, and is used by
   // GeneralHashedRelation and UniqueKeyHashedRelation
+  //从输入流中读取数组
   protected def readBytes(in: ObjectInput): Array[Byte] = {
     val serializedSize = in.readInt() // Read the length of serialized bytes first
     val bytes = new Array[Byte](serializedSize)
@@ -61,6 +63,7 @@ private[joins] sealed trait HashedRelation {
 
 /**
  * A general [[HashedRelation]] backed by a hash map that maps the key into a sequence of values.
+ * 通过hash map的方式去实现
  */
 private[joins] final class GeneralHashedRelation(
     private var hashTable: JavaHashMap[InternalRow, CompactBuffer[InternalRow]])
@@ -84,6 +87,7 @@ private[joins] final class GeneralHashedRelation(
 /**
  * A specialized [[HashedRelation]] that maps key into a single value. This implementation
  * assumes the key is unique.
+ * map存储的只有key和value,value不是一个集合,因此要将单独的value转换成集合的过程
  */
 private[joins]
 final class UniqueKeyHashedRelation(private var hashTable: JavaHashMap[InternalRow, InternalRow])
@@ -94,7 +98,7 @@ final class UniqueKeyHashedRelation(private var hashTable: JavaHashMap[InternalR
 
   override def get(key: InternalRow): Seq[InternalRow] = {
     val v = hashTable.get(key)
-    if (v eq null) null else CompactBuffer(v)
+    if (v eq null) null else CompactBuffer(v) //将value转换成集合
   }
 
   def getValue(key: InternalRow): InternalRow = hashTable.get(key)
@@ -130,7 +134,7 @@ private[joins] object HashedRelation {
 
     // Whether the join key is unique. If the key is unique, we can convert the underlying
     // hash map into one specialized for this.
-    var keyIsUnique = true
+    var keyIsUnique = true //说明所有的key对应的value都是唯一的
 
     // Create a mapping of buildKeys -> rows
     while (input.hasNext) {
@@ -151,7 +155,7 @@ private[joins] object HashedRelation {
       }
     }
 
-    if (keyIsUnique) {
+    if (keyIsUnique) {//说明没有key只有一个value,而不是一个value集合
       val uniqHashTable = new JavaHashMap[InternalRow, InternalRow](hashTable.size)
       val iter = hashTable.entrySet().iterator()
       while (iter.hasNext) {
@@ -183,7 +187,7 @@ private[joins] object HashedRelation {
  *   ...
  */
 private[joins] final class UnsafeHashedRelation(
-    private var hashTable: JavaHashMap[UnsafeRow, CompactBuffer[UnsafeRow]])
+    private var hashTable: JavaHashMap[UnsafeRow, CompactBuffer[UnsafeRow]]) //用于存储key和对应key相同的value集合 映射关系
   extends HashedRelation with Externalizable {
 
   private[joins] def this() = this(null)  // Needed for serialization
@@ -371,6 +375,7 @@ private[joins] object UnsafeHashedRelation {
       sizeEstimate: Int): HashedRelation = {
 
     // Use a Java hash table here because unsafe maps expect fixed size records
+    //key是on关键字对应的数据,value是相同key对应的原始row数据集合
     val hashTable = new JavaHashMap[UnsafeRow, CompactBuffer[UnsafeRow]](sizeEstimate)
 
     // Create a mapping of buildKeys -> rows
@@ -380,14 +385,14 @@ private[joins] object UnsafeHashedRelation {
       val rowKey = keyGenerator(unsafeRow)
       if (!rowKey.anyNull) {
         val existingMatchList = hashTable.get(rowKey)
-        val matchList = if (existingMatchList == null) {
+        val matchList = if (existingMatchList == null) {//说明没有key存在,则为该key常见一个集合
           val newMatchList = new CompactBuffer[UnsafeRow]()
           hashTable.put(rowKey.copy(), newMatchList)
           newMatchList
-        } else {
+        } else {//说明有key存在
           existingMatchList
         }
-        matchList += unsafeRow.copy()
+        matchList += unsafeRow.copy()//将数据加入到key对应的集合中
       }
     }
 

@@ -42,10 +42,10 @@ private[hive] object SparkSQLEnv extends Logging {
       // the default appName [SparkSQLCLIDriver] in cli or beeline.
       val maybeAppName = sparkConf
         .getOption("spark.app.name")
-        .filterNot(_ == classOf[SparkSQLCLIDriver].getName)
+        .filterNot(_ == classOf[SparkSQLCLIDriver].getName) //过滤名字不能是SparkSQLCLIDriver
 
       sparkConf
-        .setAppName(maybeAppName.getOrElse(s"SparkSQL::${Utils.localHostName()}"))
+        .setAppName(maybeAppName.getOrElse(s"SparkSQL::${Utils.localHostName()}"))//如果名字没有设置,则设置名字为本地host
         .set(
           "spark.serializer",
           maybeSerializer.getOrElse("org.apache.spark.serializer.KryoSerializer"))
@@ -63,7 +63,7 @@ private[hive] object SparkSQLEnv extends Logging {
 
       hiveContext.setConf("spark.sql.hive.version", HiveContext.hiveExecutionVersion)
 
-      if (log.isDebugEnabled) {
+      if (log.isDebugEnabled) {//打印hive的所有属性
         hiveContext.hiveconf.getAllProperties.toSeq.sorted.foreach { case (k, v) =>
           logDebug(s"HiveConf var: $k=$v")
         }

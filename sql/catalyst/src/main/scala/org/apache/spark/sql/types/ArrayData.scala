@@ -124,16 +124,16 @@ abstract class ArrayData extends SpecializedGetters with Serializable {
   /**
    * 循环每一个元素,元素类型是elementType类型,然后获取的元素index和元素之后调用f函数,该函数没有返回值
    * @param elementType
-   * @param f
+   * @param f  参数是数组的下标 以及 对应的数据真实值
    */
   def foreach(elementType: DataType, f: (Int, Any) => Unit): Unit = {
     val size = numElements()
     var i = 0
     while (i < size) {
-      if (isNullAt(i)) {
+      if (isNullAt(i)) {//说明该值是null
         f(i, null)
       } else {
-        f(i, get(i, elementType))
+        f(i, get(i, elementType)) //获取下标 以及对应的具体的值
       }
       i += 1
     }

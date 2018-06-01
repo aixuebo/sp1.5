@@ -33,13 +33,15 @@ import org.apache.spark.sql.types._
  */
 sealed trait BufferSetterGetterUtils {
 
+  //根据schema,返回不同的数据类型,返回值是一个数组,即每一行所有数据 以及 第几个元素 将其转换成schema需要的类型
+  //返回函数集合
   def createGetters(schema: StructType): Array[(InternalRow, Int) => Any] = {
-    val dataTypes = schema.fields.map(_.dataType)
-    val getters = new Array[(InternalRow, Int) => Any](dataTypes.length)
+    val dataTypes = schema.fields.map(_.dataType) //schema规定的数据类型
+    val getters = new Array[(InternalRow, Int) => Any](dataTypes.length) //最终获取的值
 
     var i = 0
     while (i < getters.length) {
-      getters(i) = dataTypes(i) match {
+      getters(i) = dataTypes(i) match {//
         case BooleanType =>
           (row: InternalRow, ordinal: Int) =>
             if (row.isNullAt(ordinal)) null else row.getBoolean(ordinal)
@@ -85,13 +87,14 @@ sealed trait BufferSetterGetterUtils {
     getters
   }
 
-  def createSetters(schema: StructType): Array[((MutableRow, Int, Any) => Unit)] = {
-    val dataTypes = schema.fields.map(_.dataType)
+  //将数据转换后.重新生成一行新的数据需要的函数集合
+  def createSetters(schema: StructType): Array[((MutableRow, Int, Any) => Unit)] = { //参数是将any这个真实的值进行类型转换,按照schema的方式转换,然后存储到MutableRow的第index个位置
+    val dataTypes = schema.fields.map(_.dataType) //schame需要的数据类型
     val setters = new Array[(MutableRow, Int, Any) => Unit](dataTypes.length)
 
     var i = 0
     while (i < setters.length) {
-      setters(i) = dataTypes(i) match {
+      setters(i) = dataTypes(i) match {//每一个schema类型
         case b: BooleanType =>
           (row: MutableRow, ordinal: Int, value: Any) =>
             if (value != null) {
@@ -194,9 +197,9 @@ private[sql] class MutableAggregationBufferImpl (
     newOffsets
   }
 
-  private[this] val bufferValueGetters = createGetters(schema)
+  private[this] val bufferValueGetters = createGetters(schema) //get函数集合
 
-  private[this] val bufferValueSetters = createSetters(schema)
+  private[this] val bufferValueSetters = createSetters(schema) //set函数集合
 
   override def length: Int = toCatalystConverters.length
 
@@ -293,12 +296,12 @@ private[sql] class InputAggregationBuffer private[sql] (
  * @param udaf
  */
 private[sql] case class ScalaUDAF(
-    children: Seq[Expression],
-    udaf: UserDefinedAggregateFunction)
+    children: Seq[Expression],//输入参数,比如求平均值的时候,就需要一个值即可,因此参数就一个
+    udaf: UserDefinedAggregateFunction)//自定义的udaf函数
   extends AggregateFunction2 with Logging {
 
   require(
-    children.length == udaf.inputSchema.length,
+    children.length == udaf.inputSchema.length,//udaf需要的参数和需要的参数个数相同
     s"$udaf only accepts ${udaf.inputSchema.length} arguments, " +
       s"but ${children.length} are provided.")
 
@@ -308,9 +311,9 @@ private[sql] case class ScalaUDAF(
 
   override def deterministic: Boolean = udaf.deterministic
 
-  override val inputTypes: Seq[DataType] = udaf.inputSchema.map(_.dataType)
+  override val inputTypes: Seq[DataType] = udaf.inputSchema.map(_.dataType) //输入的数据类型
 
-  override val bufferSchema: StructType = udaf.bufferSchema
+  override val bufferSchema: StructType = udaf.bufferSchema //中间需要的数据类型
 
   override val bufferAttributes: Seq[AttributeReference] = bufferSchema.toAttributes
 
@@ -324,6 +327,7 @@ private[sql] case class ScalaUDAF(
     StructType(inputFields)
   }
 
+  //返回是一个函数,参数是需要一行数据,返回一行数据,即表达式对应的数据提取出来了
   private lazy val inputProjection = {
     val inputAttributes = childrenSchema.toAttributes
     log.debug(
@@ -337,9 +341,12 @@ private[sql] case class ScalaUDAF(
     }
   }
 
+  //类型转换,即给定的是一个数据值,将其转换成schma需要的数据类型值的过程,比如给定字符串true,转换成boolean类型的true
+  //为输入参数进行类型转换,即为表达式进行类型转换
   private[this] lazy val inputToScalaConverters: Any => Any =
     CatalystTypeConverters.createToScalaConverter(childrenSchema)
 
+  //为中间结果需要的数据进行类型转换
   private[this] lazy val bufferValuesToCatalystConverters: Array[Any => Any] = {
     bufferSchema.fields.map { field =>
       CatalystTypeConverters.createToCatalystConverter(field.dataType)

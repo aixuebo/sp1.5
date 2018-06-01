@@ -44,7 +44,7 @@ case class Project(projectList: Seq[NamedExpression], child: SparkPlan) extends 
   override private[sql] lazy val metrics = Map(
     "numRows" -> SQLMetrics.createLongMetric(sparkContext, "number of rows"))
 
-  @transient lazy val buildProjection = newMutableProjection(projectList, child.output)
+  @transient lazy val buildProjection = newMutableProjection(projectList, child.output) //传入两个参数,返回值是MutableProjection对象
 
   protected override def doExecute(): RDD[InternalRow] = {
     val numRows = longMetric("numRows")
@@ -52,7 +52,7 @@ case class Project(projectList: Seq[NamedExpression], child: SparkPlan) extends 
       val reusableProjection = buildProjection()
       iter.map { row =>
         numRows += 1
-        reusableProjection(row)
+        reusableProjection(row) //row调用的是MutableProjection对象的apply方法,需要row作为参数
       }
     }
   }
@@ -108,8 +108,8 @@ case class Filter(condition: Expression, child: SparkPlan) extends UnaryNode {
     "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
 
   protected override def doExecute(): RDD[InternalRow] = {
-    val numInputRows = longMetric("numInputRows")
-    val numOutputRows = longMetric("numOutputRows")
+    val numInputRows = longMetric("numInputRows") //输入行数
+    val numOutputRows = longMetric("numOutputRows") //输出行数
     child.execute().mapPartitions { iter =>
       val predicate = newPredicate(condition, child.output)
       iter.filter { row =>

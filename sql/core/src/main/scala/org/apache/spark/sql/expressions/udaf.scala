@@ -62,6 +62,8 @@ abstract class UserDefinedAggregateFunction extends Serializable {
    *
    * The name of a field of this [[StructType]] is only used to identify the corresponding
    * buffer value. Users can choose names to identify the input arguments.
+   * 定义计算过程中需要的中间变量,比如要求均值,那么中间就需要记录多少个数据了,以及目前总和是多少
+   * 比如 new StructType().add("mycnt", LongType).add("mysum", DoubleType)
    */
   def bufferSchema: StructType
 
@@ -100,6 +102,9 @@ abstract class UserDefinedAggregateFunction extends Serializable {
    *
    * This is called when we merge two partially aggregated data together.用于合并两个局部的集合的时候调用该方法
    * 属于reduce的方法
+   *
+   * buffer1是本地local产生的一行随时merge的数据。
+   * buffer2其实也是MutableAggregationBuffer,代表一行数据,而该行数据是不断从不同节点产生的汇总数据
    */
   def merge(buffer1: MutableAggregationBuffer, buffer2: Row): Unit
 
@@ -144,10 +149,13 @@ abstract class UserDefinedAggregateFunction extends Serializable {
  * A [[Row]] representing an mutable aggregation buffer.
  *
  * This is not meant to be extended outside of Spark.
+ * 代表一行数据
  */
 @Experimental
 abstract class MutableAggregationBuffer extends Row {
 
-  /** Update the ith value of this buffer. */
+  /** Update the ith value of this buffer.
+    * 更新第i个值
+    **/
   def update(i: Int, value: Any): Unit
 }

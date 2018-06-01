@@ -35,13 +35,13 @@ object ExtractValue {
   /**
    * Returns the resolved `ExtractValue`. It will return one kind of concrete `ExtractValue`,
    * depend on the type of `child` and `extraction`.
-   *
+   *  表示复杂数据类型  以及 抽取的条件
    *   `child`      |    `extraction`    |    concrete `ExtractValue`
    * ----------------------------------------------------------------
    *    Struct      |   Literal String   |        GetStructField 从Struct对象中抽取一个属性对应得知
    * Array[Struct]  |   Literal String   |     GetArrayStructFields  从Struct数组中抽取一个属性对应的值的集合
-   *    Array       |   Integral type    |         GetArrayItem  从数组中抽取指定index下标对应的值
-   *     Map        |   map key type     |         GetMapValue  从map中抽取指定key对应的值
+   *    Array       |   Integral type  表示按照数组的下标抽取,因此是int |         GetArrayItem  从数组中抽取指定index下标对应的值
+   *     Map        |   map key type  表示按照字符串的key抽取   |         GetMapValue  从map中抽取指定key对应的值
    */
   def apply(
       child: Expression, //数据集合表达式
@@ -100,6 +100,8 @@ object ExtractValue {
  *
  * No need to do type checking since it is handled by [[ExtractValue]].
  * 从InternalRow中获取一个属性对应的值,该属性是第ordinal个属性,属性对应的schema是StructField
+ *
+ * 参数child就是该row对象,获取该row对象的第ordinal个属性对应的值
  */
 case class GetStructField(child: Expression, field: StructField, ordinal: Int)
   extends UnaryExpression {
@@ -131,7 +133,7 @@ case class GetStructField(child: Expression, field: StructField, ordinal: Int)
  * 从strct数组中抽取某一个属性对应的值的集合
  */
 case class GetArrayStructFields(
-    child: Expression,//数组,
+    child: Expression,//数组对象--该数组的元素都是row,
     field: StructField,//要获取的元素属性对应的值
     ordinal: Int,//该field是行里面第几个属性
     numFields: Int,//该行有多少个属性
@@ -192,6 +194,9 @@ case class GetArrayStructFields(
  *
  * We need to do type checking here as `ordinal` expression maybe unresolved.
  * 从数组中获取一个下标对应的值
+ *
+ * 参数child 返回值一定是一个数组对象
+ * 参数ordinal 表示要获取的数组下标,即整数类型
  */
 case class GetArrayItem(child: Expression, ordinal: Expression)
   extends BinaryExpression with ExpectsInputTypes {
@@ -209,6 +214,7 @@ case class GetArrayItem(child: Expression, ordinal: Expression)
 
   override def dataType: DataType = child.dataType.asInstanceOf[ArrayType].elementType //数据类型就是数组的元素类型
 
+  //第一个参数是数组,第二个参数是int的下标
   protected override def nullSafeEval(value: Any, ordinal: Any): Any = {
     val baseValue = value.asInstanceOf[ArrayData] //得到数组
     val index = ordinal.asInstanceOf[Number].intValue() //得到要获取的下标
@@ -237,6 +243,8 @@ case class GetArrayItem(child: Expression, ordinal: Expression)
  * Returns the value of key `key` in Map `child`.
  * 从map中获取一个key对应的值
  * We need to do type checking here as `key` expression maybe unresolved.
+ * 第一个参数child 表示返回值一定是一个map对象
+ * 第二个参数key表示要获取map.get(key)中的key的name
  */
 case class GetMapValue(child: Expression, key: Expression)
   extends BinaryExpression with ExpectsInputTypes {
@@ -258,7 +266,9 @@ case class GetMapValue(child: Expression, key: Expression)
   override def dataType: DataType = child.dataType.asInstanceOf[MapType].valueType //获取对应的value类型
 
   // todo: current search is O(n), improve it.
+  //value 代表map对象,---该map对象是由两个数组组成的,即key和value两个数组
   //ordinal 表示key的name
+  //该方法代表map.get(key)的实现
   protected override def nullSafeEval(value: Any, ordinal: Any): Any = {
     val map = value.asInstanceOf[MapData]
     val length = map.numElements() //map中元素数量

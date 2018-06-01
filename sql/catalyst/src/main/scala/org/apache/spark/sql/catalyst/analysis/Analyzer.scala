@@ -82,7 +82,7 @@ class Analyzer(
       ResolveGroupingAnalytics ::
       ResolveSortReferences :: //处理order by中字段在孙子中的时候,该如何处理
       ResolveGenerate ::
-      ResolveFunctions ::
+      ResolveFunctions :: //校验function的name必须存在
       ResolveAliases ::
       ExtractWindowExpressions ::
       GlobalAggregates :: //select中有聚合函数的时候,将Project转换成Aggregate
@@ -524,6 +524,7 @@ from
 
   /**
    * Replaces [[UnresolvedFunction]]s with concrete [[Expression]]s.
+   * 校验function的name必须存在
    */
   object ResolveFunctions extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
@@ -534,7 +535,7 @@ from
             withPosition(u) {
               registry.lookupFunction(name, children) match {//获取函数的实例
                 // We get an aggregate function built based on AggregateFunction2 interface.
-                // So, we wrap it in AggregateExpression2.
+                // So, we wrap it in AggregateExpression2.第2种实现方式,可以实现distict语法的聚合
                 case agg2: AggregateFunction2 => AggregateExpression2(agg2, Complete, isDistinct)
                 // Currently, our old aggregate function interface supports SUM(DISTINCT ...)
                 // and COUTN(DISTINCT ...).

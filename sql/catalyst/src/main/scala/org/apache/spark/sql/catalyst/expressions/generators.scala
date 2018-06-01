@@ -55,7 +55,7 @@ trait Generator extends Expression {
    * TODO we probably need to add more information like metadata etc.
    * 如果是map,则需要两组数据类型,分别是key和value的类型,以及对应的是否为null  ;如果是数组,则显示最终行的类型就是数组的类型,boolean表示是否允许为null存在
    */
-  def elementTypes: Seq[(DataType, Boolean)]
+  def elementTypes: Seq[(DataType, Boolean)] //返回每一行的数据类型 以及是否允许null
 
   /** Should be implemented by child classes to perform specific Generators.
     * 将一行数据转换成多行数据的迭代器

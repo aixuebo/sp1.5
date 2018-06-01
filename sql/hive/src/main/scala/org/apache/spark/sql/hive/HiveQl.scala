@@ -215,10 +215,11 @@ private[hive] object HiveQl extends Logging {
 
     /**
      * Returns this ASTNode with the children changed to `newChildren`.
+     * 更改ASTNode的子节点对象
      */
     def withChildren(newChildren: Seq[ASTNode]): ASTNode = {
-      (1 to n.getChildCount).foreach(_ => n.deleteChild(0))
-      n.addChildren(newChildren)
+      (1 to n.getChildCount).foreach(_ => n.deleteChild(0)) //删除原有的子节点
+      n.addChildren(newChildren) //使用新的子节点代替
       n
     }
 

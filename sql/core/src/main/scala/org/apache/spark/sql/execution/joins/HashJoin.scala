@@ -76,28 +76,32 @@ trait HashJoin {
       numOutputRows: LongSQLMetric): Iterator[InternalRow] =
   {
     new Iterator[InternalRow] {
-      private[this] var currentStreamedRow: InternalRow = _
-      private[this] var currentHashMatches: Seq[InternalRow] = _
+      private[this] var currentStreamedRow: InternalRow = _ //streamIter中处理的当前行数据
+      private[this] var currentHashMatches: Seq[InternalRow] = _ //与currentStreamedRow相同key的行集合
       private[this] var currentMatchPosition: Int = -1
 
       // Mutable per row objects.
       private[this] val joinRow = new JoinedRow
+      //参数是两个表join后的schema集合对应的行,返回最终需要的行属性
+      //该方法说明要一个InternalRow参数,返回一个InternalRow对象
       private[this] val resultProjection: (InternalRow) => InternalRow = {
         if (isUnsafeMode) {
           UnsafeProjection.create(self.schema)
         } else {
-          identity[InternalRow]
+          identity[InternalRow] //返回两个行merge后的结果
         }
       }
 
+      //对一个row对象如何产生key
       private[this] val joinKeys = streamSideKeyGenerator
 
       override final def hasNext: Boolean =
         (currentMatchPosition != -1 && currentMatchPosition < currentHashMatches.size) ||
           (streamIter.hasNext && fetchNext())
 
+      //返回两个行merge后的结果
       override final def next(): InternalRow = {
-        val ret = buildSide match {
+        val ret = buildSide match { //拼装成一个大行,该行有两个表的数据组成的一个大的行,即两个表的schema拼装而成
           case BuildRight => joinRow(currentStreamedRow, currentHashMatches(currentMatchPosition))
           case BuildLeft => joinRow(currentHashMatches(currentMatchPosition), currentStreamedRow)
         }
