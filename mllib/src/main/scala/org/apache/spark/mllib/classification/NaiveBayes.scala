@@ -311,14 +311,16 @@ object NaiveBayesModel extends Loader[NaiveBayesModel] {
  */
 @Since("0.9.0")
 class NaiveBayes private (
-    private var lambda: Double,
-    private var modelType: String) extends Serializable with Logging {
+    private var lambda: Double,//平滑因子 默认是1
+    private var modelType: String) //多项式还是伯努利 贝叶斯方式类型
+   extends Serializable with Logging {
 
   import NaiveBayes.{Bernoulli, Multinomial}
 
   @Since("1.4.0")
   def this(lambda: Double) = this(lambda, NaiveBayes.Multinomial)
 
+  //平滑因子默认是1.默认是多项式贝叶斯
   @Since("0.9.0")
   def this() = this(1.0, NaiveBayes.Multinomial)
 
@@ -336,6 +338,7 @@ class NaiveBayes private (
   /**
    * Set the model type using a string (case-sensitive).
    * Supported options: "multinomial" (default) and "bernoulli".
+   * 设置贝叶斯类型
    */
   @Since("1.4.0")
   def setModelType(modelType: String): NaiveBayes = {
@@ -351,11 +354,13 @@ class NaiveBayes private (
 
   /**
    * Run the algorithm with the configured parameters on an input RDD of LabeledPoint entries.
-   *
+   * 运行贝叶斯算法去训练模型
    * @param data RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
    */
   @Since("0.9.0")
   def run(data: RDD[LabeledPoint]): NaiveBayesModel = {
+      
+    //定义方法 多项式
     val requireNonnegativeValues: Vector => Unit = (v: Vector) => {
       val values = v match {
         case sv: SparseVector => sv.values
@@ -366,6 +371,7 @@ class NaiveBayes private (
       }
     }
 
+    //定义方法 伯努利
     val requireZeroOneBernoulliValues: Vector => Unit = (v: Vector) => {
       val values = v match {
         case sv: SparseVector => sv.values
@@ -377,7 +383,7 @@ class NaiveBayes private (
       }
     }
 
-    // Aggregates term frequencies per label.
+    // Aggregates term frequencies per label.聚合label词频
     // TODO: Calling combineByKey and collect creates two stages, we can implement something
     // TODO: similar to reduceByKeyLocally to save one stage.
     val aggregated = data.map(p => (p.label, p.features)).combineByKey[(Long, DenseVector)](
@@ -441,10 +447,10 @@ class NaiveBayes private (
 @Since("0.9.0")
 object NaiveBayes {
 
-  /** String name for multinomial model type. */
+  /** String name for multinomial model type. 多项式贝叶斯*/
   private[spark] val Multinomial: String = "multinomial"
 
-  /** String name for Bernoulli model type. */
+  /** String name for Bernoulli model type. 伯努利贝叶斯*/
   private[spark] val Bernoulli: String = "bernoulli"
 
   /* Set of modelTypes that NaiveBayes supports */
@@ -461,6 +467,7 @@ object NaiveBayes {
    *
    * @param input RDD of `(label, array of features)` pairs.  Every vector should be a frequency
    *              vector or a count vector.
+   *  输入是label标签和特征向量作为的一行数据。组成的RDD
    */
   @Since("0.9.0")
   def train(input: RDD[LabeledPoint]): NaiveBayesModel = {
@@ -476,7 +483,7 @@ object NaiveBayes {
    *
    * @param input RDD of `(label, array of features)` pairs.  Every vector should be a frequency
    *              vector or a count vector.
-   * @param lambda The smoothing parameter
+   * @param lambda The smoothing parameter 平滑因子
    */
   @Since("0.9.0")
   def train(input: RDD[LabeledPoint], lambda: Double): NaiveBayesModel = {
