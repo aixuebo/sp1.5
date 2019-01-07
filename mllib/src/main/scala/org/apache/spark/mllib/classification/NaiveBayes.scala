@@ -43,15 +43,17 @@ import org.apache.spark.sql.{DataFrame, SQLContext}
  */
 @Since("0.9.0")
 class NaiveBayesModel private[spark] (
-    @Since("1.0.0") val labels: Array[Double],
-    @Since("0.9.0") val pi: Array[Double],
-    @Since("0.9.0") val theta: Array[Array[Double]],
-    @Since("1.4.0") val modelType: String)
+    @Since("1.0.0") val labels: Array[Double],//标签集合
+    @Since("0.9.0") val pi: Array[Double],//类的先验概率P(Y)的对数值
+    @Since("0.9.0") val theta: Array[Array[Double]],//条件概率P(X|Y)的对数值
+    @Since("1.4.0") val modelType: String) //多项式 还是 伯努利
   extends ClassificationModel with Serializable with Saveable {
 
   import NaiveBayes.{Bernoulli, Multinomial, supportedModelTypes}
 
+  //先验概率
   private val piVector = new DenseVector(pi)
+  //矩阵
   private val thetaMatrix = new DenseMatrix(labels.length, theta(0).length, theta.flatten, true)
 
   private[mllib] def this(labels: Array[Double], pi: Array[Double], theta: Array[Array[Double]]) =
@@ -84,20 +86,22 @@ class NaiveBayesModel private[spark] (
       throw new UnknownError(s"Invalid modelType: $modelType.")
   }
 
+  //对参数集合进行预测--返回每一行数据属于哪个label
   @Since("1.0.0")
   override def predict(testData: RDD[Vector]): RDD[Double] = {
-    val bcModel = testData.context.broadcast(this)
+    val bcModel = testData.context.broadcast(this) //广播该模型
     testData.mapPartitions { iter =>
-      val model = bcModel.value
-      iter.map(model.predict)
+      val model = bcModel.value //在节点还原模型
+      iter.map(model.predict) //每一个数据进行预测,返回double 属于哪个label
     }
   }
 
+  //模型对一个向量进行预测,返回该向量对应的label标签
   @Since("1.0.0")
   override def predict(testData: Vector): Double = {
     modelType match {
       case Multinomial =>
-        labels(multinomialCalculation(testData).argmax)
+        labels(multinomialCalculation(testData).argmax) //argmax最大向量的位置---返回该位置对应的标签
       case Bernoulli =>
         labels(bernoulliCalculation(testData).argmax)
     }
@@ -109,22 +113,23 @@ class NaiveBayesModel private[spark] (
    * @param testData RDD representing data points to be predicted
    * @return an RDD[Vector] where each entry contains the predicted posterior class probabilities,
    *         in the same order as class labels
+    *         预测一个单一向量对应每一个标签的概率，返回值是所有label对应的概率向量
    */
   @Since("1.5.0")
   def predictProbabilities(testData: RDD[Vector]): RDD[Vector] = {
-    val bcModel = testData.context.broadcast(this)
+    val bcModel = testData.context.broadcast(this) //广播模型
     testData.mapPartitions { iter =>
-      val model = bcModel.value
+      val model = bcModel.value //节点还原模型
       iter.map(model.predictProbabilities)
     }
   }
 
   /**
    * Predict posterior class probabilities for a single data point using the model trained.
-   *
-   * @param testData array representing a single data point
+   * 使用模型,对单一向量数据,预测他的后验概率
+   * @param testData array representing a single data point 单一向量数据
    * @return predicted posterior class probabilities from the trained model,
-   *         in the same order as class labels
+   *         in the same order as class labels 返回预测后验概率值对应的向量
    */
   @Since("1.5.0")
   def predictProbabilities(testData: Vector): Vector = {
@@ -136,13 +141,23 @@ class NaiveBayesModel private[spark] (
     }
   }
 
+  //返回值是一个向量，每一个label对应向量的一个概率值
+  /**
+    *
+  30个label,50个维度
+30 * 50   50*1 = 30 * 1
+每一行与参数列向量乘积，就是30个label对应的一个值，即每一个label的概率 = 该label所在的行 * 参数 之和。
+行的内容相当于每一个维度对应的权重，因此计算就相当于计算该向量在每一个label下的加权和
+    */
   private def multinomialCalculation(testData: Vector) = {
-    val prob = thetaMatrix.multiply(testData)
-    BLAS.axpy(1.0, piVector, prob)
+    val prob = thetaMatrix.multiply(testData) //多少行,说明多少个lable,返回一个所有label组成的向量
+    BLAS.axpy(1.0, piVector, prob) //prob += a * piVector  //因为是log操作，所以*变成了+
     prob
   }
 
+  //返回值是一个向量，每一个label对应向量的一个概率值
   private def bernoulliCalculation(testData: Vector) = {
+    //校验参数必须是0或者1
     testData.foreachActive((_, value) =>
       if (value != 0.0 && value != 1.0) {
         throw new SparkException(
@@ -155,12 +170,13 @@ class NaiveBayesModel private[spark] (
     prob
   }
 
+  //计算概率
   private def posteriorProbabilities(logProb: DenseVector) = {
-    val logProbArray = logProb.toArray
-    val maxLog = logProbArray.max
-    val scaledProbs = logProbArray.map(lp => math.exp(lp - maxLog))
-    val probSum = scaledProbs.sum
-    new DenseVector(scaledProbs.map(_ / probSum))
+    val logProbArray = logProb.toArray //label分数集合
+    val maxLog = logProbArray.max //最大的值
+    val scaledProbs = logProbArray.map(lp => math.exp(lp - maxLog)) //还原,因为原始内容是log后的,所以需要还原
+    val probSum = scaledProbs.sum //求和
+    new DenseVector(scaledProbs.map(_ / probSum)) //每一个还原后的值 在总体中占比
   }
 
   @Since("1.3.0")
@@ -172,6 +188,7 @@ class NaiveBayesModel private[spark] (
   override protected def formatVersion: String = "2.0"
 }
 
+//模型的序列化与反序列化到磁盘
 @Since("1.3.0")
 object NaiveBayesModel extends Loader[NaiveBayesModel] {
 
@@ -245,7 +262,7 @@ object NaiveBayesModel extends Loader[NaiveBayesModel] {
       // Create JSON metadata.
       val metadata = compact(render(
         ("class" -> thisClassName) ~ ("version" -> thisFormatVersion) ~
-          ("numFeatures" -> data.theta(0).length) ~ ("numClasses" -> data.pi.length)))
+          ("numFeatures" -> data.theta(0).length) ~ ("numClasses" -> data.pi.length)))//numFeatures 特征数量  ,numClasses label数量
       sc.parallelize(Seq(metadata), 1).saveAsTextFile(metadataPath(path))
 
       // Create Parquet data.
@@ -360,7 +377,7 @@ class NaiveBayes private (
   @Since("0.9.0")
   def run(data: RDD[LabeledPoint]): NaiveBayesModel = {
       
-    //定义方法 多项式
+    //定义方法 多项式---校验值必须不是负数
     val requireNonnegativeValues: Vector => Unit = (v: Vector) => {
       val values = v match {
         case sv: SparseVector => sv.values
@@ -371,7 +388,7 @@ class NaiveBayes private (
       }
     }
 
-    //定义方法 伯努利
+    //定义方法 伯努利---校验值只能是0和1
     val requireZeroOneBernoulliValues: Vector => Unit = (v: Vector) => {
       val values = v match {
         case sv: SparseVector => sv.values
@@ -383,39 +400,43 @@ class NaiveBayes private (
       }
     }
 
-    // Aggregates term frequencies per label.聚合label词频
+    // Aggregates term frequencies per label.聚合label词频,即相同的向量出现次数
     // TODO: Calling combineByKey and collect creates two stages, we can implement something
     // TODO: similar to reduceByKeyLocally to save one stage.
-    val aggregated = data.map(p => (p.label, p.features)).combineByKey[(Long, DenseVector)](
+    //返回值是label,(Long, DenseVector)组成的集合,即label 出现了都少次，同一个label对应的向量和
+    val aggregated = data.map(p => (p.label, p.features)).combineByKey[(Long, DenseVector)](//表示将V(向量) 转换成(Long, DenseVector)作为中间结果存储
       createCombiner = (v: Vector) => {
+        //先数据校验
         if (modelType == Bernoulli) {
           requireZeroOneBernoulliValues(v)
         } else {
           requireNonnegativeValues(v)
         }
-        (1L, v.copy.toDense)
+        (1L, v.copy.toDense) //默认出现1次词频---即向量本身出现一次
       },
       mergeValue = (c: (Long, DenseVector), v: Vector) => {
         requireNonnegativeValues(v)
-        BLAS.axpy(1.0, v, c._2)
-        (c._1 + 1L, c._2)
+        BLAS.axpy(1.0, v, c._2)//c2 = c2 + v*1
+        (c._1 + 1L, c._2) //累加计数器1
       },
       mergeCombiners = (c1: (Long, DenseVector), c2: (Long, DenseVector)) => {
         BLAS.axpy(1.0, c2._2, c1._2)
-        (c1._1 + c2._1, c1._2)
+        (c1._1 + c2._1, c1._2) //全局性进行累加计数器
       }
-    ).collect().sortBy(_._1)
+    ).collect()//此时会在一个节点汇总，可能会浪费性能，但是由于label本身分类不多，因此一个节点汇总也是可以的
+    .sortBy(_._1) //按照label排序
 
-    val numLabels = aggregated.length
-    var numDocuments = 0L
+    val numLabels = aggregated.length //有多少个label
+    var numDocuments = 0L //有多少条总数据
     aggregated.foreach { case (_, (n, _)) =>
       numDocuments += n
     }
-    val numFeatures = aggregated.head match { case (_, (_, v)) => v.size }
+    val numFeatures = aggregated.head match { case (_, (_, v)) => v.size } //获取特征向量维数
 
-    val labels = new Array[Double](numLabels)
-    val pi = new Array[Double](numLabels)
-    val theta = Array.fill(numLabels)(new Array[Double](numFeatures))
+    val labels = new Array[Double](numLabels) //所有出现的标签集合
+    val pi = new Array[Double](numLabels) //类的先验概率P(Y)的对数值,即label出现的次数/总次数
+    //我觉得有一个前提，是向量都要进行归一化处理，否则某一个维度的值太大，就有问题了
+    val theta = Array.fill(numLabels)(new Array[Double](numFeatures))//条件概率P(X|Y)的对数值---该维度对应的lable所有数据和/该label对应的所有数据和---表示该维度在label下的权重占比
 
     val piLogDenom = math.log(numDocuments + numLabels * lambda)
     var i = 0
@@ -423,7 +444,7 @@ class NaiveBayes private (
       labels(i) = label
       pi(i) = math.log(n + lambda) - piLogDenom
       val thetaLogDenom = modelType match {
-        case Multinomial => math.log(sumTermFreqs.values.sum + numFeatures * lambda)
+        case Multinomial => math.log(sumTermFreqs.values.sum + numFeatures * lambda) //特征维度,因此用特征数量*lambda
         case Bernoulli => math.log(n + 2.0 * lambda)
         case _ =>
           // This should never happen.

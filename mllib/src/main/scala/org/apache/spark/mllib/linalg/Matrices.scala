@@ -95,7 +95,7 @@ sealed trait Matrix extends Serializable {
   /** Convenience method for `Matrix`-`Vector` multiplication. */
   @Since("1.4.0")
   def multiply(y: Vector): DenseVector = {
-    val output = new DenseVector(new Array[Double](numRows))
+    val output = new DenseVector(new Array[Double](numRows)) //多少行,说明多少个lable,返回一个所有label组成的向量
     BLAS.gemv(1.0, this, y, 0.0, output)
     output
   }
