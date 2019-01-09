@@ -27,15 +27,17 @@ import org.apache.spark.mllib.linalg.{Vectors, Vector}
 /**
  * :: DeveloperApi ::
  * Class used to perform steps (weight update) using Gradient Descent methods.
- *
+ * 使用梯度下降的方式更新权重。。步长 * 梯度反方向
+  *
  * For general minimization problems, or for regularized problems of the form
- *         min  L(w) + regParam * R(w),
+ *         min  L(w) + regParam * R(w), 其中L(w)表示损失函数
  * the compute function performs the actual update step, when given some
  * (e.g. stochastic) gradient direction for the loss L(w),
  * and a desired step-size (learning rate).
  *
  * The updater is responsible to also perform the update coming from the
  * regularization term R(w) (if any regularization is used).
+  * regularization 表示规格化
  */
 @DeveloperApi
 abstract class Updater extends Serializable {
@@ -43,7 +45,8 @@ abstract class Updater extends Serializable {
    * Compute an updated value for weights given the gradient, stepSize, iteration number and
    * regularization parameter. Also returns the regularization value regParam * R(w)
    * computed using the *updated* weights.
-   *
+   * 给定梯度、步长、迭代次数、规格化参数，去更新权重
+    * 同时也返回一个规格化后的regParam * R(w)
    * @param weightsOld - Column matrix of size dx1 where d is the number of features.
    * @param gradient - Column matrix of size dx1 where d is the number of features.
    * @param stepSize - step size across iterations
@@ -52,6 +55,7 @@ abstract class Updater extends Serializable {
    *
    * @return A tuple of 2 elements. The first element is a column matrix containing updated weights,
    *         and the second element is the regularization value computed using updated weights.
+    *         第一个返回值是更新后的权重，第二个参数值是规格化后的值
    */
   def compute(
       weightsOld: Vector,
@@ -65,20 +69,22 @@ abstract class Updater extends Serializable {
  * :: DeveloperApi ::
  * A simple updater for gradient descent *without* any regularization.
  * Uses a step-size decreasing with the square root of the number of iterations.
+  * 没有规格化的，最简单的梯度下降更新权重的方法
  */
 @DeveloperApi
 class SimpleUpdater extends Updater {
   override def compute(
-      weightsOld: Vector,
-      gradient: Vector,
-      stepSize: Double,
-      iter: Int,
-      regParam: Double): (Vector, Double) = {
+      weightsOld: Vector,//老权重
+      gradient: Vector,//diff损失梯度向量
+      stepSize: Double,//步长
+      iter: Int,//迭代次数
+      regParam: Double): (Vector, Double) = { //返回新的权重
     val thisIterStepSize = stepSize / math.sqrt(iter)
-    val brzWeights: BV[Double] = weightsOld.toBreeze.toDenseVector
-    brzAxpy(-thisIterStepSize, gradient.toBreeze, brzWeights)
+    val brzWeights: BV[Double] = weightsOld.toBreeze.toDenseVector //老权重转换成向量
+    //更新老权重,因为是梯度下降,因此反方向,即-,步长 * 梯度方向
+    brzAxpy(-thisIterStepSize, gradient.toBreeze, brzWeights) //y += x * a ,即 brzWeights = brzWeights + -thisIterStepSize * gradient
 
-    (Vectors.fromBreeze(brzWeights), 0)
+    (Vectors.fromBreeze(brzWeights), 0) //返回更新后的权重brzWeights
   }
 }
 

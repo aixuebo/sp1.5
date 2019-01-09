@@ -54,9 +54,9 @@ abstract class GeneralizedLinearModel @Since("1.0.0") (
 
   /**
    * Predict values for the given data set using the model trained.
-   *
-   * @param testData RDD representing data points to be predicted
-   * @return RDD[Double] where each entry contains the corresponding prediction
+   * 对一个集合进行预测
+   * @param testData RDD representing data points to be predicted 要预测的集合
+   * @return RDD[Double] where each entry contains the corresponding prediction 返回集合中每一个元素对应的线性回归值
    *
    */
   @Since("1.0.0")
@@ -64,11 +64,11 @@ abstract class GeneralizedLinearModel @Since("1.0.0") (
     // A small optimization to avoid serializing the entire model. Only the weightsMatrix
     // and intercept is needed.
     val localWeights = weights
-    val bcWeights = testData.context.broadcast(localWeights)
+    val bcWeights = testData.context.broadcast(localWeights) //将模型权重广播出去
     val localIntercept = intercept
     testData.mapPartitions { iter =>
       val w = bcWeights.value
-      iter.map(v => predictPoint(v, w, localIntercept))
+      iter.map(v => predictPoint(v, w, localIntercept)) //计算
     }
   }
 
@@ -77,6 +77,7 @@ abstract class GeneralizedLinearModel @Since("1.0.0") (
    *
    * @param testData array representing a single data point
    * @return Double prediction from the trained model
+    * 真实的计算
    *
    */
   @Since("1.0.0")
@@ -96,13 +97,14 @@ abstract class GeneralizedLinearModel @Since("1.0.0") (
  * :: DeveloperApi ::
  * GeneralizedLinearAlgorithm implements methods to train a Generalized Linear Model (GLM).
  * This class should be extended with an Optimizer to create a new GLM.
- *
+ * 泛型是要产生的模型
  */
 @Since("0.8.0")
 @DeveloperApi
 abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
   extends Logging with Serializable {
 
+  //校验函数,传入label和向量组成的RDD,返回boolean类型的函数,作为校验函数
   protected val validators: Seq[RDD[LabeledPoint] => Boolean] = List()
 
   /**
@@ -113,16 +115,17 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
   def optimizer: Optimizer
 
   /** Whether to add intercept (default: false). */
-  protected var addIntercept: Boolean = false
+  protected var addIntercept: Boolean = false //默认是false，是否添加一个截距
 
-  protected var validateData: Boolean = true
+  protected var validateData: Boolean = true //true表示算法要求在训练之前要进行数据校验
 
   /**
    * In `GeneralizedLinearModel`, only single linear predictor is allowed for both weights
    * and intercept. However, for multinomial logistic regression, with K possible outcomes,
    * we are training K-1 independent binary logistic regression models which requires K-1 sets
    * of linear predictor.
-   *
+   * 该模型通常是仅仅和线性回归进行预测的，只是和权重 以及 截距有关系。
+    * 然而多项式逻辑回归，(多项式是说有多个未知数，并且每一个未知数的系数不只是1,比如2次方,3次方等).
    * As a result, the workaround here is if more than two sets of linear predictors are needed,
    * we construct bigger `weights` vector which can hold both weights and intercepts.
    * If the intercepts are added, the dimension of `weights` will be
@@ -144,13 +147,14 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
 
   /**
    * The dimension of training features.
-   *
+   * 训练特征的维度
    */
   @Since("1.4.0")
   def getNumFeatures: Int = this.numFeatures
 
   /**
    * The dimension of training features.
+    * 训练特征的维度
    */
   protected var numFeatures: Int = -1
 
@@ -163,7 +167,7 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
   }
 
   /**
-   * Create a model given the weights and intercept
+   * Create a model given the weights and intercept 创建一个模型
    */
   protected def createModel(weights: Vector, intercept: Double): M
 
@@ -177,6 +181,7 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
   /**
    * Set if the algorithm should add an intercept. Default false.
    * We set the default to false because adding the intercept will cause memory allocation.
+    * 默认是false，是否添加一个截距
    *
    */
   @Since("0.8.0")
@@ -202,8 +207,10 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
    */
   @Since("0.8.0")
   def run(input: RDD[LabeledPoint]): M = {
+
+    //初始化特征向量维度
     if (numFeatures < 0) {
-      numFeatures = input.map(_.features.size).first()
+      numFeatures = input.map(_.features.size).first() //以数据的第一行向量维度作为参考
     }
 
     /**
@@ -237,17 +244,19 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
   @Since("1.0.0")
   def run(input: RDD[LabeledPoint], initialWeights: Vector): M = {
 
+    //初始化特征向量维度
     if (numFeatures < 0) {
-      numFeatures = input.map(_.features.size).first()
+      numFeatures = input.map(_.features.size).first()//以数据的第一行向量维度作为参考
     }
 
+    //输入源没有被缓存,可能有性能问题,发送一个警告
     if (input.getStorageLevel == StorageLevel.NONE) {
       logWarning("The input data is not directly cached, which may hurt performance if its"
         + " parent RDDs are also uncached.")
     }
 
-    // Check the data properties before running the optimizer
-    if (validateData && !validators.forall(func => func(input))) {
+    // Check the data properties before running the optimizer 对数据集进行校验,必须都返回true才说明数据可用
+    if (validateData && !validators.forall(func => func(input))) {//校验函数有返回false的,则说明校验失败
       throw new SparkException("Input validation failed.")
     }
 

@@ -61,7 +61,8 @@ abstract class Gradient extends Serializable {
  * :: DeveloperApi ::
  * Compute gradient and loss for a multinomial logistic loss function, as used
  * in multi-class classification (it is also used in binary logistic regression).
- *
+ *  计算梯度 以及 多项式的逻辑损失函数,被用于多分类,也用于二分类
+  *
  * In `The Elements of Statistical Learning: Data Mining, Inference, and Prediction, 2nd Edition`
  * by Trevor Hastie, Robert Tibshirani, and Jerome Friedman, which can be downloaded from
  * http://statweb.stanford.edu/~tibs/ElemStatLearn/ , Eq. (4.17) on page 119 gives the formula of
@@ -75,6 +76,7 @@ abstract class Gradient extends Serializable {
  * }}}
  *
  * for K classes multiclass classification problem.
+  * 多分类的问题
  *
  * The model weights w = (w_1, w_2, ..., w_{K-1})^T becomes a matrix which has dimension of
  * (K-1) * (N+1) if the intercepts are added. If the intercepts are not added, the dimension
@@ -265,25 +267,30 @@ class LogisticGradient(numClasses: Int) extends Gradient {
  * This is correct for the averaged least squares loss function (mean squared error)
  *              L = 1/2n ||A weights-y||^2
  * See also the documentation for the precise formulation.
+  * 线性回归的方式计算梯度
+  * 因为线性方程,求导后就是向量系数本身,比如3*x1 + 2*x2 + 3*x4=0 ,求偏导后就是3 2 4.因此用diff * 3 2 4即可得到梯度
  */
 @DeveloperApi
 class LeastSquaresGradient extends Gradient {
+
+  //返回梯度 以及 对应的损失值
   override def compute(data: Vector, label: Double, weights: Vector): (Vector, Double) = {
-    val diff = dot(data, weights) - label
-    val loss = diff * diff / 2.0
+    val diff = dot(data, weights) - label//损失值
+    val loss = diff * diff / 2.0 //单值的损失函数
     val gradient = data.copy
-    scal(diff, gradient)
+    scal(diff, gradient) //梯度不依赖外界的,因此就是变化data本身的梯度,即 x = a * x  = diff * gradient = diff * data
     (gradient, loss)
   }
 
+  //返回损失值,梯度使用cumGradient对象更新
   override def compute(
       data: Vector,
       label: Double,
       weights: Vector,
       cumGradient: Vector): Double = {
-    val diff = dot(data, weights) - label
-    axpy(diff, data, cumGradient)
-    diff * diff / 2.0
+    val diff = dot(data, weights) - label //损失函数
+    axpy(diff, data, cumGradient) //cumGradient += diff * data
+    diff * diff / 2.0 //损失函数平方
   }
 }
 

@@ -25,12 +25,14 @@ import org.apache.spark.mllib.linalg.Vector
 /**
  * :: DeveloperApi ::
  * Trait for optimization problem solvers.
+  * 定义一个优化器
  */
 @DeveloperApi
 trait Optimizer extends Serializable {
 
   /**
    * Solve the provided convex optimization problem.
+    * 给定数据集合 以及 初始化权重,返回优化后的向量
    */
   def optimize(data: RDD[(Double, Vector)], initialWeights: Vector): Vector
 }

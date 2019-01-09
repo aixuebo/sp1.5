@@ -133,7 +133,7 @@ class GradientDescent private[spark] (private var gradient: Gradient, private va
       miniBatchFraction,
       initialWeights,
       convergenceTol)
-    weights
+    weights //返回值是权重
   }
 
 }
@@ -221,8 +221,8 @@ object GradientDescent extends Logging {
       val bcWeights = data.context.broadcast(weights)
       // Sample a subset (fraction miniBatchFraction) of the total data
       // compute and sum up the subgradients on this subset (this is one map-reduce)
-      val (gradientSum, lossSum, miniBatchSize) = data.sample(false, miniBatchFraction, 42 + i)
-        .treeAggregate((BDV.zeros[Double](n), 0.0, 0L))(
+      val (gradientSum, lossSum, miniBatchSize) = data.sample(false, miniBatchFraction, 42 + i) //抽样数据
+        .treeAggregate((BDV.zeros[Double](n), 0.0, 0L))( //返回值是向量,double,long组成的---分别表示 xxx  损失值求和  出现的次数
           seqOp = (c, v) => {
             // c: (grad, loss, count), v: (label, features)
             val l = gradient.compute(v._2, v._1, bcWeights.value, Vectors.fromBreeze(c._1))

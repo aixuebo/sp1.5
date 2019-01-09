@@ -30,21 +30,21 @@ import org.apache.spark.rdd.RDD
  * Regression model trained using LinearRegression.
  *
  * @param weights Weights computed for every feature.
- * @param intercept Intercept computed for this model.
- *
+ * @param intercept Intercept computed for this model. 截距
+ * 训练好的现行模型
  */
 @Since("0.8.0")
 class LinearRegressionModel @Since("1.1.0") (
-    @Since("1.0.0") override val weights: Vector,
-    @Since("0.8.0") override val intercept: Double)
+    @Since("1.0.0") override val weights: Vector,//参数权重
+    @Since("0.8.0") override val intercept: Double) //截距
   extends GeneralizedLinearModel(weights, intercept) with RegressionModel with Serializable
   with Saveable with PMMLExportable {
 
   override protected def predictPoint(
-      dataMatrix: Vector,
-      weightMatrix: Vector,
+      dataMatrix: Vector,//数据
+      weightMatrix: Vector,//权重
       intercept: Double): Double = {
-    weightMatrix.toBreeze.dot(dataMatrix.toBreeze) + intercept
+    weightMatrix.toBreeze.dot(dataMatrix.toBreeze) + intercept //加权求和
   }
 
   @Since("1.3.0")
@@ -94,6 +94,8 @@ class LinearRegressionWithSGD private[mllib] (
 
   private val gradient = new LeastSquaresGradient()
   private val updater = new SimpleUpdater()
+
+  //梯度下降优化器
   @Since("0.8.0")
   override val optimizer = new GradientDescent(gradient, updater)
     .setStepSize(stepSize)
@@ -126,12 +128,12 @@ object LinearRegressionWithSGD {
    * in gradient descent are initialized using the initial weights provided.
    *
    * @param input RDD of (label, array of features) pairs. Each pair describes a row of the data
-   *              matrix A as well as the corresponding right hand side label y
-   * @param numIterations Number of iterations of gradient descent to run.
-   * @param stepSize Step size to be used for each iteration of gradient descent.
-   * @param miniBatchFraction Fraction of data to be used per iteration.
+   *              matrix A as well as the corresponding right hand side label y,标签label 与 向量的集合
+   * @param numIterations Number of iterations of gradient descent to run. 循环多少次梯度下降
+   * @param stepSize Step size to be used for each iteration of gradient descent.每次迭代步长
+   * @param miniBatchFraction Fraction of data to be used per iteration.每次批处理数量
    * @param initialWeights Initial set of weights to be used. Array should be equal in size to
-   *        the number of features in the data.
+   *        the number of features in the data.初始化权重
    *
    */
   @Since("1.0.0")
