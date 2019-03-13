@@ -30,6 +30,8 @@ import org.apache.spark.sql.types.{StructField, StructType}
 
 /**
  * Params for [[StandardScaler]] and [[StandardScalerModel]].
+  * 特征缩放
+  * 输入和输出都是Vector类型的列
  */
 private[feature] trait StandardScalerParams extends Params with HasInputCol with HasOutputCol {
 
@@ -54,6 +56,10 @@ private[feature] trait StandardScalerParams extends Params with HasInputCol with
  * :: Experimental ::
  * Standardizes features by removing the mean and scaling to unit variance using column summary
  * statistics on the samples in the training set.
+  * 均值的更新逻辑是  value-均值
+  * 标准差的计算逻辑是 value * (1/标准差)
+  * 均值 & 标准差计算逻辑是 (value - 均值) * (1/标准差)
+  * 当标准差为0的时候,输出默认值为0
  */
 @Experimental
 class StandardScaler(override val uid: String) extends Estimator[StandardScalerModel]
@@ -75,14 +81,16 @@ class StandardScaler(override val uid: String) extends Estimator[StandardScalerM
   /** @group setParam */
   def setWithStd(value: Boolean): this.type = set(withStd, value)
 
+  //训练模型,获取数据集合中的均值和标准差
   override def fit(dataset: DataFrame): StandardScalerModel = {
     transformSchema(dataset.schema, logging = true)
-    val input = dataset.select($(inputCol)).map { case Row(v: Vector) => v }
+    val input = dataset.select($(inputCol)).map { case Row(v: Vector) => v } //输入的向量集合
     val scaler = new feature.StandardScaler(withMean = $(withMean), withStd = $(withStd))
     val scalerModel = scaler.fit(input)
     copyValues(new StandardScalerModel(uid, scalerModel).setParent(this))
   }
 
+  //校验输入和输出都是Vector
   override def transformSchema(schema: StructType): StructType = {
     val inputType = schema($(inputCol)).dataType
     require(inputType.isInstanceOf[VectorUDT],
@@ -121,9 +129,10 @@ class StandardScalerModel private[ml] (
   override def transform(dataset: DataFrame): DataFrame = {
     transformSchema(dataset.schema, logging = true)
     val scale = udf { scaler.transform _ }
-    dataset.withColumn($(outputCol), scale(col($(inputCol))))
+    dataset.withColumn($(outputCol), scale(col($(inputCol)))) //追加输出列,进行数据转换
   }
 
+  //输入和输出都是Vector类型
   override def transformSchema(schema: StructType): StructType = {
     val inputType = schema($(inputCol)).dataType
     require(inputType.isInstanceOf[VectorUDT],

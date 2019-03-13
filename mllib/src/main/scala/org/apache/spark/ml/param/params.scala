@@ -71,12 +71,12 @@ class Param[T](val parent: String, val name: String, val doc: String, val isVali
   }
 
   /** Creates a param pair with the given value (for Java).
-    * 为该属性设置一个T值
+    * 为该属性设置一个映射对象
     **/
   def w(value: T): ParamPair[T] = this -> value
 
   /** Creates a param pair with the given value (for Scala).
-    * 为该属性设置一个T值
+    * 为该属性设置一个映射对象
     **/
   def ->(value: T): ParamPair[T] = ParamPair(this, value)
 
@@ -346,7 +346,7 @@ class IntArrayParam(parent: Params, name: String, doc: String, isValid: Array[In
 case class ParamPair[T](param: Param[T], value: T) {
   // This is *the* place Param.validate is called.  Whenever a parameter is specified, we should
   // always construct a ParamPair so that validate is called.
-  param.validate(value)
+  param.validate(value) //对value进行校验
 }
 
 /**

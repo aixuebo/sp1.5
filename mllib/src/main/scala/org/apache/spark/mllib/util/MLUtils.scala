@@ -55,16 +55,34 @@ object MLUtils {
    * where the indices are one-based and in ascending order.
    * This method parses each line into a [[org.apache.spark.mllib.regression.LabeledPoint]],
    * where the feature indices are converted to zero-based.
-   *
-   * @param sc Spark context
+   * 格式是 lable 特征向量序号:特征向量value 特征向量序号:特征向量value
+    * 注意 特征序号要保证增序排序
+    * lable一定是double类型的 特征序号是int类型,特征值是double类型
+    * 序号要从1开始计算，方法会将1变成0,即方法内会转换成0开头的序号
+    *
+    * @param sc Spark context
    * @param path file or directory path in any Hadoop-supported file system URI
    * @param numFeatures number of features, which will be determined from the input data if a
    *                    nonpositive value is given. This is useful when the dataset is already split
    *                    into multiple files and you want to load them separately, because some
    *                    features may not present in certain files, which leads to inconsistent
-   *                    feature dimensions.
-   * @param minPartitions min number of partitions
+   *                    feature dimensions.有多少个特征
+   * @param minPartitions min number of partitions //多少个并行任务
    * @return labeled data stored as an RDD[LabeledPoint]
+    *
+    *        demo:
+    *        val filepath1 = "/Users/maming/Desktop/mm/document/gittest/python/decision_demo.txt"
+    *        val data = MLUtils.loadLibSVMFile(sc, filepath1)
+    *       data.foreach(println(_))
+    *
+    *        1 1:1 2:1 3:1
+    *        1 1:1 2:1 3:2
+    *        1 1:1 2:2 3:1
+    *        0 1:1 2:2 3:2
+    *        1 1:2 2:1 3:1
+    *        0 1:3 2:1 3:2
+    *        0 1:3 2:1 3:1
+    *        0 1:3 2:2 3:1
    */
   @Since("1.0.0")
   def loadLibSVMFile(
@@ -74,23 +92,26 @@ object MLUtils {
       minPartitions: Int): RDD[LabeledPoint] = {
     val parsed = sc.textFile(path, minPartitions)
       .map(_.trim)
-      .filter(line => !(line.isEmpty || line.startsWith("#")))
+      .filter(line => !(line.isEmpty || line.startsWith("#"))) //备注可用##进行过滤,但是必须以#开头正行进行注释
       .map { line =>
         val items = line.split(' ')
         val label = items.head.toDouble
+      //list<Double>转换成List<Int,Double>
         val (indices, values) = items.tail.filter(_.nonEmpty).map { item =>
           val indexAndValue = item.split(':')
           val index = indexAndValue(0).toInt - 1 // Convert 1-based indices to 0-based.
           val value = indexAndValue(1).toDouble
           (index, value)
-        }.unzip
+        }//List<Int,Double>
+          .unzip//转换成元祖<List<Int>,List<Double>>
 
         // check if indices are one-based and in ascending order
-        var previous = -1
+      //校验序号顺序一定是按照增序排序的
+        var previous = -1 //前一个序号
         var i = 0
-        val indicesLength = indices.length
-        while (i < indicesLength) {
-          val current = indices(i)
+        val indicesLength = indices.length //总长度
+        while (i < indicesLength) {//从头到尾遍历
+          val current = indices(i) //序号
           require(current > previous, "indices should be one-based and in ascending order" )
           previous = current
           i += 1
@@ -99,18 +120,18 @@ object MLUtils {
         (label, indices.toArray, values.toArray)
       }
 
-    // Determine number of features.
+    // Determine number of features.计算有多少个不同的特征
     val d = if (numFeatures > 0) {
       numFeatures
     } else {
       parsed.persist(StorageLevel.MEMORY_ONLY)
       parsed.map { case (label, indices, values) =>
-        indices.lastOption.getOrElse(0)
-      }.reduce(math.max) + 1
+        indices.lastOption.getOrElse(0) //获取特征向量的序号,即特征向量有多少个特征值
+      }.reduce(math.max) + 1 //计算最大的特征值 + 1,因为下标是从0 开始计算的
     }
 
     parsed.map { case (label, indices, values) =>
-      LabeledPoint(label, Vectors.sparse(d, indices, values))
+      LabeledPoint(label, Vectors.sparse(d, indices, values))//稀疏向量
     }
   }
 
@@ -121,7 +142,7 @@ object MLUtils {
   def loadLibSVMFile(
       sc: SparkContext,
       path: String,
-      multiclass: Boolean,
+      multiclass: Boolean,//multiclass参数不在有效
       numFeatures: Int,
       minPartitions: Int): RDD[LabeledPoint] =
     loadLibSVMFile(sc, path, numFeatures, minPartitions)
@@ -165,9 +186,10 @@ object MLUtils {
   /**
    * Save labeled data in LIBSVM format.
    * @param data an RDD of LabeledPoint to be saved
-   * @param dir directory to save the data
+   * @param dir directory to save the data 存储的磁盘
    *
    * @see [[org.apache.spark.mllib.util.MLUtils#loadLibSVMFile]]
+    *  将标签格式转换成文本格式,存储到磁盘上
    */
   @Since("1.0.0")
   def saveAsLibSVMFile(data: RDD[LabeledPoint], dir: String) {
@@ -189,6 +211,7 @@ object MLUtils {
    * @param path file or directory path in any Hadoop-supported file system URI
    * @param minPartitions min number of partitions
    * @return vectors stored as an RDD[Vector]
+    * path路径存储的是一个向量数据
    */
   @Since("1.1.0")
   def loadVectors(sc: SparkContext, path: String, minPartitions: Int): RDD[Vector] =
@@ -207,6 +230,7 @@ object MLUtils {
    * @param path file or directory path in any Hadoop-supported file system URI
    * @param minPartitions min number of partitions
    * @return labeled points stored as an RDD[LabeledPoint]
+    * 格式:lable,value1 value2 value3
    */
   @Since("1.1.0")
   def loadLabeledPoints(sc: SparkContext, path: String, minPartitions: Int): RDD[LabeledPoint] =
@@ -232,6 +256,7 @@ object MLUtils {
    *
    * @deprecated Should use [[org.apache.spark.rdd.RDD#saveAsTextFile]] for saving and
    *            [[org.apache.spark.mllib.util.MLUtils#loadLabeledPoints]] for loading.
+    * 格式:lable,value1 value2 value3
    */
   @Since("1.0.0")
   @deprecated("Should use MLUtils.loadLabeledPoints instead.", "1.0.1")
@@ -283,6 +308,7 @@ object MLUtils {
 
   /**
    * Returns a new vector with `1.0` (bias) appended to the input vector.
+    * 向参数向量的最后一个位置追加一个向量值,固定值为1,返回新的向量
    */
   @Since("1.0.0")
   def appendBias(vector: Vector): Vector = {

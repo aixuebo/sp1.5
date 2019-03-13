@@ -30,6 +30,7 @@ import org.apache.spark.sql.types.{DoubleType, StructType}
 /**
  * :: Experimental ::
  * Binarize a column of continuous features given a threshold.
+  * 将数值特征转换为二值特征的处理过程。threshold参数表示决定二值化的阈值。 值大于阈值的特征二值化为1,否则二值化为0
  */
 @Experimental
 final class Binarizer(override val uid: String)
@@ -42,6 +43,7 @@ final class Binarizer(override val uid: String)
    * The features greater than the threshold, will be binarized to 1.0.
    * The features equal to or less than the threshold, will be binarized to 0.0.
    * @group param
+    * 阈值
    */
   val threshold: DoubleParam =
     new DoubleParam(this, "threshold", "threshold used to binarize continuous features")
@@ -52,6 +54,7 @@ final class Binarizer(override val uid: String)
   /** @group setParam */
   def setThreshold(value: Double): this.type = set(threshold, value)
 
+  //默认阈值为0
   setDefault(threshold -> 0.0)
 
   /** @group setParam */
@@ -61,9 +64,9 @@ final class Binarizer(override val uid: String)
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   override def transform(dataset: DataFrame): DataFrame = {
-    transformSchema(dataset.schema, logging = true)
+    transformSchema(dataset.schema, logging = true) //校验 & 构造新的输出列集合
     val td = $(threshold)
-    val binarizer = udf { in: Double => if (in > td) 1.0 else 0.0 }
+    val binarizer = udf { in: Double => if (in > td) 1.0 else 0.0 } //值与阈值比较
     val outputColName = $(outputCol)
     val metadata = BinaryAttribute.defaultAttr.withName(outputColName).toMetadata()
     dataset.select(col("*"),
@@ -71,17 +74,17 @@ final class Binarizer(override val uid: String)
   }
 
   override def transformSchema(schema: StructType): StructType = {
-    SchemaUtils.checkColumnType(schema, $(inputCol), DoubleType)
+    SchemaUtils.checkColumnType(schema, $(inputCol), DoubleType) //输入类型一定是double类型
 
-    val inputFields = schema.fields
+    val inputFields = schema.fields //所有列集合
     val outputColName = $(outputCol)
 
-    require(inputFields.forall(_.name != outputColName),
+    require(inputFields.forall(_.name != outputColName), //输出列不能存在
       s"Output column $outputColName already exists.")
 
-    val attr = BinaryAttribute.defaultAttr.withName(outputColName)
+    val attr = BinaryAttribute.defaultAttr.withName(outputColName) //输出列是一个0/1二值列
     val outputFields = inputFields :+ attr.toStructField()
-    StructType(outputFields)
+    StructType(outputFields) //构造新的输出列集合
   }
 
   override def copy(extra: ParamMap): Binarizer = defaultCopy(extra)

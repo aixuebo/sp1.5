@@ -100,7 +100,7 @@ sealed trait Vector extends Serializable {
 
   /**
    * Gets the value of the ith element.
-   * @param i index
+   * @param i index 获取向量的某一个维度值
    */
   @Since("1.1.0")
   def apply(i: Int): Double = toBreeze(i)
@@ -127,6 +127,8 @@ sealed trait Vector extends Serializable {
    * Number of active entries.  An "active entry" is an element which is explicitly stored,
    * regardless of its value.  Note that inactive entries have value 0.
     * value的个数
+    * 密集向量，该值就是 size
+    * 稀疏向量, 该值是 value的size
    */
   @Since("1.4.0")
   def numActives: Int
@@ -134,6 +136,8 @@ sealed trait Vector extends Serializable {
   /**
    * Number of nonzero elements. This scans all active values and count nonzeros.
     * 非0的value的个数
+    * 密集向量，该值就是向量中元素不是0的个数
+    * 稀疏向量, 该值是value的中非0的元素个数
    */
   @Since("1.4.0")
   def numNonzeros: Int
@@ -161,7 +165,7 @@ sealed trait Vector extends Serializable {
   def compressed: Vector = {
     val nnz = numNonzeros
     // A dense vector needs 8 * size + 8 bytes, while a sparse vector needs 12 * nnz + 20 bytes.
-    if (1.5 * (nnz + 1.0) < size) {
+    if (1.5 * (nnz + 1.0) < size) { //非0元素的1.5倍 不足向量空间，因此说明0还是很多，用稀疏向量
       toSparse
     } else {
       toDense
@@ -182,6 +186,7 @@ sealed trait Vector extends Serializable {
  *
  * User-defined type for [[Vector]] which allows easy interaction with SQL
  * via [[org.apache.spark.sql.DataFrame]].
+  * 自定义一个向量类型
  */
 @AlphaComponent
 class VectorUDT extends UserDefinedType[Vector] {
@@ -191,11 +196,12 @@ class VectorUDT extends UserDefinedType[Vector] {
     // We only use "values" for dense vectors, and "size", "indices", and "values" for sparse
     // vectors. The "values" field is nullable because we might want to add binary vectors later,
     // which uses "size" and "indices", but not "values".
+    //秘籍向量时，仅仅使用value属性即可
     StructType(Seq(
-      StructField("type", ByteType, nullable = false),
-      StructField("size", IntegerType, nullable = true),
-      StructField("indices", ArrayType(IntegerType, containsNull = false), nullable = true),
-      StructField("values", ArrayType(DoubleType, containsNull = false), nullable = true)))
+      StructField("type", ByteType, nullable = false),//向量类型 0表示稀松向量  1表示密集向量
+      StructField("size", IntegerType, nullable = true),//向量总大小
+      StructField("indices", ArrayType(IntegerType, containsNull = false), nullable = true),//数组--表示哪些位置非0
+      StructField("values", ArrayType(DoubleType, containsNull = false), nullable = true)))//数组--表示非0位置具体的值
   }
 
   override def serialize(obj: Any): InternalRow = {
@@ -210,8 +216,8 @@ class VectorUDT extends UserDefinedType[Vector] {
       case DenseVector(values) =>
         val row = new GenericMutableRow(4)
         row.setByte(0, 1)
-        row.setNullAt(1)
-        row.setNullAt(2)
+        row.setNullAt(1)//设置为null
+        row.setNullAt(2)//设置为null
         row.update(3, new GenericArrayData(values.map(_.asInstanceOf[Any])))
         row
     }
@@ -222,14 +228,14 @@ class VectorUDT extends UserDefinedType[Vector] {
       case row: InternalRow =>
         require(row.numFields == 4,
           s"VectorUDT.deserialize given row with length ${row.numFields} but requires length == 4")
-        val tpe = row.getByte(0)
+        val tpe = row.getByte(0) //判断向量类型
         tpe match {
-          case 0 =>
+          case 0 => //稀松
             val size = row.getInt(1)
             val indices = row.getArray(2).toIntArray()
             val values = row.getArray(3).toDoubleArray()
             new SparseVector(size, indices, values)
-          case 1 =>
+          case 1 => //密集
             val values = row.getArray(3).toDoubleArray()
             new DenseVector(values)
         }
@@ -301,9 +307,9 @@ object Vectors {
   def sparse(size: Int, elements: Seq[(Int, Double)]): Vector = {
     require(size > 0, "The size of the requested sparse vector must be greater than 0.")
 
-    val (indices, values) = elements.sortBy(_._1).unzip
+    val (indices, values) = elements.sortBy(_._1).unzip //先按照序号排序,拆分成2部分
     var prev = -1
-    indices.foreach { i =>
+    indices.foreach { i =>  //确保顺序
       require(prev < i, s"Found duplicate indices: $i.")
       prev = i
     }
@@ -394,25 +400,25 @@ object Vectors {
       case SparseVector(n, ids, vs) => vs
       case v => throw new IllegalArgumentException("Do not support vector type " + v.getClass)
     }
-    val size = values.length
+    val size = values.length //向量元素数量
 
-    if (p == 1) {
+    if (p == 1) {//向量元素绝对值之和
       var sum = 0.0
       var i = 0
-      while (i < size) {
+      while (i < size) {//迭代每一个向量元素
         sum += math.abs(values(i))
         i += 1
       }
       sum
-    } else if (p == 2) {
+    } else if (p == 2) {//向量元素平方之和--开根号
       var sum = 0.0
       var i = 0
       while (i < size) {
         sum += values(i) * values(i)
         i += 1
       }
-      math.sqrt(sum)
-    } else if (p == Double.PositiveInfinity) {
+      math.sqrt(sum) //开根号
+    } else if (p == Double.PositiveInfinity) {//向量元素绝对值最大的元素---正无穷
       var max = 0.0
       var i = 0
       while (i < size) {
@@ -421,19 +427,20 @@ object Vectors {
         i += 1
       }
       max
-    } else {
+    } else {//向量元素^n之和
       var sum = 0.0
       var i = 0
       while (i < size) {
-        sum += math.pow(math.abs(values(i)), p)
+        sum += math.pow(math.abs(values(i)), p) //向量元素^n之和
         i += 1
       }
-      math.pow(sum, 1.0 / p)
+      math.pow(sum, 1.0 / p) //向量元素绝对值的p次方和的1/p次幂
     }
   }
 
   /**
    * Returns the squared distance between two Vectors.
+    * (向量1-向量2)^2和
    * @param v1 first Vector.
    * @param v2 second Vector.
    * @return squared distance between two Vectors.
@@ -452,8 +459,8 @@ object Vectors {
         val nnzv1 = v1Indices.length
         val nnzv2 = v2Indices.length
 
-        var kv1 = 0
-        var kv2 = 0
+        var kv1 = 0 //第一个向量指针
+        var kv2 = 0 //第二个向量指针
         while (kv1 < nnzv1 || kv2 < nnzv2) {
           var score = 0.0
 
@@ -494,23 +501,24 @@ object Vectors {
 
   /**
    * Returns the squared distance between DenseVector and SparseVector.
+    * (向量1-向量2)^2和
    */
   private[mllib] def sqdist(v1: SparseVector, v2: DenseVector): Double = {
-    var kv1 = 0
-    var kv2 = 0
-    val indices = v1.indices
+    var kv1 = 0 //向量1的下标
+    var kv2 = 0 //向量2的下标
+    val indices = v1.indices //向量1稀疏向量的非0点下标
     var squaredDistance = 0.0
-    val nnzv1 = indices.length
-    val nnzv2 = v2.size
-    var iv1 = if (nnzv1 > 0) indices(kv1) else -1
+    val nnzv1 = indices.length //向量1有多少个非0点
+    val nnzv2 = v2.size //向量2的全部点
+    var iv1 = if (nnzv1 > 0) indices(kv1) else -1 //向量1的第一个非0点下标序号，如果没有则-1
 
-    while (kv2 < nnzv2) {
+    while (kv2 < nnzv2) { //循环向量2
       var score = 0.0
-      if (kv2 != iv1) {
-        score = v2(kv2)
-      } else {
-        score = v1.values(kv1) - v2(kv2)
-        if (kv1 < nnzv1 - 1) {
+      if (kv2 != iv1) { //说明不是同一个位置
+        score = v2(kv2) //只获取向量2的
+      } else {//说明两个向量位置是相同的
+        score = v1.values(kv1) - v2(kv2) //减法
+        if (kv1 < nnzv1 - 1) { //更新第一个向量的下一个非0的位置
           kv1 += 1
           iv1 = indices(kv1)
         }
@@ -659,7 +667,7 @@ class DenseVector @Since("1.0.0") (
 object DenseVector {
 
   /** Extracts the value array from a dense vector.
-    * 返回稀松向量中的元素数组集合
+    * 返回密度向量中的元素数组集合
     **/
   @Since("1.3.0")
   def unapply(dv: DenseVector): Option[Array[Double]] = Some(dv.values)
@@ -837,9 +845,10 @@ class SparseVector @Since("1.0.0") (
    *
    * NOTE: The API needs to be discussed before making this public.
    *       Also, if we have a version assuming indices are sorted, we should optimize it.
+    * 对向量进行抽取，只要向量的某些位置的值，组成一个新向量
    */
   private[spark] def slice(selectedIndices: Array[Int]): SparseVector = {
-    var currentIdx = 0
+    var currentIdx = 0 //新向量有值的节点下标就是0 1 2 累加的连续值
     val (sliceInds, sliceVals) = selectedIndices.flatMap { origIdx =>
       val iIdx = java.util.Arrays.binarySearch(this.indices, origIdx)
       val i_v = if (iIdx >= 0) {
@@ -856,7 +865,7 @@ class SparseVector @Since("1.0.0") (
 
 //返回元素个数、有值得元素位置索引,有值得元素数组
 @Since("1.3.0")
-object SparseVector {
+object SparseVector {//稀疏向量
   @Since("1.3.0")
   def unapply(sv: SparseVector): Option[(Int, Array[Int], Array[Double])] =
     Some((sv.size, sv.indices, sv.values))

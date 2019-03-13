@@ -48,7 +48,9 @@ class IDF @Since("1.2.0") (@Since("1.2.0") val minDocFreq: Int) {
 
   /**
    * Computes the inverse document frequency.
+    * 计算每一个term出现在多少个doc中,（有多少个词，数组--每一个出现的词，数组--每一个词出现在多少个doc中）
    * @param dataset an RDD of term frequency vectors
+    * 参数是词频向量,即使用HashingTF处理后的向量,总共都少词、词是否出现，出现都少次
    */
   @Since("1.1.0")
   def fit(dataset: RDD[Vector]): IDFModel = {
@@ -72,33 +74,33 @@ class IDF @Since("1.2.0") (@Since("1.2.0") val minDocFreq: Int) {
 
 private object IDF {
 
-  /** Document frequency aggregator. */
+  /** Document frequency aggregator. 表示每一个term出现在都少个doc中*/
   class DocumentFrequencyAggregator(val minDocFreq: Int) extends Serializable {
 
     /** number of documents */
-    private var m = 0L
+    private var m = 0L //map阶段包含了都少个文档
     /** document frequency vector */
-    private var df: BDV[Long] = _
+    private var df: BDV[Long] = _ //词频对象---向量一个位置表示一个词，具体的值表示词出现在多少document中
 
 
     def this() = this(0)
 
-    /** Adds a new document. */
+    /** Adds a new document. map阶段添加一个文档*/
     def add(doc: Vector): this.type = {
-      if (isEmpty) {
+      if (isEmpty) { //创建词频集合
         df = BDV.zeros(doc.size)
       }
       doc match {
-        case SparseVector(size, indices, values) =>
-          val nnz = indices.size
+        case SparseVector(size, indices, values) => //稀疏向量
+          val nnz = indices.size //该文档有多少个词
           var k = 0
-          while (k < nnz) {
-            if (values(k) > 0) {
-              df(indices(k)) += 1L
+          while (k < nnz) {//依次迭代每一个term
+            if (values(k) > 0) {//该term对应在该文档出现次数
+              df(indices(k)) += 1L //说明出现在一个doc中
             }
             k += 1
           }
-        case DenseVector(values) =>
+        case DenseVector(values) => //密集向量
           val n = values.size
           var j = 0
           while (j < n) {
@@ -115,7 +117,7 @@ private object IDF {
       this
     }
 
-    /** Merges another. */
+    /** Merges another. reduce阶段*/
     def merge(other: DocumentFrequencyAggregator): this.type = {
       if (!other.isEmpty) {
         m += other.m
@@ -130,7 +132,9 @@ private object IDF {
 
     private def isEmpty: Boolean = m == 0L
 
-    /** Returns the current IDF vector. */
+    /** Returns the current IDF vector.
+      * 返回最终汇总后的向量
+      **/
     def idf(): Vector = {
       if (isEmpty) {
         throw new IllegalStateException("Haven't seen any document yet.")
@@ -144,7 +148,7 @@ private object IDF {
          * number of documents, set IDF to 0. This
          * will cause multiplication in IDFModel to
          * set TF-IDF to 0.
-         *
+         * 如果该term所在文档数量小于minDocFreq,我们设置为0
          * Since arrays are initialized to 0 by default,
          * we just omit changing those entries.
          */
@@ -161,6 +165,7 @@ private object IDF {
 /**
  * :: Experimental ::
  * Represents an IDF model that can transform term frequency vectors.
+  * 具体模型
  */
 @Experimental
 @Since("1.1.0")
@@ -173,13 +178,13 @@ class IDFModel private[spark] (@Since("1.1.0") val idf: Vector) extends Serializ
    * the terms which occur in fewer than `minDocFreq`
    * documents will have an entry of 0.
    *
-   * @param dataset an RDD of term frequency vectors
+   * @param dataset an RDD of term frequency vectors 词频向量
    * @return an RDD of TF-IDF vectors
    */
   @Since("1.1.0")
   def transform(dataset: RDD[Vector]): RDD[Vector] = {
-    val bcIdf = dataset.context.broadcast(idf)
-    dataset.mapPartitions(iter => iter.map(v => IDFModel.transform(bcIdf.value, v)))
+    val bcIdf = dataset.context.broadcast(idf) //广播模型
+    dataset.mapPartitions(iter => iter.map(v => IDFModel.transform(bcIdf.value, v))) //每一个向量与模型进行分析
   }
 
   /**
@@ -207,19 +212,19 @@ private object IDFModel {
   /**
    * Transforms a term frequency (TF) vector to a TF-IDF vector with a IDF vector
    *
-   * @param idf an IDF vector
-   * @param v a term frequence vector
+   * @param idf an IDF vector 模型
+   * @param v a term frequence vector 要预测的向量
    * @return a TF-IDF vector
    */
   def transform(idf: Vector, v: Vector): Vector = {
     val n = v.size
     v match {
       case SparseVector(size, indices, values) =>
-        val nnz = indices.size
+        val nnz = indices.size //该doc包含多少个term
         val newValues = new Array[Double](nnz)
         var k = 0
-        while (k < nnz) {
-          newValues(k) = values(k) * idf(indices(k))
+        while (k < nnz) {//循环每一个term
+          newValues(k) = values(k) * idf(indices(k)) //该文档词频 * 该文档中该词的权重
           k += 1
         }
         Vectors.sparse(n, indices, newValues)

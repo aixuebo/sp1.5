@@ -50,6 +50,8 @@ object LabeledPoint {
    * Parses a string resulted from `LabeledPoint#toString` into
    * an [[org.apache.spark.mllib.regression.LabeledPoint]].
    * 一个lable 标签以及对应很多属性值,表示一行记录
+    * 格式
+    * 1.lable,value1 value2 value3
    */
   @Since("1.1.0")
   def parse(s: String): LabeledPoint = {

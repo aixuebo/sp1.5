@@ -33,11 +33,12 @@ import org.apache.spark.rdd.RDD
  *      "Ordered categorical features" are categorical features with high arity,
  *      or any categorical feature used in regression or binary classification.
  *
- * @param label  Label from LabeledPoint
+ * @param label  Label from LabeledPoint 所属特征
  * @param binnedFeatures  Binned feature values.
- *                        Same length as LabeledPoint.features, but values are bin indices.
+ *                        Same length as LabeledPoint.features, but values are bin indices.特征值所在下标集合
  */
-private[spark] class TreePoint(val label: Double, val binnedFeatures: Array[Int])
+private[spark] class TreePoint(val label: Double,
+                               val binnedFeatures: Array[Int]) //该原始向量  --> 属于哪个分类点向量 转化过程
   extends Serializable {
 }
 
@@ -47,7 +48,7 @@ private[spark] object TreePoint {
    * Convert an input dataset into its TreePoint representation,
    * binning feature values in preparation for DecisionTree training.
    * @param input     Input dataset.
-   * @param bins      Bins for features, of size (numFeatures, numBins).
+   * @param bins      Bins for features, of size (numFeatures, numBins).决策树向量的分位点信息
    * @param metadata  Learning and dataset metadata
    * @return  TreePoint dataset representation
    */
@@ -58,10 +59,12 @@ private[spark] object TreePoint {
     // Construct arrays for featureArity for efficiency in the inner loop.
     val featureArity: Array[Int] = new Array[Int](metadata.numFeatures)
     var featureIndex = 0
-    while (featureIndex < metadata.numFeatures) {
+    while (featureIndex < metadata.numFeatures) {//遍历每一个特征
       featureArity(featureIndex) = metadata.featureArity.getOrElse(featureIndex, 0)
       featureIndex += 1
     }
+
+    //循环每一个元素做处理
     input.map { x =>
       TreePoint.labeledPointToTreePoint(x, bins, featureArity)
     }
@@ -78,11 +81,10 @@ private[spark] object TreePoint {
       bins: Array[Array[Bin]],
       featureArity: Array[Int]): TreePoint = {
     val numFeatures = labeledPoint.features.size
-    val arr = new Array[Int](numFeatures)
+    val arr = new Array[Int](numFeatures) //特征值存储所在区间位置
     var featureIndex = 0
-    while (featureIndex < numFeatures) {
-      arr(featureIndex) = findBin(featureIndex, labeledPoint, featureArity(featureIndex),
-        bins)
+    while (featureIndex < numFeatures) {//计算每一个特征值
+      arr(featureIndex) = findBin(featureIndex, labeledPoint, featureArity(featureIndex), bins)//每一个特征值所在区间位置
       featureIndex += 1
     }
     new TreePoint(labeledPoint.label, arr)
@@ -90,31 +92,34 @@ private[spark] object TreePoint {
 
   /**
    * Find bin for one (labeledPoint, feature).
-   *
-   * @param featureArity  0 for continuous features; number of categories for categorical features.
+    *
+    * @param featureArity  0 for continuous features; number of categories for categorical features.
    * @param bins   Bins for features, of size (numFeatures, numBins).
    */
   private def findBin(
-      featureIndex: Int,
-      labeledPoint: LabeledPoint,
+      featureIndex: Int,//特征序号
+      labeledPoint: LabeledPoint,//特征值
       featureArity: Int,
-      bins: Array[Array[Bin]]): Int = {
+      bins: Array[Array[Bin]]) //特征区间
+    : Int = { //返回该特征值在第几个区间
 
     /**
      * Binary search helper method for continuous feature.
+      * 方法内部的一个方法，为findBin方法内部调用
+      * 返回该特征对应的区间
      */
     def binarySearchForBins(): Int = {
-      val binForFeatures = bins(featureIndex)
-      val feature = labeledPoint.features(featureIndex)
+      val binForFeatures = bins(featureIndex) //向量特征区间
+      val feature = labeledPoint.features(featureIndex) //向量特征值
       var left = 0
       var right = binForFeatures.length - 1
-      while (left <= right) {
+      while (left <= right) {//二分法
         val mid = left + (right - left) / 2
-        val bin = binForFeatures(mid)
-        val lowThreshold = bin.lowSplit.threshold
+        val bin = binForFeatures(mid) //找到要比较的特征区间
+        val lowThreshold = bin.lowSplit.threshold //计算最大值和最小值
         val highThreshold = bin.highSplit.threshold
-        if ((lowThreshold < feature) && (highThreshold >= feature)) {
-          return mid
+        if ((lowThreshold < feature) && (highThreshold >= feature)) { //说明该特征在该区间
+          return mid //返回区间
         } else if (lowThreshold >= feature) {
           right = mid - 1
         } else {
@@ -123,6 +128,8 @@ private[spark] object TreePoint {
       }
       -1
     }
+
+    //上面的方法是需要被调用的
 
     if (featureArity == 0) {
       // Perform binary search for finding bin for continuous features.

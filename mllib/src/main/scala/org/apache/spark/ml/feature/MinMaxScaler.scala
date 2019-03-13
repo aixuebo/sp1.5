@@ -30,13 +30,14 @@ import org.apache.spark.sql.types.{StructField, StructType}
 
 /**
  * Params for [[MinMaxScaler]] and [[MinMaxScalerModel]].
+  * 输入/输出都是Vector类型
  */
 private[feature] trait MinMaxScalerParams extends Params with HasInputCol with HasOutputCol {
 
   /**
    * lower bound after transformation, shared by all features
    * Default: 0.0
-   * @group param
+   * @group param double类型
    */
   val min: DoubleParam = new DoubleParam(this, "min",
     "lower bound of the output feature range")
@@ -47,7 +48,7 @@ private[feature] trait MinMaxScalerParams extends Params with HasInputCol with H
   /**
    * upper bound after transformation, shared by all features
    * Default: 1.0
-   * @group param
+   * @group param double类型
    */
   val max: DoubleParam = new DoubleParam(this, "max",
     "upper bound of the output feature range")
@@ -55,7 +56,9 @@ private[feature] trait MinMaxScalerParams extends Params with HasInputCol with H
   /** @group getParam */
   def getMax: Double = $(max)
 
-  /** Validates and transforms the input schema. */
+  /** Validates and transforms the input schema.
+    * 校验输入/输出列类型都是Vector,输出列name不存在
+    **/
   protected def validateAndTransformSchema(schema: StructType): StructType = {
     val inputType = schema($(inputCol)).dataType
     require(inputType.isInstanceOf[VectorUDT],
@@ -89,7 +92,7 @@ class MinMaxScaler(override val uid: String)
 
   def this() = this(Identifiable.randomUID("minMaxScal"))
 
-  setDefault(min -> 0.0, max -> 1.0)
+  setDefault(min -> 0.0, max -> 1.0) //默认值是0和1
 
   /** @group setParam */
   def setInputCol(value: String): this.type = set(inputCol, value)
@@ -103,9 +106,10 @@ class MinMaxScaler(override val uid: String)
   /** @group setParam */
   def setMax(value: Double): this.type = set(max, value)
 
+  //数据集组装成模型
   override def fit(dataset: DataFrame): MinMaxScalerModel = {
     transformSchema(dataset.schema, logging = true)
-    val input = dataset.select($(inputCol)).map { case Row(v: Vector) => v }
+    val input = dataset.select($(inputCol)).map { case Row(v: Vector) => v }//查询输入列，因为row只有这一个字段,并且是vector类型,因此转换成vector类型数据集合
     val summary = Statistics.colStats(input)
     copyValues(new MinMaxScalerModel(uid, summary.min, summary.max).setParent(this))
   }
@@ -147,18 +151,21 @@ class MinMaxScalerModel private[ml] (
 
   override def transform(dataset: DataFrame): DataFrame = {
     val originalRange = (originalMax.toBreeze - originalMin.toBreeze).toArray
-    val minArray = originalMin.toArray
 
+    val minArray = originalMin.toArray //最小向量
+
+    //对输入向量进行转换
     val reScale = udf { (vector: Vector) =>
       val scale = $(max) - $(min)
 
       // 0 in sparse vector will probably be rescaled to non-zero
-      val values = vector.toArray
+      val values = vector.toArray //输入向量维度集合
       val size = values.size
       var i = 0
-      while (i < size) {
+      while (i < size) {//一个一个维度进行计算
+        //value-min /max-min,对各个维度数据进行归一化，让他们都转换成0-1之间,因此可以进行比较,当max=min的时候，说明整个维度就一个值,因此归一化的结果都相同，所以默认值为0.5
         val raw = if (originalRange(i) != 0) (values(i) - minArray(i)) / originalRange(i) else 0.5
-        values(i) = raw * scale + $(min)
+        values(i) = raw * scale + $(min) //更新每一个维度的value值---min和max表示最终分数在min-max之间。默认值是min=0,max=1,表示分数就是row计算好的归一化的值
         i += 1
       }
       Vectors.dense(values)

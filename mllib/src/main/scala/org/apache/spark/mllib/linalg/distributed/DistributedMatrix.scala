@@ -23,18 +23,21 @@ import org.apache.spark.annotation.Since
 
 /**
  * Represents a distributively stored matrix backed by one or more RDDs.
+  * 代表分布式环境下如何存储一个矩阵
  */
 @Since("1.0.0")
 trait DistributedMatrix extends Serializable {
 
-  /** Gets or computes the number of rows. */
+  /** Gets or computes the number of rows. 矩阵行数*/
   @Since("1.0.0")
   def numRows(): Long
 
-  /** Gets or computes the number of columns. */
+  /** Gets or computes the number of columns. 矩阵列数*/
   @Since("1.0.0")
   def numCols(): Long
 
-  /** Collects data and assembles a local dense breeze matrix (for test only). */
+  /** Collects data and assembles a local dense breeze matrix (for test only).
+    * 仅仅用于测试,表示本地存储的矩阵集合
+    **/
   private[mllib] def toBreeze(): BDM[Double]
 }

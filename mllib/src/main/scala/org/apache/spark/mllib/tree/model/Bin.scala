@@ -42,6 +42,7 @@ import org.apache.spark.mllib.tree.configuration.FeatureType._
  *                  accepted in the bin
  * @param featureType type of feature -- categorical or continuous
  * @param category categorical label value accepted in the bin for ordered features
+  * 分位点的开始位置和结束位置
  */
 private[tree]
 case class Bin(lowSplit: Split, highSplit: Split, featureType: FeatureType, category: Double)

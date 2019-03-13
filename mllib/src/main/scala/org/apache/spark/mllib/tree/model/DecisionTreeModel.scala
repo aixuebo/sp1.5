@@ -40,11 +40,12 @@ import org.apache.spark.util.Utils
  * This model stores the decision tree structure and parameters.
  * @param topNode root node
  * @param algo algorithm type -- classification or regression
+  * 代表一个决策树模型
  */
 @Since("1.0.0")
 @Experimental
 class DecisionTreeModel @Since("1.0.0") (
-    @Since("1.0.0") val topNode: Node,
+    @Since("1.0.0") val topNode: Node,//根节点对象
     @Since("1.0.0") val algo: Algo) extends Serializable with Saveable {
 
   /**
@@ -55,7 +56,7 @@ class DecisionTreeModel @Since("1.0.0") (
    */
   @Since("1.0.0")
   def predict(features: Vector): Double = {
-    topNode.predict(features)
+    topNode.predict(features) //从根节点进行计算
   }
 
   /**

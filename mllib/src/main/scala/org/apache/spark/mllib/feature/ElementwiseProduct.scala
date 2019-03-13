@@ -26,11 +26,13 @@ import org.apache.spark.mllib.linalg._
  * provided "weight" vector. In other words, it scales each column of the dataset by a scalar
  * multiplier.
  * @param scalingVec The values used to scale the reference vector's individual components.
+  * 进行向量的内积操作
  */
 @Since("1.4.0")
 @Experimental
 class ElementwiseProduct @Since("1.4.0") (
-    @Since("1.4.0") val scalingVec: Vector) extends VectorTransformer {
+    @Since("1.4.0") val scalingVec: Vector) //权重向量
+  extends VectorTransformer {
 
   /**
    * Does the hadamard product transformation.
@@ -44,7 +46,7 @@ class ElementwiseProduct @Since("1.4.0") (
       s"vector sizes do not match: Expected ${scalingVec.size} but found ${vector.size}")
     vector match {
       case dv: DenseVector =>
-        val values: Array[Double] = dv.values.clone()
+        val values: Array[Double] = dv.values.clone() //分别计算好每一个元素的乘法的值
         val dim = scalingVec.size
         var i = 0
         while (i < dim) {

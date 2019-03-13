@@ -70,7 +70,7 @@ import org.apache.spark.util.random.SamplingUtils
 private class RandomForest (
     private val strategy: Strategy,//配置对象
     private val numTrees: Int,//该森林有多少棵树
-    featureSubsetStrategy: String,
+    featureSubsetStrategy: String,//节点的特征该如何选择:auto  all  sqrt  log2  onethird
     private val seed: Int)
   extends Serializable with Logging {
 
@@ -136,9 +136,9 @@ private class RandomForest (
 
     val retaggedInput = input.retag(classOf[LabeledPoint])
     val metadata =
-      DecisionTreeMetadata.buildMetadata(retaggedInput, strategy, numTrees, featureSubsetStrategy)
+      DecisionTreeMetadata.buildMetadata(retaggedInput, strategy, numTrees, featureSubsetStrategy) //构建元数据
     logDebug("algo = " + strategy.algo)
-    logDebug("numTrees = " + numTrees)
+    logDebug("numTrees = " + numTrees) //需要多少颗决策树
     logDebug("seed = " + seed)
     logDebug("maxBins = " + metadata.maxBins)
     logDebug("featureSubsetStrategy = " + featureSubsetStrategy)
@@ -148,7 +148,7 @@ private class RandomForest (
     // Find the splits and the corresponding bins (interval between the splits) using a sample
     // of the input data.
     timer.start("findSplitsBins")
-    val (splits, bins) = DecisionTree.findSplitsBins(retaggedInput, metadata)
+    val (splits, bins) = DecisionTree.findSplitsBins(retaggedInput, metadata) //计算每一个特征的分位点
     timer.stop("findSplitsBins")
     logDebug("numBins: feature: number of bins")
     logDebug(Range(0, metadata.numFeatures).map { featureIndex =>
@@ -157,19 +157,20 @@ private class RandomForest (
 
     // Bin feature values (TreePoint representation).
     // Cache input RDD for speedup during multiple passes.
-    val treeInput = TreePoint.convertToTreeRDD(retaggedInput, bins, metadata)
+    val treeInput = TreePoint.convertToTreeRDD(retaggedInput, bins, metadata) //该原始向量  --> 属于哪个分类点向量 转化过程---即无论原始特征是连续的还是离散的,最后都变成离散类型的
 
+    //是否是多颗树
     val withReplacement = if (numTrees > 1) true else false
 
     val baggedInput
       = BaggedPoint.convertToBaggedRDD(treeInput,
           strategy.subsamplingRate, numTrees,
-          withReplacement, seed).persist(StorageLevel.MEMORY_AND_DISK)
+          withReplacement, seed).persist(StorageLevel.MEMORY_AND_DISK) //存储到磁盘上
 
     // depth of the decision tree
     val maxDepth = strategy.maxDepth
     require(maxDepth <= 30,
-      s"DecisionTree currently only supports maxDepth <= 30, but was given maxDepth = $maxDepth.")
+      s"DecisionTree currently only supports maxDepth <= 30, but was given maxDepth = $maxDepth.") //深度要求大于30才好
 
     // Max memory usage for aggregates
     // TODO: Calculate memory usage more precisely.
@@ -185,6 +186,8 @@ private class RandomForest (
       }
       RandomForest.aggregateSizeForNode(metadata, featureSubset) * 8L
     }
+
+    //校验内存限制
     require(maxMemoryPerNode <= maxMemoryUsage,
       s"RandomForest/DecisionTree given maxMemoryInMB = ${strategy.maxMemoryInMB}," +
       " which is too small for the given features." +
@@ -218,7 +221,7 @@ private class RandomForest (
     rng.setSeed(seed)
 
     // Allocate and queue root nodes.
-    val topNodes: Array[Node] = Array.fill[Node](numTrees)(Node.emptyNode(nodeIndex = 1))
+    val topNodes: Array[Node] = Array.fill[Node](numTrees)(Node.emptyNode(nodeIndex = 1)) //每一棵树,有一个顶层节点top
     Range(0, numTrees).foreach(treeIndex => nodeQueue.enqueue((treeIndex, topNodes(treeIndex))))
 
     while (nodeQueue.nonEmpty) {

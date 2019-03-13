@@ -22,6 +22,7 @@ import org.apache.spark.annotation.{Experimental, Since}
 /**
  * :: Experimental ::
  * Enum to describe whether a feature is "continuous" or "categorical"
+  * 描述该特征是连续值还是离散的分类值
  */
 @Since("1.0.0")
 @Experimental

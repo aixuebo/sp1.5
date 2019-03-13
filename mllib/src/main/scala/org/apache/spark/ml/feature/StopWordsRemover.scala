@@ -102,7 +102,7 @@ class StopWordsRemover(override val uid: String)
    */
   val stopWords: StringArrayParam = new StringArrayParam(this, "stopWords", "stop words")
 
-  /** @group setParam */
+  /** @group setParam 自定义停用词集合*/
   def setStopWords(value: Array[String]): this.type = set(stopWords, value)
 
   /** @group getParam */
@@ -121,34 +121,36 @@ class StopWordsRemover(override val uid: String)
   /** @group getParam */
   def getCaseSensitive: Boolean = $(caseSensitive)
 
-  setDefault(stopWords -> StopWords.EnglishStopWords, caseSensitive -> false)
+  setDefault(stopWords -> StopWords.EnglishStopWords, caseSensitive -> false) //默认大小写不敏感
 
   override def transform(dataset: DataFrame): DataFrame = {
-    val outputSchema = transformSchema(dataset.schema)
-    val t = if ($(caseSensitive)) {
-        val stopWordsSet = $(stopWords).toSet
+    val outputSchema = transformSchema(dataset.schema) //创建新的输出schema
+    val t = if ($(caseSensitive)) {//大小写敏感
+        val stopWordsSet = $(stopWords).toSet //停用词集合
         udf { terms: Seq[String] =>
-          terms.filter(s => !stopWordsSet.contains(s))
+          terms.filter(s => !stopWordsSet.contains(s)) //循环每一个term,保留不在停用词集合中的term
         }
-      } else {
-        val toLower = (s: String) => if (s != null) s.toLowerCase else s
-        val lowerStopWords = $(stopWords).map(toLower(_)).toSet
+      } else {//大小写不敏感
+        val toLower = (s: String) => if (s != null) s.toLowerCase else s //全部字符串转换成小写
+        val lowerStopWords = $(stopWords).map(toLower(_)).toSet //停用词转换成小写
         udf { terms: Seq[String] =>
-          terms.filter(s => !lowerStopWords.contains(toLower(s)))
+          terms.filter(s => !lowerStopWords.contains(toLower(s))) //循环每一个term,保留不在停用词集合中的term
         }
     }
 
     val metadata = outputSchema($(outputCol)).metadata
-    dataset.select(col("*"), t(col($(inputCol))).as($(outputCol), metadata))
+    dataset.select(col("*"),//输出原有列
+      t(col($(inputCol))).as($(outputCol), //追加一列,获取输入列,对输入列进行停用词过滤,命名为输出列名字
+        metadata))
   }
 
   override def transformSchema(schema: StructType): StructType = {
     val inputType = schema($(inputCol)).dataType
-    require(inputType.sameType(ArrayType(StringType)),
+    require(inputType.sameType(ArrayType(StringType)), //校验输入列必须是字符串数组类型
       s"Input type must be ArrayType(StringType) but got $inputType.")
     val outputFields = schema.fields :+
-      StructField($(outputCol), inputType, schema($(inputCol)).nullable)
-    StructType(outputFields)
+      StructField($(outputCol), inputType, schema($(inputCol)).nullable) //追加新的一列,输出列,类型也是字符串数组
+    StructType(outputFields) //返回新的带有输出列的schema
   }
 
   override def copy(extra: ParamMap): StopWordsRemover = defaultCopy(extra)

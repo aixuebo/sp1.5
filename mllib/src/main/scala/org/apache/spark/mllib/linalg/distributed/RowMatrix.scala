@@ -38,7 +38,7 @@ import org.apache.spark.storage.StorageLevel
 /**
  * :: Experimental ::
  * Represents a row-oriented distributed Matrix with no meaningful row indices.
- *
+ * 代表一个矩阵，只是以row为单位的行集合组成的矩阵
  * @param rows rows stored as an RDD[Vector]
  * @param nRows number of rows. A non-positive value means unknown, and then the number of rows will
  *              be determined by the number of records in the RDD `rows`.
@@ -48,7 +48,7 @@ import org.apache.spark.storage.StorageLevel
 @Since("1.0.0")
 @Experimental
 class RowMatrix @Since("1.0.0") (
-    @Since("1.0.0") val rows: RDD[Vector],
+    @Since("1.0.0") val rows: RDD[Vector],//row集合
     private var nRows: Long, //有多少行
     private var nCols: Int) //有多少列
     extends DistributedMatrix with Logging {
@@ -399,9 +399,11 @@ class RowMatrix @Since("1.0.0") (
 
   /**
    * Computes column-wise summary statistics.
+    * 统计vector中每一个维度的均值、方差、最大值、最小值等特征
    */
   @Since("1.0.0")
   def computeColumnSummaryStatistics(): MultivariateStatisticalSummary = {
+    //summary返回值是MultivariateOnlineSummarizer
     val summary = rows.treeAggregate(new MultivariateOnlineSummarizer)(
       (aggregator, data) => aggregator.add(data),
       (aggregator1, aggregator2) => aggregator1.merge(aggregator2))

@@ -23,6 +23,7 @@ import org.apache.spark.annotation.DeveloperApi
  * :: DeveloperApi ::
  * An enum-like type for attribute types: [[AttributeType$#Numeric]], [[AttributeType$#Nominal]],
  * and [[AttributeType$#Binary]].
+  * 定义枚举类型
  */
 @DeveloperApi
 sealed abstract class AttributeType(val name: String)
@@ -30,19 +31,19 @@ sealed abstract class AttributeType(val name: String)
 @DeveloperApi
 object AttributeType {
 
-  /** Numeric type. */
+  /** Numeric type. 正数类型 */
   val Numeric: AttributeType = {
     case object Numeric extends AttributeType("numeric")
     Numeric
   }
 
-  /** Nominal type. */
+  /** Nominal type. 名词类型--分类name */
   val Nominal: AttributeType = {
     case object Nominal extends AttributeType("nominal")
     Nominal
   }
 
-  /** Binary type. */
+  /** Binary type. 二元类型  0或者1*/
   val Binary: AttributeType = {
     case object Binary extends AttributeType("binary")
     Binary

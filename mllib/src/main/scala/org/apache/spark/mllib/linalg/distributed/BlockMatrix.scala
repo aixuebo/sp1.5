@@ -284,6 +284,8 @@ class BlockMatrix @Since("1.3.0") (
       s"less than Int.MaxValue. Currently numRows * numCols: ${numRows() * numCols()}")
     val m = numRows().toInt
     val n = numCols().toInt
+    //1个int是4个字节,1M能存储1024*1024/4 = 256个int
+    //500M能存储多少int，500*1024*1024 / 4 = 125 * 1024 * 1024 大约等于125000个int
     val mem = m * n / 125000
     if (mem > 500) logWarning(s"Storing this matrix will require $mem MB of memory!")
     val localBlocks = blocks.collect()

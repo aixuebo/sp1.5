@@ -22,7 +22,7 @@ import org.apache.spark.annotation.{DeveloperApi, Since}
 /**
  * Predicted value for a node
  * @param predict predicted value
- * @param prob probability of the label (classification only)
+ * @param prob probability of the label (classification only) 仅仅用于分类时,表示该节点可能对应的分类label
  */
 @Since("1.2.0")
 @DeveloperApi

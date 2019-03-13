@@ -22,11 +22,13 @@ import org.apache.spark.rdd.RDD
 
 /**
  * Trait for correlation algorithms.
+  * 相似度算法
  */
 private[stat] trait Correlation {
 
   /**
    * Compute correlation for two datasets.
+    * 计算两个结果集的相似度
    */
   def computeCorrelation(x: RDD[Double], y: RDD[Double]): Double
 
@@ -89,7 +91,7 @@ private[stat] object Correlations {
  */
 private[mllib] object CorrelationNames {
 
-  // Note: after new types of correlations are implemented, please update this map.
+  // Note: after new types of correlations are implemented, please update this map.两种相似度算法
   val nameToObjectMap = Map(("pearson", PearsonCorrelation), ("spearman", SpearmanCorrelation))
   val defaultCorrName: String = "pearson"
 

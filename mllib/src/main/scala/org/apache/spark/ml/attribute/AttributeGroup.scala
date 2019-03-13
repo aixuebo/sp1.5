@@ -26,22 +26,25 @@ import org.apache.spark.sql.types.{Metadata, MetadataBuilder, StructField}
 /**
  * :: DeveloperApi ::
  * Attributes that describe a vector ML column.
+  * 使用属性去描述一个向量列,即该列是以name为名字的列，只是里面的类型是一个向量,包含多个子列
  *
- * @param name name of the attribute group (the ML column name)
+ * @param name name of the attribute group (the ML column name) 列的name,该列存储的是一个向量
  * @param numAttributes optional number of attributes. At most one of `numAttributes` and `attrs`
  *                      can be defined.
  * @param attrs optional array of attributes. Attribute will be copied with their corresponding
  *              indices in the array.
+  *    numAttributes和attrs参数只能定义一个
  */
 @DeveloperApi
 class AttributeGroup private (
     val name: String,
-    val numAttributes: Option[Int],
-    attrs: Option[Array[Attribute]]) extends Serializable {
+    val numAttributes: Option[Int],//向量容纳多少个维度
+    attrs: Option[Array[Attribute]]) //向量中每一个维度对应数据的类型
+     extends Serializable {
 
   require(name.nonEmpty, "Cannot have an empty string for name.")
   require(!(numAttributes.isDefined && attrs.isDefined),
-    "Cannot have both numAttributes and attrs defined.")
+    "Cannot have both numAttributes and attrs defined.") //不能两个都定义,只能定义一个
 
   /**
    * Creates an attribute group without attribute info.
@@ -66,18 +69,22 @@ class AttributeGroup private (
 
   /**
    * Optional array of attributes. At most one of `numAttributes` and `attributes` can be defined.
+    * 向量定义的特征集合
    */
   val attributes: Option[Array[Attribute]] = attrs.map(_.view.zipWithIndex.map { case (attr, i) =>
     attr.withIndex(i)
   }.toArray)
 
+  //特征name与特征序号映射
   private lazy val nameToIndex: Map[String, Int] = {
     attributes.map(_.view.flatMap { attr =>
       attr.name.map(_ -> attr.index.get)
     }.toMap).getOrElse(Map.empty)
   }
 
-  /** Size of the attribute group. Returns -1 if the size is unknown. */
+  /** Size of the attribute group. Returns -1 if the size is unknown.
+    * 特征数量
+    **/
   def size: Int = {
     if (numAttributes.isDefined) {
       numAttributes.get
@@ -88,21 +95,31 @@ class AttributeGroup private (
     }
   }
 
-  /** Test whether this attribute group contains a specific attribute. */
+  /** Test whether this attribute group contains a specific attribute.
+    * 是否有该name对应的特征
+    **/
   def hasAttr(attrName: String): Boolean = nameToIndex.contains(attrName)
 
-  /** Index of an attribute specified by name. */
+  /** Index of an attribute specified by name.
+    * 该name对应的特征序号
+    **/
   def indexOf(attrName: String): Int = nameToIndex(attrName)
 
-  /** Gets an attribute by its name. */
+  /** Gets an attribute by its name.
+    * name对应的特征
+    **/
   def apply(attrName: String): Attribute = {
-    attributes.get(indexOf(attrName))
+    attributes.get(indexOf(attrName)) //先找到序号,在按照序号找特征
   }
 
-  /** Gets an attribute by its name. */
+  /** Gets an attribute by its name.
+    *  name对应的特征
+    **/
   def getAttr(attrName: String): Attribute = this(attrName)
 
-  /** Gets an attribute by its index. */
+  /** Gets an attribute by its index.
+    * index对应找特征
+    **/
   def apply(attrIndex: Int): Attribute = attributes.get(attrIndex)
 
   /** Gets an attribute by its index. */
@@ -113,6 +130,7 @@ class AttributeGroup private (
     import AttributeKeys._
     val bldr = new MetadataBuilder()
     if (attributes.isDefined) {
+      //存储所有特征的数组集合,每一个特征本身是有序号的,所以不用存储序号
       val numericMetadata = ArrayBuffer.empty[Metadata]
       val nominalMetadata = ArrayBuffer.empty[Metadata]
       val binaryMetadata = ArrayBuffer.empty[Metadata]
@@ -239,7 +257,7 @@ object AttributeGroup {
 
   /** Creates an attribute group from a [[StructField]] instance. */
   def fromStructField(field: StructField): AttributeGroup = {
-    require(field.dataType == new VectorUDT)
+    require(field.dataType == new VectorUDT) //该字段属性一定是vector类型
     if (field.metadata.contains(ML_ATTR)) {
       fromMetadata(field.metadata.getMetadata(ML_ATTR), field.name)
     } else {

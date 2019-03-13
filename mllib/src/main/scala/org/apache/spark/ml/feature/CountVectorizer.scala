@@ -31,6 +31,8 @@ import org.apache.spark.util.collection.OpenHashMap
 
 /**
  * Params for [[CountVectorizer]] and [[CountVectorizerModel]].
+  * 输入是String数组组成的多个列
+  * 输出是Vector向量类型的列
  */
 private[feature] trait CountVectorizerParams extends Params with HasInputCol with HasOutputCol {
 
@@ -66,7 +68,7 @@ private[feature] trait CountVectorizerParams extends Params with HasInputCol wit
   /** @group getParam */
   def getMinDF: Double = $(minDF)
 
-  /** Validates and transforms the input schema. */
+  /** Validates and transforms the input schema.校验输入和输出类型 */
   protected def validateAndTransformSchema(schema: StructType): StructType = {
     SchemaUtils.checkColumnType(schema, $(inputCol), new ArrayType(StringType, true))
     SchemaUtils.appendColumn(schema, $(outputCol), new VectorUDT)
@@ -127,8 +129,9 @@ class CountVectorizer(override val uid: String)
   setDefault(vocabSize -> (1 << 18), minDF -> 1)
 
   override def fit(dataset: DataFrame): CountVectorizerModel = {
-    transformSchema(dataset.schema, logging = true)
+    transformSchema(dataset.schema, logging = true) //创建输出列
     val vocSize = $(vocabSize)
+
     val input = dataset.select($(inputCol)).map(_.getAs[Seq[String]](0))
     val minDf = if ($(minDF) >= 1.0) {
       $(minDF)
@@ -177,7 +180,7 @@ class CountVectorizer(override val uid: String)
  * @param vocabulary An Array over terms. Only the terms in the vocabulary will be counted.
  */
 @Experimental
-class CountVectorizerModel(override val uid: String, val vocabulary: Array[String])
+class CountVectorizerModel(override val uid: String, val vocabulary: Array[String]) //字典数组集合
   extends Model[CountVectorizerModel] with CountVectorizerParams {
 
   def this(vocabulary: Array[String]) = {
@@ -198,11 +201,11 @@ class CountVectorizerModel(override val uid: String, val vocabulary: Array[Strin
   private var broadcastDict: Option[Broadcast[Map[String, Int]]] = None
 
   override def transform(dataset: DataFrame): DataFrame = {
-    if (broadcastDict.isEmpty) {
+    if (broadcastDict.isEmpty) { //字典映射成属性值以及序号
       val dict = vocabulary.zipWithIndex.toMap
       broadcastDict = Some(dataset.sqlContext.sparkContext.broadcast(dict))
     }
-    val dictBr = broadcastDict.get
+    val dictBr = broadcastDict.get //获取字典
     val minTf = $(minTF)
     val vectorizer = udf { (document: Seq[String]) =>
       val termCounts = new OpenHashMap[Int, Double]

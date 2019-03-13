@@ -32,10 +32,11 @@ private[spark] object MetadataUtils {
   /**
    * Examine a schema to identify the number of classes in a label column.
    * Returns None if the number of labels is not specified, or if the label column is continuous.
+    * 该特征的分类数量
    */
   def getNumClasses(labelSchema: StructField): Option[Int] = {
     Attribute.fromStructField(labelSchema) match {
-      case binAttr: BinaryAttribute => Some(2)
+      case binAttr: BinaryAttribute => Some(2) //二元就2个
       case nomAttr: NominalAttribute => nomAttr.getNumValues
       case _: NumericAttribute | UnresolvedAttribute => None
     }
@@ -50,6 +51,7 @@ private[spark] object MetadataUtils {
    *                        specified.
    * @return  Map: feature index --> number of categories.
    *          The map's set of keys will be the set of categorical feature indices.
+    * 返回向量中每一个特征对应的分类数量的映射,key是特征index序号
    */
   def getCategoricalFeatures(featuresSchema: StructField): Map[Int, Int] = {
     val metadata = AttributeGroup.fromStructField(featuresSchema)
@@ -78,13 +80,15 @@ private[spark] object MetadataUtils {
   /**
    * Takes a Vector column and a list of feature names, and returns the corresponding list of
    * feature indices in the column, in order.
-   * @param col  Vector column which must have feature names specified via attributes
-   * @param names  List of feature names
+   * @param col  Vector column which must have feature names specified via attributes 该列必须是vector的向量类型列
+   * @param names  List of feature names 获取向量中某些name对应的序号
+    *
    */
   def getFeatureIndicesFromNames(col: StructField, names: Array[String]): Array[Int] = {
     require(col.dataType.isInstanceOf[VectorUDT], s"getFeatureIndicesFromNames expected column $col"
       + s" to be Vector type, but it was type ${col.dataType} instead.")
-    val inputAttr = AttributeGroup.fromStructField(col)
+    val inputAttr = AttributeGroup.fromStructField(col) //转换成向量特征集合
+    //返回name对应的向量下标
     names.map { name =>
       require(inputAttr.hasAttr(name),
         s"getFeatureIndicesFromNames found no feature with name $name in column $col.")

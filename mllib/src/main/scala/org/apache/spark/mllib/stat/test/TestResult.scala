@@ -31,6 +31,7 @@ trait TestResult[DF] {
   /**
    * The probability of obtaining a test statistic result at least as extreme as the one that was
    * actually observed, assuming that the null hypothesis is true.
+    * 返回的p值概率
    */
   @Since("1.1.0")
   def pValue: Double
@@ -38,18 +39,21 @@ trait TestResult[DF] {
   /**
    * Returns the degree(s) of freedom of the hypothesis test.
    * Return type should be Number(e.g. Int, Double) or tuples of Numbers for toString compatibility.
+    * 自由度
    */
   @Since("1.1.0")
   def degreesOfFreedom: DF
 
   /**
    * Test statistic.
+    * 计算结果
    */
   @Since("1.1.0")
   def statistic: Double
 
   /**
    * Null hypothesis of the test.
+    * 是否支持原假设
    */
   @Since("1.1.0")
   def nullHypothesis: String
@@ -62,13 +66,13 @@ trait TestResult[DF] {
   override def toString: String = {
 
     // String explaining what the p-value indicates.
-    val pValueExplain = if (pValue <= 0.01) {
+    val pValueExplain = if (pValue <= 0.01) { //表示非常强的显著
       s"Very strong presumption against null hypothesis: $nullHypothesis."
-    } else if (0.01 < pValue && pValue <= 0.05) {
+    } else if (0.01 < pValue && pValue <= 0.05) { //一般强的显著
       s"Strong presumption against null hypothesis: $nullHypothesis."
-    } else if (0.05 < pValue && pValue <= 0.1) {
+    } else if (0.05 < pValue && pValue <= 0.1) { //弱显著
       s"Low presumption against null hypothesis: $nullHypothesis."
-    } else {
+    } else { //不显著
       s"No presumption against null hypothesis: $nullHypothesis."
     }
 
@@ -84,9 +88,9 @@ trait TestResult[DF] {
  */
 @Experimental
 @Since("1.1.0")
-class ChiSqTestResult private[stat] (override val pValue: Double,
-    @Since("1.1.0") override val degreesOfFreedom: Int,
-    @Since("1.1.0") override val statistic: Double,
+class ChiSqTestResult private[stat] (override val pValue: Double,//成功的概率值
+    @Since("1.1.0") override val degreesOfFreedom: Int,//自由度
+    @Since("1.1.0") override val statistic: Double,//计算的卡方结果
     @Since("1.1.0") val method: String,
     @Since("1.1.0") override val nullHypothesis: String) extends TestResult[Int] {
 
@@ -109,7 +113,7 @@ class KolmogorovSmirnovTestResult private[stat] (
     @Since("1.5.0") override val nullHypothesis: String) extends TestResult[Int] {
 
   @Since("1.5.0")
-  override val degreesOfFreedom = 0
+  override val degreesOfFreedom = 0 //自语哦度默认为0
 
   override def toString: String = {
     "Kolmogorov-Smirnov test summary:\n" + super.toString

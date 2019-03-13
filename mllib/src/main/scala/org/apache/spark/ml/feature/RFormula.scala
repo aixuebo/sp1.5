@@ -31,6 +31,7 @@ import org.apache.spark.sql.types._
 
 /**
  * Base trait for [[RFormula]] and [[RFormulaModel]].
+  * 基于公式选择特征
  */
 private[feature] trait RFormulaBase extends HasFeaturesCol with HasLabelCol {
 
@@ -72,15 +73,15 @@ class RFormula(override val uid: String) extends Estimator[RFormulaModel] with R
   /** @group setParam */
   def setLabelCol(value: String): this.type = set(labelCol, value)
 
-  /** Whether the formula specifies fitting an intercept. */
+  /** Whether the formula specifies fitting an intercept.是否特殊化拟合截距 */
   private[ml] def hasIntercept: Boolean = {
-    require(isDefined(formula), "Formula must be defined first.")
-    RFormulaParser.parse($(formula)).hasIntercept
+    require(isDefined(formula), "Formula must be defined first.") //定义了公式
+    RFormulaParser.parse($(formula)).hasIntercept //是否特殊化拟合截距
   }
 
   override def fit(dataset: DataFrame): RFormulaModel = {
-    require(isDefined(formula), "Formula must be defined first.")
-    val parsedFormula = RFormulaParser.parse($(formula))
+    require(isDefined(formula), "Formula must be defined first.") //必须定义了formula属性
+    val parsedFormula = RFormulaParser.parse($(formula)) //解析
     val resolvedFormula = parsedFormula.resolve(dataset.schema)
     // StringType terms and terms representing interactions need to be encoded before assembly.
     // TODO(ekl) add support for feature interactions

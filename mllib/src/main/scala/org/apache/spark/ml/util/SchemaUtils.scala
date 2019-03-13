@@ -31,6 +31,7 @@ private[spark] object SchemaUtils {
    * Check whether the given schema contains a column of the required data type.
    * @param colName  column name
    * @param dataType  required column data type
+    * 校验schema中存在colName列,并且colName的类型与参数dataType一致
    */
   def checkColumnType(
       schema: StructType,
@@ -50,14 +51,16 @@ private[spark] object SchemaUtils {
    *                the input schema unchanged. This allows users to disable output columns.
    * @param dataType new column data type
    * @return new schema with the input column appended
+    *  向schema追加字段--参数有字段的name、类型
+    *
    */
   def appendColumn(
       schema: StructType,
       colName: String,
-      dataType: DataType): StructType = {
+      dataType: DataType): StructType = {//返回新的StructType对象,即不可变对象
     if (colName.isEmpty) return schema
     val fieldNames = schema.fieldNames
-    require(!fieldNames.contains(colName), s"Column $colName already exists.")
+    require(!fieldNames.contains(colName), s"Column $colName already exists.") //原schema不能存在该字段
     val outputFields = schema.fields :+ StructField(colName, dataType, nullable = false)
     StructType(outputFields)
   }
@@ -67,6 +70,7 @@ private[spark] object SchemaUtils {
    * @param schema input schema
    * @param col New column schema
    * @return new schema with the input column appended
+    * 向schema追加字段--参数有字段的name、类型
    */
   def appendColumn(schema: StructType, col: StructField): StructType = {
     require(!schema.fieldNames.contains(col.name), s"Column ${col.name} already exists.")

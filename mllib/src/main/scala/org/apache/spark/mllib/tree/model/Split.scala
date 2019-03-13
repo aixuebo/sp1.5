@@ -30,13 +30,14 @@ import org.apache.spark.mllib.tree.configuration.FeatureType.FeatureType
  *                  Split left if feature <= threshold, else right.
  * @param featureType type of feature -- categorical or continuous
  * @param categories Split left if categorical feature value is in this set, else right.
+  *   表示决策树的一个分位点
  */
 @Since("1.0.0")
 @DeveloperApi
 case class Split(
-    @Since("1.0.0") feature: Int,
-    @Since("1.0.0") threshold: Double,
-    @Since("1.0.0") featureType: FeatureType,
+    @Since("1.0.0") feature: Int,//第几个特征
+    @Since("1.0.0") threshold: Double,//该分位点的具体值
+    @Since("1.0.0") featureType: FeatureType,//该特征是连续值还是离散值
     @Since("1.0.0") categories: List[Double]) {
 
   override def toString: String = {
@@ -49,6 +50,7 @@ case class Split(
  * Split with minimum threshold for continuous features. Helps with the smallest bin creation.
  * @param feature feature index
  * @param featureType type of feature -- categorical or continuous
+  *  最左边边界
  */
 private[tree] class DummyLowSplit(feature: Int, featureType: FeatureType)
   extends Split(feature, Double.MinValue, featureType, List())
@@ -57,6 +59,7 @@ private[tree] class DummyLowSplit(feature: Int, featureType: FeatureType)
  * Split with maximum threshold for continuous features. Helps with the highest bin creation.
  * @param feature feature index
  * @param featureType type of feature -- categorical or continuous
+  * 最右边边界
  */
 private[tree] class DummyHighSplit(feature: Int, featureType: FeatureType)
   extends Split(feature, Double.MaxValue, featureType, List())

@@ -25,6 +25,7 @@ import org.apache.spark.rdd.RDD
 /**
  * :: DeveloperApi ::
  * Trait for transformation of a vector
+  * 向量转换的trait
  */
 @Since("1.1.0")
 @DeveloperApi
@@ -32,7 +33,7 @@ trait VectorTransformer extends Serializable {
 
   /**
    * Applies transformation on a vector.
-   *
+   * 转换一个向量
    * @param vector vector to be transformed.
    * @return transformed vector.
    */
@@ -41,7 +42,7 @@ trait VectorTransformer extends Serializable {
 
   /**
    * Applies transformation on an RDD[Vector].
-   *
+   * 对向量的RDD进行转换
    * @param data RDD[Vector] to be transformed.
    * @return transformed RDD[Vector].
    */

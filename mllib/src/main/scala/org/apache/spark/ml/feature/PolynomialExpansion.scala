@@ -33,6 +33,7 @@ import org.apache.spark.sql.types.DataType
  * expansion of a product of sums expresses it as a sum of products by using the fact that
  * multiplication distributes over addition". Take a 2-variable feature vector as an example:
  * `(x, y)`, if we want to expand it with degree 2, then we get `(x, x * x, y, x * y, y * y)`.
+  * 展开多项式
  */
 @Experimental
 class PolynomialExpansion(override val uid: String)
@@ -48,7 +49,7 @@ class PolynomialExpansion(override val uid: String)
   val degree = new IntParam(this, "degree", "the polynomial degree to expand (>= 1)",
     ParamValidators.gt(1))
 
-  setDefault(degree -> 2)
+  setDefault(degree -> 2) //默认是2
 
   /** @group getParam */
   def getDegree: Int = $(degree)

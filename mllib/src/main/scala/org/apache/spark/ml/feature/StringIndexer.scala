@@ -32,6 +32,7 @@ import org.apache.spark.util.collection.OpenHashMap
 
 /**
  * Base trait for [[StringIndexer]] and [[StringIndexerModel]].
+  * 为离散型特征设置唯一编号,按照出现频率大小排序后设置编号
  */
 private[feature] trait StringIndexerBase extends Params with HasInputCol with HasOutputCol {
 
@@ -39,12 +40,13 @@ private[feature] trait StringIndexerBase extends Params with HasInputCol with Ha
   protected def validateAndTransformSchema(schema: StructType): StructType = {
     val inputColName = $(inputCol)
     val inputDataType = schema(inputColName).dataType
-    require(inputDataType == StringType || inputDataType.isInstanceOf[NumericType],
+    require(inputDataType == StringType || inputDataType.isInstanceOf[NumericType], //输入列类型一定是字符串或者是int值
       s"The input column $inputColName must be either string type or numeric type, " +
         s"but got $inputDataType.")
+
     val inputFields = schema.fields
     val outputColName = $(outputCol)
-    require(inputFields.forall(_.name != outputColName),
+    require(inputFields.forall(_.name != outputColName),//输出列不在输入李中
       s"Output column $outputColName already exists.")
     val attr = NominalAttribute.defaultAttr.withName($(outputCol))
     val outputFields = inputFields :+ attr.toStructField()
@@ -76,10 +78,10 @@ class StringIndexer(override val uid: String) extends Estimator[StringIndexerMod
   // TODO: handle unseen labels
 
   override def fit(dataset: DataFrame): StringIndexerModel = {
-    val counts = dataset.select(col($(inputCol)).cast(StringType))
-      .map(_.getString(0))
-      .countByValue()
-    val labels = counts.toSeq.sortBy(-_._2).map(_._1).toArray
+    val counts = dataset.select(col($(inputCol)).cast(StringType)) //获取输入列,该列必须是字符串类型的，即是是数字也要转换成字符串类型
+      .map(_.getString(0)) //row只有一个列,并且是String类型的,因此直接获取第0个即可
+      .countByValue() //Map[T, Long] 计算每一个分类出现的次数
+    val labels = counts.toSeq.sortBy(-_._2).map(_._1).toArray //输出磁盘排序后的离散值,组成数组
     copyValues(new StringIndexerModel(uid, labels).setParent(this))
   }
 
@@ -103,10 +105,12 @@ class StringIndexer(override val uid: String) extends Estimator[StringIndexerMod
 @Experimental
 class StringIndexerModel (
     override val uid: String,
-    val labels: Array[String]) extends Model[StringIndexerModel] with StringIndexerBase {
+    val labels: Array[String]) //按照词频计算好的离散型集合---如果离散值很多,占用内存较大
+  extends Model[StringIndexerModel] with StringIndexerBase {
 
   def this(labels: Array[String]) = this(Identifiable.randomUID("strIdx"), labels)
 
+  //为lable编号--key是label,value是编号
   private val labelToIndex: OpenHashMap[String, Double] = {
     val n = labels.length
     val map = new OpenHashMap[String, Double](n)
@@ -124,26 +128,28 @@ class StringIndexerModel (
   /** @group setParam */
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
+  //拿到模型后去适配数据集合
   override def transform(dataset: DataFrame): DataFrame = {
-    if (!dataset.schema.fieldNames.contains($(inputCol))) {
+    if (!dataset.schema.fieldNames.contains($(inputCol))) { //说明输入列不存在
       logInfo(s"Input column ${$(inputCol)} does not exist during transformation. " +
         "Skip StringIndexerModel.")
       return dataset
     }
 
+    //输出lable对应的序号
     val indexer = udf { label: String =>
       if (labelToIndex.contains(label)) {
         labelToIndex(label)
       } else {
         // TODO: handle unseen labels
-        throw new SparkException(s"Unseen label: $label.")
+        throw new SparkException(s"Unseen label: $label.") //说明lable不存在
       }
     }
     val outputColName = $(outputCol)
     val metadata = NominalAttribute.defaultAttr
       .withName(outputColName).withValues(labels).toMetadata()
-    dataset.select(col("*"),
-      indexer(dataset($(inputCol)).cast(StringType)).as(outputColName, metadata))
+    dataset.select(col("*"),//输入全部数据
+      indexer(dataset($(inputCol)).cast(StringType)).as(outputColName, metadata)) //增加一个列,即转换成int值的列
   }
 
   override def transformSchema(schema: StructType): StructType = {
@@ -169,6 +175,7 @@ class StringIndexerModel (
  * All original columns are kept during transformation.
  *
  * @see [[StringIndexer]] for converting strings into indices
+  * 将int转换成string
  */
 @Experimental
 class IndexToString private[ml] (
@@ -189,6 +196,7 @@ class IndexToString private[ml] (
    * metadata is read for labels. The default value is an empty array,
    * but the empty array is ignored and column metadata used instead.
    * @group setParam
+    * 需要的lable标签集合
    */
   def setLabels(value: Array[String]): this.type = set(labels, value)
 
@@ -197,6 +205,7 @@ class IndexToString private[ml] (
    * Optional labels to be provided by the user, if not supplied column
    * metadata is read for labels.
    * @group param
+    * 注意 该label已经是按照频率排序好的lable数组集合
    */
   final val labels: StringArrayParam = new StringArrayParam(this, "labels",
     "array of labels, if not provided metadata from inputCol is used instead.")
@@ -211,40 +220,40 @@ class IndexToString private[ml] (
 
   /** Transform the schema for the inverse transformation */
   override def transformSchema(schema: StructType): StructType = {
-    val inputColName = $(inputCol)
-    val inputDataType = schema(inputColName).dataType
-    require(inputDataType.isInstanceOf[NumericType],
+    val inputColName = $(inputCol) //输入字段对应的string
+    val inputDataType = schema(inputColName).dataType //获取输入字段类型
+    require(inputDataType.isInstanceOf[NumericType], //该字段必须是数值类型
       s"The input column $inputColName must be a numeric type, " +
         s"but got $inputDataType.")
-    val inputFields = schema.fields
-    val outputColName = $(outputCol)
-    require(inputFields.forall(_.name != outputColName),
+    val inputFields = schema.fields //字段集合
+    val outputColName = $(outputCol) //输出的序号字段
+    require(inputFields.forall(_.name != outputColName), //输出字段不存在
       s"Output column $outputColName already exists.")
-    val attr = NominalAttribute.defaultAttr.withName($(outputCol))
+    val attr = NominalAttribute.defaultAttr.withName($(outputCol)) //设置一个分类离散型属性
     val outputFields = inputFields :+ attr.toStructField()
-    StructType(outputFields)
+    StructType(outputFields)//原始类型+输出类型
   }
 
   override def transform(dataset: DataFrame): DataFrame = {
-    val inputColSchema = dataset.schema($(inputCol))
+    val inputColSchema = dataset.schema($(inputCol)) //输入字段
     // If the labels array is empty use column metadata
-    val values = if ($(labels).isEmpty) {
-      Attribute.fromStructField(inputColSchema)
+    val values = if ($(labels).isEmpty) {//说明没有输入标签
+      Attribute.fromStructField(inputColSchema) //从输入列中获取lable集合的元数据内容
         .asInstanceOf[NominalAttribute].values.get
     } else {
       $(labels)
     }
     val indexer = udf { index: Double =>
       val idx = index.toInt
-      if (0 <= idx && idx < values.length) {
+      if (0 <= idx && idx < values.length) { //返回序号对应的标签值
         values(idx)
       } else {
-        throw new SparkException(s"Unseen index: $index ??")
+        throw new SparkException(s"Unseen index: $index ??") //没有该需要,则抛异常
       }
     }
     val outputColName = $(outputCol)
-    dataset.select(col("*"),
-      indexer(dataset($(inputCol)).cast(DoubleType)).as(outputColName))
+    dataset.select(col("*"),//全部lable
+      indexer(dataset($(inputCol)).cast(DoubleType)).as(outputColName))//追加输出列,即double转换成String
   }
 
   override def copy(extra: ParamMap): IndexToString = {

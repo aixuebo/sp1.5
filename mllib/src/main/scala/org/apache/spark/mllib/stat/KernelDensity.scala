@@ -111,7 +111,7 @@ class KernelDensity extends Serializable {
 
 private object KernelDensity {
 
-  /** Evaluates the PDF of a normal distribution. */
+  /** Evaluates the PDF of a normal distribution. 求正态分布的值*/
   def normPdf(
       mean: Double,
       standardDeviation: Double,

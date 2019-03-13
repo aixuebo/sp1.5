@@ -50,7 +50,7 @@ import org.apache.spark.util.Utils
 @Experimental
 class RandomForestModel @Since("1.2.0") (
     @Since("1.2.0") override val algo: Algo,
-    @Since("1.2.0") override val trees: Array[DecisionTreeModel])
+    @Since("1.2.0") override val trees: Array[DecisionTreeModel]) //随机森林持有的一组决策树模型
   extends TreeEnsembleModel(algo, trees, Array.fill(trees.length)(1.0),
     combiningStrategy = if (algo == Classification) Vote else Average)
   with Saveable {

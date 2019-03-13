@@ -25,15 +25,15 @@ import org.apache.spark.mllib.linalg.Vector
 /**
  * :: DeveloperApi ::
  * Node in a decision tree.
- *
- * About node indexing:
+ * 代表决策树的一个节点
+ * About node indexing:关于node节点的序号
  *   Nodes are indexed from 1.  Node 1 is the root; nodes 2, 3 are the left, right children.
- *   Node index 0 is not used.
+ *   Node index 0 is not used.0节点没有被使用
  *
- * @param id integer node id, from 1
- * @param predict predicted value at the node
+ * @param id integer node id, from 1 节点序号
+ * @param predict predicted value at the node 节点的预测值
  * @param impurity current node impurity
- * @param isLeaf whether the node is a leaf
+ * @param isLeaf whether the node is a leaf 是否是叶子节点
  * @param split split to calculate left and right nodes
  * @param leftNode  left child
  * @param rightNode right child
@@ -42,10 +42,10 @@ import org.apache.spark.mllib.linalg.Vector
 @Since("1.0.0")
 @DeveloperApi
 class Node @Since("1.2.0") (
-    @Since("1.0.0") val id: Int,
-    @Since("1.0.0") var predict: Predict,
+    @Since("1.0.0") val id: Int,//从1开始,节点序号
+    @Since("1.0.0") var predict: Predict,//节点的预测值
     @Since("1.2.0") var impurity: Double,
-    @Since("1.0.0") var isLeaf: Boolean,
+    @Since("1.0.0") var isLeaf: Boolean,//是否是叶子节点
     @Since("1.0.0") var split: Option[Split],
     @Since("1.0.0") var leftNode: Option[Node],
     @Since("1.0.0") var rightNode: Option[Node],
@@ -87,7 +87,7 @@ class Node @Since("1.2.0") (
     if (isLeaf) {
       predict.predict
     } else {
-      if (split.get.featureType == Continuous) {
+      if (split.get.featureType == Continuous) {//连续值
         if (features(split.get.feature) <= split.get.threshold) {
           leftNode.get.predict(features)
         } else {
@@ -207,6 +207,7 @@ private[spark] object Node {
 
   /**
    * Return the index of the left child of this node.
+    * 返回参数节点的左子树节点
    */
   def leftChildIndex(nodeIndex: Int): Int = nodeIndex << 1
 
@@ -217,6 +218,7 @@ private[spark] object Node {
 
   /**
    * Get the parent index of the given node, or 0 if it is the root.
+    * 返回父节点
    */
   def parentIndex(nodeIndex: Int): Int = nodeIndex >> 1
 

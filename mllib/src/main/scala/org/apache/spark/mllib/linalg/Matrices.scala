@@ -30,6 +30,7 @@ import org.apache.spark.sql.types._
 
 /**
  * Trait for a local matrix.
+  * 本地的一个矩阵
  */
 @SQLUserDefinedType(udt = classOf[MatrixUDT])
 @Since("1.0.0")
@@ -43,11 +44,11 @@ sealed trait Matrix extends Serializable {
   @Since("1.0.0")
   def numCols: Int
 
-  /** Flag that keeps track whether the matrix is transposed or not. False by default. */
+  /** Flag that keeps track whether the matrix is transposed or not. False by default. 是否支持转置*/
   @Since("1.3.0")
   val isTransposed: Boolean = false
 
-  /** Converts to a dense array in column major. */
+  /** Converts to a dense array in column major. 按照列向量的方式存储矩阵*/
   @Since("1.0.0")
   def toArray: Array[Double] = {
     val newArray = new Array[Double](numRows * numCols)
@@ -60,7 +61,7 @@ sealed trait Matrix extends Serializable {
   /** Converts to a breeze matrix. */
   private[mllib] def toBreeze: BM[Double]
 
-  /** Gets the (i, j)-th element. */
+  /** Gets the (i, j)-th element. 获取矩阵中的值*/
   @Since("1.3.0")
   def apply(i: Int, j: Int): Double
 
@@ -74,7 +75,9 @@ sealed trait Matrix extends Serializable {
   @Since("1.2.0")
   def copy: Matrix
 
-  /** Transpose the Matrix. Returns a new `Matrix` instance sharing the same underlying data. */
+  /** Transpose the Matrix. Returns a new `Matrix` instance sharing the same underlying data.
+    * 转置
+    **/
   @Since("1.3.0")
   def transpose: Matrix
 

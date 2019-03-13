@@ -64,10 +64,16 @@ private[ml] trait VectorIndexerParams extends Params with HasInputCol with HasOu
  *     - This helps process a dataset of unknown vectors into a dataset with some continuous
  *       features and some categorical features. The choice between continuous and categorical
  *       is based upon a maxCategories parameter.
+  *
+  *       自动识别哪些列特征是离散型的,哪些是连续型的
+  *
  *     - Set maxCategories to the maximum number of categorical any categorical feature should have.
  *     - E.g.: Feature 0 has unique values {-1.0, 0.0}, and feature 1 values {1.0, 3.0, 5.0}.
  *       If maxCategories = 2, then feature 0 will be declared categorical and use indices {0, 1},
  *       and feature 1 will be declared continuous.
+  *
+  *  1.设置合理的maxCategories数量,用来标识区分离散型或者连续性属性
+  *
  *  - Index all features, if all features are categorical
  *     - If maxCategories is set to be very large, then this will build an index of unique
  *       values for all features.
@@ -75,7 +81,9 @@ private[ml] trait VectorIndexerParams extends Params with HasInputCol with HasOu
  *       unique values to the driver.
  *     - E.g.: Feature 0 has unique values {-1.0, 0.0}, and feature 1 values {1.0, 3.0, 5.0}.
  *       If maxCategories >= 3, then both features will be declared categorical.
- *
+  *
+ *   2.认为所有特征都是分类特征,即将max设置为非常大的值。
+  *  这样所有所有特征都满足分类属性，但是需要注意的是，如果特征值是连续性的，汇总的时候是在driver端，会有性能问题。
  * This returns a model which can transform categorical features to use 0-based indices.
  *
  * Index stability:
@@ -89,6 +97,9 @@ private[ml] trait VectorIndexerParams extends Params with HasInputCol with HasOu
  *  - Specify certain features to not index, either via a parameter or via existing metadata.
  *  - Add warning if a categorical feature has only 1 category.
  *  - Add option for allowing unknown categories.
+  *
+  *
+  * 输入/输出都是Vector类型
  */
 @Experimental
 class VectorIndexer(override val uid: String) extends Estimator[VectorIndexerModel]
@@ -106,22 +117,23 @@ class VectorIndexer(override val uid: String) extends Estimator[VectorIndexerMod
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   override def fit(dataset: DataFrame): VectorIndexerModel = {
-    transformSchema(dataset.schema, logging = true)
-    val firstRow = dataset.select($(inputCol)).take(1)
+    transformSchema(dataset.schema, logging = true) //校验输入输出了列类型
+    val firstRow = dataset.select($(inputCol)).take(1) //获取一个输入列的值
     require(firstRow.length == 1, s"VectorIndexer cannot be fit on an empty dataset.")
-    val numFeatures = firstRow(0).getAs[Vector](0).size
-    val vectorDataset = dataset.select($(inputCol)).map { case Row(v: Vector) => v }
+    val numFeatures = firstRow(0).getAs[Vector](0).size //输入列特征size
+    val vectorDataset = dataset.select($(inputCol)).map { case Row(v: Vector) => v } //输入特征Vector集合
     val maxCats = $(maxCategories)
     val categoryStats: VectorIndexer.CategoryStats = vectorDataset.mapPartitions { iter =>
-      val localCatStats = new VectorIndexer.CategoryStats(numFeatures, maxCats)
-      iter.foreach(localCatStats.addVector)
-      Iterator(localCatStats)
-    }.reduce((stats1, stats2) => stats1.merge(stats2))
-    val model = new VectorIndexerModel(uid, numFeatures, categoryStats.getCategoryMaps)
+      val localCatStats = new VectorIndexer.CategoryStats(numFeatures, maxCats) //创建统计对象
+      iter.foreach(localCatStats.addVector) //迭代每一个元素进行统计
+      Iterator(localCatStats) //返回统计对象
+    }.reduce((stats1, stats2) => stats1.merge(stats2)) //合并统计对象
+    val model = new VectorIndexerModel(uid, numFeatures, categoryStats.getCategoryMaps) //设置模型
       .setParent(this)
     copyValues(model)
   }
 
+  //校验输入/输出都是Vector类型
   override def transformSchema(schema: StructType): StructType = {
     // We do not transfer feature metadata since we do not know what types of features we will
     // produce in transform().
@@ -142,17 +154,22 @@ private object VectorIndexer {
    *
    * TODO: Track which features are known to be continuous already; do not update counts for them.
    *
-   * @param numFeatures  This class fails if it encounters a Vector whose length is not numFeatures.
-   * @param maxCategories  This class caps the number of unique values collected at maxCategories.
+   * @param numFeatures  This class fails if it encounters a Vector whose length is not numFeatures.向量的维度数量
+   * @param maxCategories  This class caps the number of unique values collected at maxCategories.每一个维度下最多允许存储多少个特征值
    */
   class CategoryStats(private val numFeatures: Int, private val maxCategories: Int)
     extends Serializable {
 
-    /** featureValueSets[feature index] = set of unique values */
+    /** featureValueSets[feature index] = set of unique values
+      * 为每一个维度创建一个OpenHashSet[Double]对象 ,各个维度组成一个数组
+      * set 用于存储该维度下不同的特征值
+      **/
     private val featureValueSets =
       Array.fill[OpenHashSet[Double]](numFeatures)(new OpenHashSet[Double]())
 
-    /** Merge with another instance, modifying this instance. */
+    /** Merge with another instance, modifying this instance.
+      * 合并特征值
+      **/
     def merge(other: CategoryStats): CategoryStats = {
       featureValueSets.zip(other.featureValueSets).foreach { case (thisValSet, otherValSet) =>
         otherValSet.iterator.foreach { x =>
@@ -164,7 +181,7 @@ private object VectorIndexer {
       this
     }
 
-    /** Add a new vector to this index, updating sets of unique feature values */
+    /** Add a new vector to this index, updating sets of unique feature values 解析 and 存储特征值*/
     def addVector(v: Vector): Unit = {
       require(v.size == numFeatures, s"VectorIndexer expected $numFeatures features but" +
         s" found vector of size ${v.size}.")
@@ -183,17 +200,18 @@ private object VectorIndexer {
      *
      * @return  Feature value index.  Keys are categorical feature indices (column indices).
      *          Values are mappings from original features values to 0-based category indices.
+      * key是分类特征编号,value是特征值集合，特征值按照顺序排序好了,因此是一个map，标识value值 以及 排序位置
      */
     def getCategoryMaps: Map[Int, Map[Double, Int]] = {
       // Filter out features which are declared continuous.
-      featureValueSets.zipWithIndex.filter(_._1.size <= maxCategories).map {
-        case (featureValues: OpenHashSet[Double], featureIndex: Int) =>
-          var sortedFeatureValues = featureValues.iterator.filter(_ != 0.0).toArray.sorted
-          val zeroExists = sortedFeatureValues.length + 1 == featureValues.size
+      featureValueSets.zipWithIndex.filter(_._1.size <= maxCategories).map {//过滤小于maxCategories的列的序号以及存储的特征值集合
+        case (featureValues: OpenHashSet[Double], featureIndex: Int) => //特征值集合 以及 序号
+          var sortedFeatureValues = featureValues.iterator.filter(_ != 0.0).toArray.sorted //特征值排序,其实特征值已经过滤重复了,因此等于0的特征值也就最多存在1个
+          val zeroExists = sortedFeatureValues.length + 1 == featureValues.size //true标识存在0特征值
           if (zeroExists) {
-            sortedFeatureValues = 0.0 +: sortedFeatureValues
+            sortedFeatureValues = 0.0 +: sortedFeatureValues //把0放到第一个位置
           }
-          val categoryMap: Map[Double, Int] = sortedFeatureValues.zipWithIndex.toMap
+          val categoryMap: Map[Double, Int] = sortedFeatureValues.zipWithIndex.toMap //排序后的特征值进行编号
           (featureIndex, categoryMap)
       }.toMap
     }
@@ -233,11 +251,13 @@ private object VectorIndexer {
 /**
  * :: Experimental ::
  * Transform categorical features to use 0-based indices instead of their original values.
- *  - Categorical features are mapped to indices.
- *  - Continuous features (columns) are left unchanged.
+ *  - Categorical features are mapped to indices. 分类特征的内容变成唯一数字，从0开始计数
+ *  - Continuous features (columns) are left unchanged.连续性特征值不变
+  *
  * This also appends metadata to the output column, marking features as Numeric (continuous),
  * Nominal (categorical), or Binary (either continuous or categorical).
  * Non-ML metadata is not carried over from the input to the output column.
+  * 元数据存储分类特征的所有分类内容
  *
  * This maintains vector sparsity.
  *
@@ -249,8 +269,8 @@ private object VectorIndexer {
 @Experimental
 class VectorIndexerModel private[ml] (
     override val uid: String,
-    val numFeatures: Int,
-    val categoryMaps: Map[Int, Map[Double, Int]])
+    val numFeatures: Int,//向量有多少个特征
+    val categoryMaps: Map[Int, Map[Double, Int]]) //key是分类特征编号,value是特征值集合，特征值按照顺序排序好了,因此是一个map，标识value值 以及 排序位置
   extends Model[VectorIndexerModel] with VectorIndexerParams {
 
   /** Java-friendly version of [[categoryMaps]] */
@@ -261,16 +281,17 @@ class VectorIndexerModel private[ml] (
   /**
    * Pre-computed feature attributes, with some missing info.
    * In transform(), set attribute name and other info, if available.
+    * 设置向量每一个维度对应的类型的元数据内容
    */
   private val partialFeatureAttributes: Array[Attribute] = {
-    val attrs = new Array[Attribute](numFeatures)
+    val attrs = new Array[Attribute](numFeatures) //向量有numFeatures个维度,因此有numFeatures个Attribute属性组成的数组
     var categoricalFeatureCount = 0 // validity check for numFeatures, categoryMaps
-    var featureIndex = 0
-    while (featureIndex < numFeatures) {
-      if (categoryMaps.contains(featureIndex)) {
+    var featureIndex = 0 //等待处理特征的序号
+    while (featureIndex < numFeatures) { //一个一个处理特征
+      if (categoryMaps.contains(featureIndex)) { //说明特征是离散型分类特征
         // categorical feature
         val featureValues: Array[String] =
-          categoryMaps(featureIndex).toArray.sortBy(_._1).map(_._1).map(_.toString)
+          categoryMaps(featureIndex).toArray.sortBy(_._1).map(_._1).map(_.toString) //输出特征的所有特征值
         if (featureValues.length == 2) {
           attrs(featureIndex) = new BinaryAttribute(index = Some(featureIndex),
             values = Some(featureValues))
@@ -279,7 +300,7 @@ class VectorIndexerModel private[ml] (
             isOrdinal = Some(false), values = Some(featureValues))
         }
         categoricalFeatureCount += 1
-      } else {
+      } else { //说明是连续特征
         // continuous feature
         attrs(featureIndex) = new NumericAttribute(index = Some(featureIndex))
       }
@@ -294,8 +315,8 @@ class VectorIndexerModel private[ml] (
 
   /** Per-vector transform function */
   private val transformFunc: Vector => Vector = {
-    val sortedCatFeatureIndices = categoryMaps.keys.toArray.sorted
-    val localVectorMap = categoryMaps
+    val sortedCatFeatureIndices = categoryMaps.keys.toArray.sorted //分类特征序号排序
+    val localVectorMap = categoryMaps //分类特征
     val localNumFeatures = numFeatures
     val f: Vector => Vector = { (v: Vector) =>
       assert(v.size == localNumFeatures, "VectorIndexerModel expected vector of length" +
@@ -304,7 +325,7 @@ class VectorIndexerModel private[ml] (
         case dv: DenseVector =>
           val tmpv = dv.copy
           localVectorMap.foreach { case (featureIndex: Int, categoryMap: Map[Double, Int]) =>
-            tmpv.values(featureIndex) = categoryMap(tmpv(featureIndex))
+            tmpv.values(featureIndex) = categoryMap(tmpv(featureIndex)) //为分类特征重新定义值 = 分类特征所在序号
           }
           tmpv
         case sv: SparseVector =>
@@ -344,7 +365,11 @@ class VectorIndexerModel private[ml] (
     dataset.withColumn($(outputCol), newCol.as($(outputCol), newField.metadata))
   }
 
+
+  //校验
   override def transformSchema(schema: StructType): StructType = {
+
+    //输入/输出都是Vector类型
     val dataType = new VectorUDT
     require(isDefined(inputCol),
       s"VectorIndexerModel requires input column parameter: $inputCol")
@@ -372,6 +397,7 @@ class VectorIndexerModel private[ml] (
    * Prepare the output column field, including per-feature metadata.
    * @param schema  Input schema
    * @return  Output column field.  This field does not contain non-ML metadata.
+    * 构造输出列，主要是构造他的元数据,即分类的具体内容
    */
   private def prepOutputField(schema: StructType): StructField = {
     val origAttrGroup = AttributeGroup.fromStructField(schema($(inputCol)))

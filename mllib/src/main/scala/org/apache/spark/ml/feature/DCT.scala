@@ -34,6 +34,9 @@ import org.apache.spark.sql.types.DataType
  * such that the transform matrix is unitary (aka scaled DCT-II).
  *
  * More information on [[https://en.wikipedia.org/wiki/Discrete_cosine_transform#DCT-II Wikipedia]].
+  *
+  * 输入和输出都是Vector类型的列
+  * Discrete Cosine Transform 变换
  */
 @Experimental
 class DCT(override val uid: String)
@@ -55,7 +58,7 @@ class DCT(override val uid: String)
   /** @group getParam */
   def getInverse: Boolean = $(inverse)
 
-  setDefault(inverse -> false)
+  setDefault(inverse -> false) //默认是false
 
   override protected def createTransformFunc: Vector => Vector = { vec =>
     val result = vec.toArray

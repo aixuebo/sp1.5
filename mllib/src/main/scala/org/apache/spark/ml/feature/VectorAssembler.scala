@@ -34,6 +34,7 @@ import org.apache.spark.sql.types._
 /**
  * :: Experimental ::
  * A feature transformer that merges multiple columns into a vector column.
+  * 它可以将给定的多列(数字列)转换为一个向量列
  */
 @Experimental
 class VectorAssembler(override val uid: String)
@@ -41,10 +42,10 @@ class VectorAssembler(override val uid: String)
 
   def this() = this(Identifiable.randomUID("vecAssembler"))
 
-  /** @group setParam */
+  /** @group setParam 输入是一个字符串数组,表示多个列 */
   def setInputCols(value: Array[String]): this.type = set(inputCols, value)
 
-  /** @group setParam */
+  /** @group setParam 输出列类型是一个vector*/
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   override def transform(dataset: DataFrame): DataFrame = {
@@ -92,6 +93,8 @@ class VectorAssembler(override val uid: String)
     val assembleFunc = udf { r: Row =>
       VectorAssembler.assemble(r.toSeq: _*)
     }
+
+    //获取输入列对应的值
     val args = $(inputCols).map { c =>
       schema(c).dataType match {
         case DoubleType => dataset(c)
@@ -104,15 +107,17 @@ class VectorAssembler(override val uid: String)
   }
 
   override def transformSchema(schema: StructType): StructType = {
-    val inputColNames = $(inputCols)
+    val inputColNames = $(inputCols) //获取输入列集合
     val outputColName = $(outputCol)
-    val inputDataTypes = inputColNames.map(name => schema(name).dataType)
+    val inputDataTypes = inputColNames.map(name => schema(name).dataType) //输入列的类型集合
+    //校验类型只能是数字和boolean或者向量
     inputDataTypes.foreach {
       case _: NumericType | BooleanType =>
       case t if t.isInstanceOf[VectorUDT] =>
       case other =>
         throw new IllegalArgumentException(s"Data type $other is not supported.")
     }
+    //校验列集合中不能存在输出列
     if (schema.fieldNames.contains(outputColName)) {
       throw new IllegalArgumentException(s"Output column $outputColName already exists.")
     }
@@ -124,7 +129,9 @@ class VectorAssembler(override val uid: String)
 
 private object VectorAssembler {
 
+  //输入列的值
   private[feature] def assemble(vv: Any*): Vector = {
+    //稀疏向量
     val indices = ArrayBuilder.make[Int]
     val values = ArrayBuilder.make[Double]
     var cur = 0

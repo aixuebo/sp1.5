@@ -40,13 +40,16 @@ import org.apache.spark.util.random.XORShiftRandom
  * :: Experimental ::
  * A class which implements a decision tree learning algorithm for classification and regression.
  * It supports both continuous and categorical features.
+  * 决策树的一种实现，支持分类和回归
+  * 特征可以是连续、也可以是离散
  * @param strategy The configuration parameters for the tree algorithm which specify the type
  *                 of algorithm (classification, regression, etc.), feature type (continuous,
  *                 categorical), depth of the tree, quantile calculation strategy, etc.
+  *                 配置信息
  */
 @Since("1.0.0")
 @Experimental
-class DecisionTree @Since("1.0.0") (private val strategy: Strategy)
+class DecisionTree @Since("1.0.0") (private val strategy: Strategy) //传入配置后生产一个决策树
   extends Serializable with Logging {
 
   strategy.assertValid()
@@ -61,7 +64,7 @@ class DecisionTree @Since("1.0.0") (private val strategy: Strategy)
     // Note: random seed will not be used since numTrees = 1.
     val rf = new RandomForest(strategy, numTrees = 1, featureSubsetStrategy = "all", seed = 0)
     val rfModel = rf.run(input)
-    rfModel.trees(0)
+    rfModel.trees(0) //因为就一棵树,因此获取0就是决策树模型
   }
 }
 
@@ -294,10 +297,10 @@ object DecisionTree extends Serializable with Logging {
       bins: Array[Array[Bin]],
       unorderedFeatures: Set[Int]): Int = {
     if (node.isLeaf || node.split.isEmpty) {
-      // Node is either leaf, or has not yet been split.
+      // Node is either leaf, or has not yet been split.叶子节点
       node.id
     } else {
-      val featureIndex = node.split.get.feature
+      val featureIndex = node.split.get.feature //第几个特征
       val splitLeft = node.split.get.featureType match {
         case Continuous => {
           val binIndex = binnedFeatures(featureIndex)
@@ -969,17 +972,20 @@ object DecisionTree extends Serializable with Logging {
    */
   protected[tree] def findSplitsBins(
       input: RDD[LabeledPoint],
-      metadata: DecisionTreeMetadata): (Array[Array[Split]], Array[Array[Bin]]) = {
+      metadata: DecisionTreeMetadata): (Array[Array[Split]], Array[Array[Bin]]) = { //返回每一个特征的分割信息
 
-    logDebug("isMulticlass = " + metadata.isMulticlass)
+    logDebug("isMulticlass = " + metadata.isMulticlass) //是否是大于2个分类的分类问题
 
-    val numFeatures = metadata.numFeatures
+    val numFeatures = metadata.numFeatures //向量特征数量
 
-    // Sample the input only if there are continuous features.
-    val hasContinuousFeatures = Range(0, numFeatures).exists(metadata.isContinuous)
-    val sampledInput = if (hasContinuousFeatures) {
-      // Calculate the number of samples for approximate quantile calculation.
-      val requiredSamples = math.max(metadata.maxBins * metadata.maxBins, 10000)
+    // Sample the input only if there are continuous features.有连续性特征的时候会参与抽样
+    val hasContinuousFeatures = Range(0, numFeatures).exists(metadata.isContinuous) //true表示有连续性特征
+
+    //获取抽样结果,在本地节点生成一个数组
+    val sampledInput = if (hasContinuousFeatures) {//有连续性特征
+      // Calculate the number of samples for approximate quantile calculation.获取1万条以上抽样样本，正常是 最大分类数量^2个抽样样本
+      val requiredSamples = math.max(metadata.maxBins * metadata.maxBins, 10000) //设置抽样数量
+      //计算抽样样本占比
       val fraction = if (requiredSamples < metadata.numExamples) {
         requiredSamples.toDouble / metadata.numExamples
       } else {
@@ -987,33 +993,34 @@ object DecisionTree extends Serializable with Logging {
       }
       logDebug("fraction of data used for calculating quantiles = " + fraction)
       input.sample(withReplacement = false, fraction, new XORShiftRandom().nextInt()).collect()
-    } else {
+    } else {//无连续性特征
       new Array[LabeledPoint](0)
     }
 
-    metadata.quantileStrategy match {
+    metadata.quantileStrategy match { //计算分位点策略
       case Sort =>
-        val splits = new Array[Array[Split]](numFeatures)
+        val splits = new Array[Array[Split]](numFeatures) //该特征对应的分位点集合
         val bins = new Array[Array[Bin]](numFeatures)
 
         // Find all splits.
         // Iterate over all features.
-        var featureIndex = 0
-        while (featureIndex < numFeatures) {
-          if (metadata.isContinuous(featureIndex)) {
-            val featureSamples = sampledInput.map(lp => lp.features(featureIndex))
+        var featureIndex = 0 //目前在处理第几个下标特征
+        while (featureIndex < numFeatures) {//遍历每一个特征
+          if (metadata.isContinuous(featureIndex)) {//连续特征
+            val featureSamples = sampledInput.map(lp => lp.features(featureIndex)) //该下标特征值集合
             val featureSplits = findSplitsForContinuousFeature(featureSamples,
-              metadata, featureIndex)
+              metadata, featureIndex) //获取该向量对应的拆分分位点集合
 
-            val numSplits = featureSplits.length
-            val numBins = numSplits + 1
-            logDebug(s"featureIndex = $featureIndex, numSplits = $numSplits")
+            val numSplits = featureSplits.length //分位点集合数量
+            val numBins = numSplits + 1 //因为分位点要向外扩张一个,因此要+1
+            logDebug(s"featureIndex = $featureIndex, numSplits = $numSplits") //输出该向量特征拆分出多少个分位点
             splits(featureIndex) = new Array[Split](numSplits)
             bins(featureIndex) = new Array[Bin](numBins)
 
+            //设置分位点信息
             var splitIndex = 0
-            while (splitIndex < numSplits) {
-              val threshold = featureSplits(splitIndex)
+            while (splitIndex < numSplits) {//获取每一个特征分位点值
+              val threshold = featureSplits(splitIndex) //具体的值
               splits(featureIndex)(splitIndex) =
                 new Split(featureIndex, threshold, Continuous, List())
               splitIndex += 1
@@ -1030,12 +1037,12 @@ object DecisionTree extends Serializable with Logging {
             }
             bins(featureIndex)(numSplits) = new Bin(splits(featureIndex)(numSplits - 1),
               new DummyHighSplit(featureIndex, Continuous), Continuous, Double.MinValue)
-          } else {
+          } else {//离散型特征
             val numSplits = metadata.numSplits(featureIndex)
             val numBins = metadata.numBins(featureIndex)
             // Categorical feature
-            val featureArity = metadata.featureArity(featureIndex)
-            if (metadata.isUnordered(featureIndex)) {
+            val featureArity = metadata.featureArity(featureIndex) //真实特征值数量
+            if (metadata.isUnordered(featureIndex)) {//特征值数量太大
               // Unordered features
               // 2^(maxFeatureValue - 1) - 1 combinations
               splits(featureIndex) = new Array[Split](numSplits)
@@ -1047,7 +1054,7 @@ object DecisionTree extends Serializable with Logging {
                   new Split(featureIndex, Double.MinValue, Categorical, categories)
                 splitIndex += 1
               }
-            } else {
+            } else {//特征值数量不大
               // Ordered features
               //   Bins correspond to feature values, so we do not need to compute splits or bins
               //   beforehand.  Splits are constructed as needed during training.
@@ -1097,42 +1104,45 @@ object DecisionTree extends Serializable with Logging {
    * NOTE: Returned number of splits is set based on `featureSamples` and
    *       could be different from the specified `numSplits`.
    *       The `numSplits` attribute in the `DecisionTreeMetadata` class will be set accordingly.
-   * @param featureSamples feature values of each sample
+   * @param featureSamples feature values of each sample 抽样的特征值集合,是某一个维度下所有抽样数据特征值集合
    * @param metadata decision tree metadata
    *                 NOTE: `metadata.numbins` will be changed accordingly
    *                       if there are not enough splits to be found
-   * @param featureIndex feature index to find splits
-   * @return array of splits
+   * @param featureIndex feature index to find splits 目前处理的是第几个特征
+   * @return array of splits 返回拆分的value集合
+    * 为连续性特征设置拆分的数量，以及拆分点被返回
    */
   private[tree] def findSplitsForContinuousFeature(
-      featureSamples: Array[Double],
-      metadata: DecisionTreeMetadata,
-      featureIndex: Int): Array[Double] = {
-    require(metadata.isContinuous(featureIndex),
+      featureSamples: Array[Double],//特征样本集合
+      metadata: DecisionTreeMetadata,//元数据
+      featureIndex: Int) //第几个特征
+     : Array[Double] = {
+    require(metadata.isContinuous(featureIndex),//特征一定是连续性的
       "findSplitsForContinuousFeature can only be used to find splits for a continuous feature.")
 
+    //splits返回抽样结果集中,拆分的value集合
     val splits = {
       val numSplits = metadata.numSplits(featureIndex)
 
-      // get count for each distinct value
+      // get count for each distinct value 每一个value出现的次数,key是value值,value是次数
       val valueCountMap = featureSamples.foldLeft(Map.empty[Double, Int]) { (m, x) =>
         m + ((x, m.getOrElse(x, 0) + 1))
       }
       // sort distinct values
-      val valueCounts = valueCountMap.toSeq.sortBy(_._1).toArray
+      val valueCounts = valueCountMap.toSeq.sortBy(_._1).toArray //按照value值排序
 
       // if possible splits is not enough or just enough, just return all possible splits
       val possibleSplits = valueCounts.length
-      if (possibleSplits <= numSplits) {
-        valueCounts.map(_._1)
-      } else {
+      if (possibleSplits <= numSplits) { //比如要求拆分10个,结果抽样value值一共才5个,则不需要进行拆分
+        valueCounts.map(_._1) //输出全部value值
+      } else {//抽样的分类数量 比 要求的分类数多,因此我们要拆分
         // stride between splits
-        val stride: Double = featureSamples.length.toDouble / (numSplits + 1)
+        val stride: Double = featureSamples.length.toDouble / (numSplits + 1) //假设一共60条数据，分成5组,因此结果是60/6 = 10 ,即分位点为10 20 30 40 50
         logDebug("stride = " + stride)
 
         // iterate `valueCount` to find splits
         val splitsBuilder = ArrayBuilder.make[Double]
-        var index = 1
+        var index = 1 //从1开始,因为第0个value一定放到第一个分割桶里面了
         // currentCount: sum of counts of values that have been visited
         var currentCount = valueCounts(0)._2
         // targetCount: target value for `currentCount`.
@@ -1140,16 +1150,16 @@ object DecisionTree extends Serializable with Logging {
         // then current value is a split threshold.
         // After finding a split threshold, `targetCount` is added by stride.
         var targetCount = stride
-        while (index < valueCounts.length) {
-          val previousCount = currentCount
-          currentCount += valueCounts(index)._2
-          val previousGap = math.abs(previousCount - targetCount)
-          val currentGap = math.abs(currentCount - targetCount)
+        while (index < valueCounts.length) {//从头到尾迭代
+          val previousCount = currentCount //添加前该桶有多少个元素
+          currentCount += valueCounts(index)._2 //添加后元素数量
+          val previousGap = math.abs(previousCount - targetCount) //桶添加前剩余多少
+          val currentGap = math.abs(currentCount - targetCount) //桶添加后剩余多少
           // If adding count of current value to currentCount
           // makes the gap between currentCount and targetCount smaller,
           // previous value is a split threshold.
-          if (previousGap < currentGap) {
-            splitsBuilder += valueCounts(index - 1)._1
+          if (previousGap < currentGap) { //此处有一个bug,但是是在value出现非常多次的时候才会出现，但是不影响结果，因为value出现多次，他会在下一次迭代中将value作为分位点插入进去
+            splitsBuilder += valueCounts(index - 1)._1 //添加分位点
             targetCount += stride
           }
           index += 1
@@ -1162,9 +1172,9 @@ object DecisionTree extends Serializable with Logging {
     // TODO: Do not fail; just ignore the useless feature.
     assert(splits.length > 0,
       s"DecisionTree could not handle feature $featureIndex since it had only 1 unique value." +
-        "  Please remove this feature and then try again.")
+        "  Please remove this feature and then try again.") //说明特征值只有一种,因此抛异常
     // set number of splits accordingly
-    metadata.setNumSplits(featureIndex, splits.length)
+    metadata.setNumSplits(featureIndex, splits.length) //设置新的分类数量---连续性特征
 
     splits
   }

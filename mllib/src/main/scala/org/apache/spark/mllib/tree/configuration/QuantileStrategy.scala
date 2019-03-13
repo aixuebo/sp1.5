@@ -22,6 +22,7 @@ import org.apache.spark.annotation.{Experimental, Since}
 /**
  * :: Experimental ::
  * Enum for selecting the quantile calculation strategy
+  * 计算分位点策略
  */
 @Since("1.0.0")
 @Experimental

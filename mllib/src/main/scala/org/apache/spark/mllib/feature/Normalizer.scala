@@ -29,14 +29,14 @@ import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, Vectors
  *
  * For p = Double.PositiveInfinity, max(abs(vector)) will be used as norm for normalization.
  *
- * @param p Normalization in L^p^ space, p = 2 by default.
+ * @param p Normalization in L^p^ space, p = 2 by default.做多少范式计算,默认是2范式
  */
 @Since("1.1.0")
 @Experimental
 class Normalizer @Since("1.1.0") (p: Double) extends VectorTransformer {
 
   @Since("1.1.0")
-  def this() = this(2)
+  def this() = this(2) //默认值是2范式
 
   require(p >= 1.0)
 
@@ -45,10 +45,11 @@ class Normalizer @Since("1.1.0") (p: Double) extends VectorTransformer {
    *
    * @param vector vector to be normalized.
    * @return normalized vector. If the norm of the input is zero, it will return the input vector.
+    * 归一化 ----value / 范式
    */
   @Since("1.1.0")
   override def transform(vector: Vector): Vector = {
-    val norm = Vectors.norm(vector, p)
+    val norm = Vectors.norm(vector, p) //计算范式
 
     if (norm != 0.0) {
       // For dense vector, we've to allocate new memory for new output vector.
@@ -69,7 +70,7 @@ class Normalizer @Since("1.1.0") (p: Double) extends VectorTransformer {
           val nnz = values.size
           var i = 0
           while (i < nnz) {
-            values(i) /= norm
+            values(i) /= norm //对值进行范式运算
             i += 1
           }
           Vectors.sparse(size, ids, values)

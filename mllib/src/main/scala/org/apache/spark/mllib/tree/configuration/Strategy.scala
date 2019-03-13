@@ -32,25 +32,27 @@ import org.apache.spark.mllib.tree.configuration.QuantileStrategy._
  * @param algo  Learning goal.  Supported:
  *              [[org.apache.spark.mllib.tree.configuration.Algo.Classification]],
  *              [[org.apache.spark.mllib.tree.configuration.Algo.Regression]]
- * @param impurity Criterion used for information gain calculation.
+ * @param impurity Criterion used for information gain calculation.如何计算信息的混乱程度
  *                 Supported for Classification: [[org.apache.spark.mllib.tree.impurity.Gini]],
  *                  [[org.apache.spark.mllib.tree.impurity.Entropy]].
  *                 Supported for Regression: [[org.apache.spark.mllib.tree.impurity.Variance]].
  * @param maxDepth Maximum depth of the tree.
- *                 E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes.
+ *                 E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes.树的最大深度
  * @param numClasses Number of classes for classification.
  *                                    (Ignored for regression.)
- *                                    Default value is 2 (binary classification).
+ *                                    Default value is 2 (binary classification).分类数量
  * @param maxBins Maximum number of bins used for discretizing continuous features and
  *                for choosing how to split on features at each node.
- *                More bins give higher granularity.
+ *                More bins give higher granularity.最多分配多少个拆分点，被用来对连续值特征进行离散化
  * @param quantileCalculationStrategy Algorithm for calculating quantiles.  Supported:
- *                             [[org.apache.spark.mllib.tree.configuration.QuantileStrategy.Sort]]
+ *                             [[org.apache.spark.mllib.tree.configuration.QuantileStrategy.Sort]]如何计算分位数
  * @param categoricalFeaturesInfo A map storing information about the categorical variables and the
  *                                number of discrete values they take. For example, an entry (n ->
  *                                k) implies the feature n is categorical with k categories 0,
  *                                1, 2, ... , k-1. It's important to note that features are
  *                                zero-indexed.
+  *                                存储分类变量和离散的值信息,entry (n -> k)该表是n这个特征有k个分类
+  *                                注意:从0开始计数
  * @param minInstancesPerNode Minimum number of instances each child must have after split.
  *                            Default value is 1. If a split cause left or right child
  *                            to have less than minInstancesPerNode,
@@ -60,7 +62,7 @@ import org.apache.spark.mllib.tree.configuration.QuantileStrategy._
  *                    this split will not be considered as a valid split.
  * @param maxMemoryInMB Maximum memory in MB allocated to histogram aggregation. Default value is
  *                      256 MB.
- * @param subsamplingRate Fraction of the training data used for learning decision tree.
+ * @param subsamplingRate Fraction of the training data used for learning decision tree.抽样系数比例
  * @param useNodeIdCache If this is true, instead of passing trees to executors, the algorithm will
  *                      maintain a separate RDD of node Id cache for each row.
  * @param checkpointInterval How often to checkpoint when the node Id cache gets updated.
@@ -77,7 +79,7 @@ class Strategy @Since("1.3.0") (
     @Since("1.2.0") @BeanProperty var numClasses: Int = 2,//目标产生多少个分类
     @Since("1.0.0") @BeanProperty var maxBins: Int = 32,
     @Since("1.0.0") @BeanProperty var quantileCalculationStrategy: QuantileStrategy = Sort,
-    @Since("1.0.0") @BeanProperty var categoricalFeaturesInfo: Map[Int, Int] = Map[Int, Int](),
+    @Since("1.0.0") @BeanProperty var categoricalFeaturesInfo: Map[Int, Int] = Map[Int, Int](),//表示哪些特征是离散型特征
     @Since("1.2.0") @BeanProperty var minInstancesPerNode: Int = 1,
     @Since("1.2.0") @BeanProperty var minInfoGain: Double = 0.0,
     @Since("1.0.0") @BeanProperty var maxMemoryInMB: Int = 256,
@@ -126,6 +128,7 @@ class Strategy @Since("1.3.0") (
 
   /**
    * Sets categoricalFeaturesInfo using a Java Map.
+    * 设置分类的特征需要拆分多少个节点
    */
   @Since("1.2.0")
   def setCategoricalFeaturesInfo(

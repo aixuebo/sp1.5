@@ -30,6 +30,7 @@ import org.apache.spark.sql.types.DataType
  * Outputs the Hadamard product (i.e., the element-wise product) of each input vector with a
  * provided "weight" vector.  In other words, it scales each column of the dataset by a scalar
  * multiplier.
+  * 两个vector,相应下标元素相乘,组成新的Vector
  */
 @Experimental
 class ElementwiseProduct(override val uid: String)
@@ -40,6 +41,7 @@ class ElementwiseProduct(override val uid: String)
   /**
     * the vector to multiply with input vectors
     * @group param
+    * 权重向量vector
     */
   val scalingVec: Param[Vector] = new Param(this, "scalingVec", "vector for hadamard product")
 
@@ -55,5 +57,6 @@ class ElementwiseProduct(override val uid: String)
     elemScaler.transform
   }
 
+  //输出是vector类型
   override protected def outputDataType: DataType = new VectorUDT()
 }

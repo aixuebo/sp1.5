@@ -42,6 +42,7 @@ object Statistics {
    *
    * @param X an RDD[Vector] for which column-wise summary statistics are to be computed.
    * @return [[MultivariateStatisticalSummary]] object containing column-wise summary statistics.
+    * 统计Vector中每一个维度的均值、方差、最大值、最小值等信息
    */
   @Since("1.1.0")
   def colStats(X: RDD[Vector]): MultivariateStatisticalSummary = {

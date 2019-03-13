@@ -103,7 +103,7 @@ private[spark] object BaggedPoint {
       seed: Long): RDD[BaggedPoint[Datum]] = {
     input.mapPartitionsWithIndex { (partitionIndex, instances) =>
       // Use random seed = seed + partitionIndex + 1 to make generation reproducible.
-      val poisson = new PoissonDistribution(subsample)
+      val poisson = new PoissonDistribution(subsample) //泊松分布
       poisson.reseedRandomGenerator(seed + partitionIndex + 1)
       instances.map { instance =>
         val subsampleWeights = new Array[Double](numSubsamples)

@@ -25,10 +25,12 @@ import org.apache.spark.sql.types.{DoubleType, NumericType, Metadata, MetadataBu
 /**
  * :: DeveloperApi ::
  * Abstract class for ML attributes.
+  * 向量中每一个维度对应数据的类型
  */
 @DeveloperApi
 sealed abstract class Attribute extends Serializable {
 
+  //属性由name和序号组成,即该属性属于向量的第几个属性、属性name是什么
   name.foreach { n =>
     require(n.nonEmpty, "Cannot have an empty string for name.")
   }
@@ -37,7 +39,7 @@ sealed abstract class Attribute extends Serializable {
   }
 
   /** Attribute type. */
-  def attrType: AttributeType
+  def attrType: AttributeType //属性类型
 
   /** Name of the attribute. None if it is not set. */
   def name: Option[String]
@@ -59,11 +61,13 @@ sealed abstract class Attribute extends Serializable {
 
   /**
    * Tests whether this attribute is numeric, true for [[NumericAttribute]] and [[BinaryAttribute]].
+    * 维度类型是整数,比如数字或者0/1二元类型
    */
   def isNumeric: Boolean
 
   /**
    * Tests whether this attribute is nominal, true for [[NominalAttribute]] and [[BinaryAttribute]].
+    * 维度类型是分类,分类或者0/1二元类型
    */
   def isNominal: Boolean
 
@@ -174,10 +178,11 @@ object Attribute extends AttributeFactory {
  * A numeric attribute with optional summary statistics.
  * @param name optional name
  * @param index optional index
- * @param min optional min value
+ * @param min optional min value 特征集合中最大值和最小值、方差等统计信息信息
  * @param max optional max value
  * @param std optional standard deviation
  * @param sparsity optional sparsity (ratio of zeros)
+  *  数值型的特征
  */
 @DeveloperApi
 class NumericAttribute private[ml] (
@@ -228,12 +233,12 @@ class NumericAttribute private[ml] (
   /** Copy without the sparsity. */
   def withoutSparsity: NumericAttribute = copy(sparsity = None)
 
-  /** Copy without summary statistics. */
+  /** Copy without summary statistics. 不要统计信息*/
   def withoutSummary: NumericAttribute = copy(min = None, max = None, std = None, sparsity = None)
 
   override def isNumeric: Boolean = true
 
-  override def isNominal: Boolean = false
+  override def isNominal: Boolean = false //不是分类
 
   /** Convert this attribute to metadata. */
   override private[attribute] def toMetadataImpl(withType: Boolean): Metadata = {
@@ -313,10 +318,10 @@ object NumericAttribute extends AttributeFactory {
  * A nominal attribute.
  * @param name optional name
  * @param index optional index
- * @param isOrdinal whether this attribute is ordinal (optional)
+ * @param isOrdinal whether this attribute is ordinal (optional) 是否分类元素集合是有顺序的
  * @param numValues optional number of values. At most one of `numValues` and `values` can be
- *                  defined.
- * @param values optional values. At most one of `numValues` and `values` can be defined.
+ *                  defined.集合数量
+ * @param values optional values. At most one of `numValues` and `values` can be defined.集合内容
  */
 @DeveloperApi
 class NominalAttribute private[ml] (
@@ -330,24 +335,25 @@ class NominalAttribute private[ml] (
     require(n >= 0, s"numValues cannot be negative but got $n.")
   }
   require(!(numValues.isDefined && values.isDefined),
-    "Cannot have both numValues and values defined.")
+    "Cannot have both numValues and values defined.") //集合数量 和 集合内容只有一个被定义
 
-  override def attrType: AttributeType = AttributeType.Nominal
+  override def attrType: AttributeType = AttributeType.Nominal //分类类型
 
   override def isNumeric: Boolean = false
 
   override def isNominal: Boolean = true
 
+  //返回分类集合内容和对应的序号映射关系
   private lazy val valueToIndex: Map[String, Int] = {
     values.map(_.zipWithIndex.toMap).getOrElse(Map.empty)
   }
 
-  /** Index of a specific value. */
+  /** Index of a specific value. 返回分类内容对应的序号*/
   def indexOf(value: String): Int = {
     valueToIndex(value)
   }
 
-  /** Tests whether this attribute contains a specific value. */
+  /** Tests whether this attribute contains a specific value.是否有该分类 */
   def hasValue(value: String): Boolean = valueToIndex.contains(value)
 
   /** Gets a value given its index. */
@@ -386,6 +392,7 @@ class NominalAttribute private[ml] (
   /**
    * Get the number of values, either from `numValues` or from `values`.
    * Return None if unknown.
+    * 返回元素数量
    */
   def getNumValues: Option[Int] = {
     if (numValues.nonEmpty) {
@@ -477,7 +484,7 @@ object NominalAttribute extends AttributeFactory {
 class BinaryAttribute private[ml] (
     override val name: Option[String] = None,
     override val index: Option[Int] = None,
-    val values: Option[Array[String]] = None)
+    val values: Option[Array[String]] = None) //2元分类,因此里面有2个值
   extends Attribute {
 
   values.foreach { v =>
