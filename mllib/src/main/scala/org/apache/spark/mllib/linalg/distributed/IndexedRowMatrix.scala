@@ -27,6 +27,7 @@ import org.apache.spark.mllib.linalg.SingularValueDecomposition
 /**
  * :: Experimental ::
  * Represents a row of [[org.apache.spark.mllib.linalg.distributed.IndexedRowMatrix]].
+  * 行号  以及 对应的一行向量 组成一行数据
  */
 @Since("1.0.0")
 @Experimental
@@ -36,7 +37,7 @@ case class IndexedRow(index: Long, vector: Vector)
  * :: Experimental ::
  * Represents a row-oriented [[org.apache.spark.mllib.linalg.distributed.DistributedMatrix]] with
  * indexed rows.
- *
+ * 以行的方式 展示矩阵
  * @param rows indexed rows of this matrix
  * @param nRows number of rows. A non-positive value means unknown, and then the number of rows will
  *              be determined by the max row index plus one.
@@ -46,14 +47,15 @@ case class IndexedRow(index: Long, vector: Vector)
 @Since("1.0.0")
 @Experimental
 class IndexedRowMatrix @Since("1.0.0") (
-    @Since("1.0.0") val rows: RDD[IndexedRow],
-    private var nRows: Long,
+    @Since("1.0.0") val rows: RDD[IndexedRow],//以行为单位,组成的RDD对象
+    private var nRows: Long,//有多少行
     private var nCols: Int) extends DistributedMatrix {
 
   /** Alternative constructor leaving matrix dimensions to be determined automatically. */
   @Since("1.0.0")
   def this(rows: RDD[IndexedRow]) = this(rows, 0L, 0)
 
+  //每一行的列数都相同
   @Since("1.0.0")
   override def numCols(): Long = {
     if (nCols <= 0) {
@@ -67,7 +69,7 @@ class IndexedRowMatrix @Since("1.0.0") (
   override def numRows(): Long = {
     if (nRows <= 0L) {
       // Reduce will throw an exception if `rows` is empty.
-      nRows = rows.map(_.index).reduce(math.max) + 1L
+      nRows = rows.map(_.index).reduce(math.max) + 1L //最大的行数序号
     }
     nRows
   }

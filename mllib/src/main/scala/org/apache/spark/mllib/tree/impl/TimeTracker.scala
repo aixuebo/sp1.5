@@ -65,7 +65,7 @@ private[spark] class TimeTracker extends Serializable {
     } else {
       totals(timerLabel) = elapsed
     }
-    elapsed / 1e9
+    elapsed / 1e9 //微妙转换成秒,即返回单位是秒，小数精准到微妙级别
   }
 
   /**

@@ -29,6 +29,7 @@ import org.apache.spark.mllib.linalg.{Matrix, SparseMatrix, Vectors}
  * @param i row index
  * @param j column index
  * @param value value of the entry
+  * 表示矩阵真实的行、列、值
  */
 @Since("1.0.0")
 @Experimental
@@ -37,12 +38,14 @@ case class MatrixEntry(i: Long, j: Long, value: Double)
 /**
  * :: Experimental ::
  * Represents a matrix in coordinate format.
+  * 获取矩阵每一个元素的形式
  *
  * @param entries matrix entries
  * @param nRows number of rows. A non-positive value means unknown, and then the number of rows will
  *              be determined by the max row index plus one.
  * @param nCols number of columns. A non-positive value means unknown, and then the number of
  *              columns will be determined by the max column index plus one.
+  *  分布式矩阵所有的行、列、值组成的元素元组  总行数 总列数
  */
 @Since("1.0.0")
 @Experimental
@@ -73,25 +76,30 @@ class CoordinateMatrix @Since("1.0.0") (
     nRows
   }
 
-  /** Transposes this CoordinateMatrix. */
+  /** Transposes this CoordinateMatrix.
+    * 转置
+    **/
   @Since("1.3.0")
   def transpose(): CoordinateMatrix = {
     new CoordinateMatrix(entries.map(x => MatrixEntry(x.j, x.i, x.value)), numCols(), numRows())
   }
 
-  /** Converts to IndexedRowMatrix. The number of columns must be within the integer range. */
+  /** Converts to IndexedRowMatrix. The number of columns must be within the integer range.
+    * 将数据转换成以行为单位的矩阵
+    **/
   @Since("1.0.0")
   def toIndexedRowMatrix(): IndexedRowMatrix = {
-    val nl = numCols()
+    val nl = numCols() //列数
     if (nl > Int.MaxValue) {
       sys.error(s"Cannot convert to a row-oriented format because the number of columns $nl is " +
         "too large.")
     }
     val n = nl.toInt
-    val indexedRows = entries.map(entry => (entry.i, (entry.j.toInt, entry.value)))
-      .groupByKey()
+    //以行为单位组织数据
+    val indexedRows = entries.map(entry => (entry.i, (entry.j.toInt, entry.value))) //行号,列以及对应的值
+      .groupByKey() //对相同行号进行分组
       .map { case (i, vectorEntries) =>
-        IndexedRow(i, Vectors.sparse(n, vectorEntries.toSeq))
+        IndexedRow(i, Vectors.sparse(n, vectorEntries.toSeq)) //对列组成稀松向量
       }
     new IndexedRowMatrix(indexedRows, numRows(), n)
   }
@@ -147,7 +155,9 @@ class CoordinateMatrix @Since("1.0.0") (
     new BlockMatrix(blocks, rowsPerBlock, colsPerBlock, m, n)
   }
 
-  /** Determines the size by computing the max row/column index. */
+  /** Determines the size by computing the max row/column index.
+    * 计算最大的行号 以及 列号
+    **/
   private def computeSize() {
     // Reduce will throw an exception if `entries` is empty.
     val (m1, n1) = entries.map(entry => (entry.i, entry.j)).reduce { case ((i1, j1), (i2, j2)) =>
@@ -158,7 +168,9 @@ class CoordinateMatrix @Since("1.0.0") (
     nCols = math.max(nCols, n1 + 1L)
   }
 
-  /** Collects data and assembles a local matrix. */
+  /** Collects data and assembles a local matrix.
+    * 可能会内存溢出，因为当矩阵非常大的时候,本地内存是存储不下的
+    **/
   private[mllib] override def toBreeze(): BDM[Double] = {
     val m = numRows().toInt
     val n = numCols().toInt

@@ -128,14 +128,17 @@ private[mllib] object GridPartitioner {
  *              the number of rows will be calculated when `numRows` is invoked.
  * @param nCols Number of columns of this matrix. If the supplied value is less than or equal to
  *              zero, the number of columns will be calculated when `numCols` is invoked.
+  * 矩阵分块
+  * 注意:具体多少行列是最后计算获取的。初始值可以为0.因为大的矩阵按照固定的行列进行分割后，最后一行数据块在行数上满足不了行数拆分限制，每一列的最后一列都满足不了列的拆分限制，
+  * 比如5*5的矩阵，按照2*3的方式进行拆分
  */
 @Since("1.3.0")
 @Experimental
 class BlockMatrix @Since("1.3.0") (
-    @Since("1.3.0") val blocks: RDD[((Int, Int), Matrix)],
-    @Since("1.3.0") val rowsPerBlock: Int,
+    @Since("1.3.0") val blocks: RDD[((Int, Int), Matrix)],//分块后的矩阵行列序号，以及每一个行列对应的内容不再是一个具体的值，而是一个local矩阵
+    @Since("1.3.0") val rowsPerBlock: Int,//每一块规定好多少行多少列
     @Since("1.3.0") val colsPerBlock: Int,
-    private var nRows: Long,
+    private var nRows: Long,//实际上该分布式矩阵一共多少行列
     private var nCols: Long) extends DistributedMatrix with Logging {
 
   private type MatrixBlock = ((Int, Int), Matrix) // ((blockRowIndex, blockColIndex), sub-matrix)
@@ -171,6 +174,7 @@ class BlockMatrix @Since("1.3.0") (
     nCols
   }
 
+  //拆分后的矩阵，组成新的矩阵，一共有多少行、列
   @Since("1.3.0")
   val numRowBlocks = math.ceil(numRows() * 1.0 / rowsPerBlock).toInt
   @Since("1.3.0")
@@ -179,15 +183,15 @@ class BlockMatrix @Since("1.3.0") (
   private[mllib] def createPartitioner(): GridPartitioner =
     GridPartitioner(numRowBlocks, numColBlocks, suggestedNumPartitions = blocks.partitions.size)
 
-  private lazy val blockInfo = blocks.mapValues(block => (block.numRows, block.numCols)).cache()
+  private lazy val blockInfo = blocks.mapValues(block => (block.numRows, block.numCols)).cache() //<(该数据块在整体矩阵的位置，行列),(该数据块矩阵的行列数)>
 
-  /** Estimates the dimensions of the matrix. */
+  /** Estimates the dimensions of the matrix. 计算真实的大矩阵的行、列值 */
   private def estimateDim(): Unit = {
     val (rows, cols) = blockInfo.map { case ((blockRowIndex, blockColIndex), (m, n)) =>
-      (blockRowIndex.toLong * rowsPerBlock + m,
-        blockColIndex.toLong * colsPerBlock + n)
+      (blockRowIndex.toLong * rowsPerBlock + m, //计算行数
+        blockColIndex.toLong * colsPerBlock + n) //计算列数
     }.reduce { (x0, x1) =>
-      (math.max(x0._1, x1._1), math.max(x0._2, x1._2))
+      (math.max(x0._1, x1._1), math.max(x0._2, x1._2)) //获取行数最大的，列数最大的
     }
     if (nRows <= 0L) nRows = rows
     assert(rows <= nRows, s"The number of rows $rows is more than claimed $nRows.")
@@ -207,6 +211,7 @@ class BlockMatrix @Since("1.3.0") (
     logDebug("BlockMatrix dimensions are okay...")
 
     // Check if there are multiple MatrixBlocks with the same index.
+    //新矩阵的每一个坐标只能出现一次
     blockInfo.countByKey().foreach { case (key, cnt) =>
       if (cnt > 1) {
         throw new SparkException(s"Found multiple MatrixBlocks with the indices $key. Please " +
@@ -257,7 +262,7 @@ class BlockMatrix @Since("1.3.0") (
       val colStart = blockColIndex.toLong * colsPerBlock
       val entryValues = new ArrayBuffer[MatrixEntry]()
       mat.foreachActive { (i, j, v) =>
-        if (v != 0.0) entryValues.append(new MatrixEntry(rowStart + i, colStart + j, v))
+        if (v != 0.0) entryValues.append(new MatrixEntry(rowStart + i, colStart + j, v)) //矩阵真实的行、列、值
       }
       entryValues
     }

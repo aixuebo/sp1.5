@@ -31,13 +31,15 @@ import org.apache.spark.mllib.linalg.{Vectors, Vector}
  * Class used to solve an optimization problem using Gradient Descent.
  * @param gradient Gradient function to be used.
  * @param updater Updater to be used to update weights after every iteration.
+  * 梯度下降算法
+  * 给定初始化权重 以及 data数据集合,进行不断迭代,梯度下降的方式,计算最终的权重输出
  */
 class GradientDescent private[spark] (private var gradient: Gradient, private var updater: Updater)
   extends Optimizer with Logging {
 
-  private var stepSize: Double = 1.0
+  private var stepSize: Double = 1.0 //步长
   private var numIterations: Int = 100
-  private var regParam: Double = 0.0
+  private var regParam: Double = 0.0 //正则化参数 朗母达
   private var miniBatchFraction: Double = 1.0
   private var convergenceTol: Double = 0.001
 
@@ -71,6 +73,7 @@ class GradientDescent private[spark] (private var gradient: Gradient, private va
 
   /**
    * Set the regularization parameter. Default 0.0.
+    * 正则化参数 朗母达
    */
   def setRegParam(regParam: Double): this.type = {
     this.regParam = regParam
@@ -117,9 +120,10 @@ class GradientDescent private[spark] (private var gradient: Gradient, private va
   /**
    * :: DeveloperApi ::
    * Runs gradient descent on the given training data.
-   * @param data training data
-   * @param initialWeights initial weights
+   * @param data training data  数据集合
+   * @param initialWeights initial weights  初始化权重系数
    * @return solution vector
+    * 梯度下降的方式计算最终的权重系数
    */
   @DeveloperApi
   def optimize(data: RDD[(Double, Vector)], initialWeights: Vector): Vector = {
@@ -165,9 +169,9 @@ object GradientDescent extends Logging {
    *                       difference between the current weight and the previous weight is less
    *                       than this value. In measuring convergence, L2 norm is calculated.
    *                       Default value 0.001. Must be between 0.0 and 1.0 inclusively.
-   * @return A tuple containing two elements. The first element is a column matrix containing
-   *         weights for every feature, and the second element is an array containing the
-   *         stochastic loss computed for every iteration.
+   * @return A tuple containing two elements.
+    *         The first element is a column matrix containing weights for every feature, 最终权重系数
+    *         and the second element is an array containing the stochastic loss computed for every iteration.损失信息
    */
   def runMiniBatchSGD(
       data: RDD[(Double, Vector)],
@@ -180,13 +184,13 @@ object GradientDescent extends Logging {
       initialWeights: Vector,
       convergenceTol: Double): (Vector, Array[Double]) = {
 
-    // convergenceTol should be set with non minibatch settings
+    // convergenceTol should be set with non minibatch settings,convergenceTol 不能被设置在miniBatchFraction存在的训练模型中,即两者不能共存
     if (miniBatchFraction < 1.0 && convergenceTol > 0.0) {
       logWarning("Testing against a convergenceTol when using miniBatchFraction " +
         "< 1.0 can be unstable because of the stochasticity in sampling.")
     }
 
-    val stochasticLossHistory = new ArrayBuffer[Double](numIterations)
+    val stochasticLossHistory = new ArrayBuffer[Double](numIterations) //存储每一轮迭代的损失值
     // Record previous weight and current one to calculate solution vector difference
 
     var previousWeights: Option[Vector] = None
@@ -215,7 +219,7 @@ object GradientDescent extends Logging {
     var regVal = updater.compute(
       weights, Vectors.zeros(weights.size), 0, 1, regParam)._2
 
-    var converged = false // indicates whether converged based on convergenceTol
+    var converged = false // indicates whether converged based on convergenceTol 是否收敛了,默认没有收敛
     var i = 1
     while (!converged && i <= numIterations) {
       val bcWeights = data.context.broadcast(weights)
@@ -223,7 +227,7 @@ object GradientDescent extends Logging {
       // compute and sum up the subgradients on this subset (this is one map-reduce)
       val (gradientSum, lossSum, miniBatchSize) = data.sample(false, miniBatchFraction, 42 + i) //抽样数据
         .treeAggregate((BDV.zeros[Double](n), 0.0, 0L))( //返回值是向量,double,long组成的---分别表示 xxx  损失值求和  出现的次数
-          seqOp = (c, v) => {
+          seqOp = (c, v) => { //c是merge的值,v是lable和特征组成的元组
             // c: (grad, loss, count), v: (label, features)
             val l = gradient.compute(v._2, v._1, bcWeights.value, Vectors.fromBreeze(c._1))
             (c._1, c._2 + l, c._3 + 1)
@@ -279,7 +283,7 @@ object GradientDescent extends Logging {
     GradientDescent.runMiniBatchSGD(data, gradient, updater, stepSize, numIterations,
                                     regParam, miniBatchFraction, initialWeights, 0.001)
 
-
+  //是否收敛
   private def isConverged(
       previousWeights: Vector,
       currentWeights: Vector,

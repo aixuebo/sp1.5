@@ -213,7 +213,7 @@ object LogisticRegressionModel extends Loader[LogisticRegressionModel] {
 class LogisticRegressionWithSGD private[mllib] (
     private var stepSize: Double,
     private var numIterations: Int,
-    private var regParam: Double,
+    private var regParam: Double,//正则化参数 朗母达
     private var miniBatchFraction: Double)
   extends GeneralizedLinearAlgorithm[LogisticRegressionModel] with Serializable {
 
@@ -223,7 +223,7 @@ class LogisticRegressionWithSGD private[mllib] (
   override val optimizer = new GradientDescent(gradient, updater)
     .setStepSize(stepSize)
     .setNumIterations(numIterations)
-    .setRegParam(regParam)
+    .setRegParam(regParam) // 正则化参数 朗母达
     .setMiniBatchFraction(miniBatchFraction)
   override protected val validators = List(DataValidators.binaryLabelValidator)
 

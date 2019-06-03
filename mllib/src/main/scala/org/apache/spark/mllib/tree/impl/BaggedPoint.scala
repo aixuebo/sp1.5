@@ -27,12 +27,18 @@ import org.apache.spark.util.random.XORShiftRandom
  * Internal representation of a datapoint which belongs to several subsamples of the same dataset,
  * particularly for bagging (e.g., for random forests).
  *
+  * 用于在同一个数据集上，拆分多个子样本集合，比如随机森林
+  *
  * This holds one instance, as well as an array of weights which represent the (weighted)
  * number of times which this instance appears in each subsamplingRate.
  * E.g., (datum, [1, 0, 4]) indicates that there are 3 subsamples of the dataset and that
  * this datum has 1 copy, 0 copies, and 4 copies in the 3 subsamples, respectively.
  *
- * @param datum  Data instance
+  * 持有一个权重数组，表示每一个书对应的抽样比例权重。
+  * 比如 (datum, [1, 0, 4]) 表示3个抽样，以及抽样比例
+  *
+  *
+  * @param datum  Data instance
  * @param subsampleWeights  Weight of this instance in each subsampled dataset.
  *
  * TODO: This does not currently support (Double) weighted instances.  Once MLlib has weighted
@@ -51,7 +57,7 @@ private[spark] object BaggedPoint {
    * @param input Input dataset.
    * @param subsamplingRate Fraction of the training data used for learning decision tree.
    * @param numSubsamples Number of subsamples of this RDD to take.
-   * @param withReplacement Sampling with/without replacement.
+   * @param withReplacement Sampling with/without replacement. 是否是放回抽样
    * @param seed Random seed.
    * @return BaggedPoint dataset representation.
    */
@@ -61,9 +67,9 @@ private[spark] object BaggedPoint {
       numSubsamples: Int,
       withReplacement: Boolean,
       seed: Long = Utils.random.nextLong()): RDD[BaggedPoint[Datum]] = {
-    if (withReplacement) {
+    if (withReplacement) {//放回抽样
       convertToBaggedRDDSamplingWithReplacement(input, subsamplingRate, numSubsamples, seed)
-    } else {
+    } else {//不放回抽样
       if (numSubsamples == 1 && subsamplingRate == 1.0) {
         convertToBaggedRDDWithoutSampling(input)
       } else {
@@ -86,7 +92,7 @@ private[spark] object BaggedPoint {
         var subsampleIndex = 0
         while (subsampleIndex < numSubsamples) {
           val x = rng.nextDouble()
-          subsampleWeights(subsampleIndex) = {
+          subsampleWeights(subsampleIndex) = { //根据随机系数，觉得该样本分配到第几个样本池中
             if (x < subsamplingRate) 1.0 else 0.0
           }
           subsampleIndex += 1
@@ -96,6 +102,7 @@ private[spark] object BaggedPoint {
     }
   }
 
+  //放回抽样
   private def convertToBaggedRDDSamplingWithReplacement[Datum] (
       input: RDD[Datum],
       subsample: Double,

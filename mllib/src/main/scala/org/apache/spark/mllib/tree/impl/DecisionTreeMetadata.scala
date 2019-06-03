@@ -73,7 +73,7 @@ private[spark] class DecisionTreeMetadata(
    * For ordered features, there is 1 more bin than split.
    */
   def numSplits(featureIndex: Int): Int = if (isUnordered(featureIndex)) {//特征太少,无序的,如何拆分
-    numBins(featureIndex) >> 1
+    numBins(featureIndex) >> 1 // /2
   } else {
     numBins(featureIndex) - 1
   }

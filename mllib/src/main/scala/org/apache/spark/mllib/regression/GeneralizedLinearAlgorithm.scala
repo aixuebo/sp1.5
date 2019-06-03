@@ -98,6 +98,7 @@ abstract class GeneralizedLinearModel @Since("1.0.0") (
  * GeneralizedLinearAlgorithm implements methods to train a Generalized Linear Model (GLM).
  * This class should be extended with an Optimizer to create a new GLM.
  * 泛型是要产生的模型
+  * 处理特征的缩放、初始化权重等工作
  */
 @Since("0.8.0")
 @DeveloperApi
@@ -142,6 +143,7 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
    * which can significantly help the optimizer converging faster. The scaling correction will be
    * translated back to resulting model weights, so it's transparent to users.
    * Note: This technique is used in both libsvm and glmnet packages. Default false.
+    * 是否对特征进行缩放处理,比如均方差处理,或者min-max处理等操作,默认是false
    */
   private var useFeatureScaling = false
 
@@ -223,6 +225,7 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
      *
      * TODO: See if we can deprecate `intercept` in `GeneralizedLinearModel`, and always
      * have the intercept as part of weights to have consistent design.
+      * 初始化权重为0
      */
     val initialWeights = {
       if (numOfLinearPredictor == 1) {
@@ -279,7 +282,7 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
      *
      * Currently, it's only enabled in LogisticRegressionWithLBFGS
      */
-    val scaler = if (useFeatureScaling) {
+    val scaler = if (useFeatureScaling) {//特征处理函数
       new StandardScaler(withStd = true, withMean = false).fit(input.map(_.features))
     } else {
       null
@@ -314,14 +317,17 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
       initialWeights
     }
 
+    //进行梯度处理--计算最优的权重系数
     val weightsWithIntercept = optimizer.optimize(data, initialWeightsWithIntercept)
 
+    //截距---最后一个维度就是截距常亮值
     val intercept = if (addIntercept && numOfLinearPredictor == 1) {
       weightsWithIntercept(weightsWithIntercept.size - 1)
     } else {
       0.0
     }
 
+    //除了截距后的权重
     var weights = if (addIntercept && numOfLinearPredictor == 1) {
       Vectors.dense(weightsWithIntercept.toArray.slice(0, weightsWithIntercept.size - 1))
     } else {
@@ -331,7 +337,8 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
     /**
      * The weights and intercept are trained in the scaled space; we're converting them back to
      * the original scale.
-     *
+     * 如果数据特征被缩放了,因此计算的权重是缩放后的,要还原回来
+      *
      * Math shows that if we only perform standardization without subtracting means, the intercept
      * will not be changed. w_i = w_i' / v_i where w_i' is the coefficient in the scaled space, w_i
      * is the coefficient in the original space, and v_i is the variance of the column i.

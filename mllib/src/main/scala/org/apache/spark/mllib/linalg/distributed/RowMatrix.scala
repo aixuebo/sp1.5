@@ -58,7 +58,7 @@ class RowMatrix @Since("1.0.0") (
   def this(rows: RDD[Vector]) = this(rows, 0L, 0)
 
   /** Gets or computes the number of columns.
-    * 计算有多少列
+    * 计算有多少列--每一行的列都是相同的
     **/
   @Since("1.0.0")
   override def numCols(): Long = {
@@ -75,7 +75,9 @@ class RowMatrix @Since("1.0.0") (
     nCols
   }
 
-  /** Gets or computes the number of rows. */
+  /** Gets or computes the number of rows.
+    * 分布式计算
+    **/
   @Since("1.0.0")
   override def numRows(): Long = {
     if (nRows <= 0L) {
@@ -90,26 +92,27 @@ class RowMatrix @Since("1.0.0") (
 
   /**
    * Multiplies the Gramian matrix `A^T A` by a dense vector on the right without computing `A^T A`.
-   *
+   * 格拉姆矩阵矩阵
    * @param v a dense vector whose length must match the number of columns of this matrix
    * @return a dense vector representing the product
+    * 输入是一个向量,输出是一个向量
    */
   private[mllib] def multiplyGramianMatrixBy(v: BDV[Double]): BDV[Double] = {
     val n = numCols().toInt
     val vbr = rows.context.broadcast(v)
-    rows.treeAggregate(BDV.zeros[Double](n))(
-      seqOp = (U, r) => {
+    rows.treeAggregate(BDV.zeros[Double](n))(//返回值是一个向量,n维的
+      seqOp = (U, r) => {//r是迭代的行向量
         val rBrz = r.toBreeze
-        val a = rBrz.dot(vbr.value)
+        val a = rBrz.dot(vbr.value) //行向量 dot 参数向量
         rBrz match {
           // use specialized axpy for better performance
-          case _: BDV[_] => brzAxpy(a, rBrz.asInstanceOf[BDV[Double]], U)
-          case _: BSV[_] => brzAxpy(a, rBrz.asInstanceOf[BSV[Double]], U)
+          case _: BDV[_] => brzAxpy(a, rBrz.asInstanceOf[BDV[Double]], U) //y += x * a ,即U = U + a * rBrz   DenseVector 密集向量
+          case _: BSV[_] => brzAxpy(a, rBrz.asInstanceOf[BSV[Double]], U) //稀松向量
           case _ => throw new UnsupportedOperationException(
             s"Do not support vector operation from type ${rBrz.getClass.getName}.")
         }
         U
-      }, combOp = (U1, U2) => U1 += U2)
+      }, combOp = (U1, U2) => U1 += U2) //向量元素位置相加
   }
 
   /**
@@ -185,6 +188,7 @@ class RowMatrix @Since("1.0.0") (
    * @param rCond the reciprocal condition number. All singular values smaller than rCond * sigma(0)
    *              are treated as zero, where sigma(0) is the largest singular value.
    * @return SingularValueDecomposition(U, s, V). U = null if computeU = false.
+    * 奇异值分解SVD
    */
   @Since("1.0.0")
   def computeSVD(
@@ -211,6 +215,7 @@ class RowMatrix @Since("1.0.0") (
    *             local-eigs: compute gram matrix and computes its top eigenvalues locally,
    *             dist-eigs: compute the top eigenvalues of the gram matrix distributively)
    * @return SingularValueDecomposition(U, s, V). U = null if computeU = false.
+    * 奇异值分解SVD
    */
   private[mllib] def computeSVD(
       k: Int,
@@ -716,9 +721,10 @@ object RowMatrix {
 
   /**
    * Fills a full square matrix from its upper triangular part.
+    * 填满一个方阵，U是上三角
    */
   private def triuToFull(n: Int, U: Array[Double]): Matrix = {
-    val G = new BDM[Double](n, n)
+    val G = new BDM[Double](n, n) //初始化一个n*n的矩阵
 
     var row = 0
     var col = 0

@@ -48,6 +48,7 @@ private[spark] class DTStatsAggregator(
 
   /**
    * Number of bins for each feature.  This is indexed by the feature index.
+    * 返回每一个特征的split数量
    */
   private val numBins: Array[Int] = {
     if (featureSubset.isDefined) {

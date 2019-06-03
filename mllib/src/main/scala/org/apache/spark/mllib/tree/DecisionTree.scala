@@ -969,8 +969,8 @@ object DecisionTree extends Serializable with Logging {
    *          of size (numFeatures, numSplits).
    *         Bins is an Array of [[org.apache.spark.mllib.tree.model.Bin]]
    *          of size (numFeatures, numBins).
-   */
-  protected[tree] def findSplitsBins(
+   */protected[tree] def findSplitsBins(
+
       input: RDD[LabeledPoint],
       metadata: DecisionTreeMetadata): (Array[Array[Split]], Array[Array[Bin]]) = { //返回每一个特征的分割信息
 
@@ -1042,7 +1042,7 @@ object DecisionTree extends Serializable with Logging {
             val numBins = metadata.numBins(featureIndex)
             // Categorical feature
             val featureArity = metadata.featureArity(featureIndex) //真实特征值数量
-            if (metadata.isUnordered(featureIndex)) {//特征值数量太大
+            if (metadata.isUnordered(featureIndex)) {//无序的特征，特征值数量很小
               // Unordered features
               // 2^(maxFeatureValue - 1) - 1 combinations
               splits(featureIndex) = new Array[Split](numSplits)
@@ -1054,10 +1054,11 @@ object DecisionTree extends Serializable with Logging {
                   new Split(featureIndex, Double.MinValue, Categorical, categories)
                 splitIndex += 1
               }
-            } else {//特征值数量不大
+            } else {//有序特征
               // Ordered features
               //   Bins correspond to feature values, so we do not need to compute splits or bins
               //   beforehand.  Splits are constructed as needed during training.
+              //有序的特征向量，分享符合特征值定义。因此不需要事先去计算拆分点
               splits(featureIndex) = new Array[Split](0)
             }
             // For ordered features, bins correspond to feature values.
@@ -1080,6 +1081,8 @@ object DecisionTree extends Serializable with Logging {
    * position of ones in a binary representation of the input. If binary
    * representation of an number is 01101 (13), the output list should (3.0, 2.0,
    * 0.0). The maxFeatureValue depict the number of rightmost digits that will be tested for ones.
+    * 可以看到13的二进制，表示第0 2 3 位置都是1,因此他属于这三个分类特征
+    * 正常一个特征值表示一个分类，不会出现多分类的情况
    */
   private[tree] def extractMultiClassCategories(
       input: Int,
@@ -1088,7 +1091,7 @@ object DecisionTree extends Serializable with Logging {
     var j = 0
     var bitShiftedInput = input
     while (j < maxFeatureValue) {
-      if (bitShiftedInput % 2 != 0) {
+      if (bitShiftedInput % 2 != 0) {//找到是1的位置
         // updating the list of categories.
         categories = j.toDouble :: categories
       }

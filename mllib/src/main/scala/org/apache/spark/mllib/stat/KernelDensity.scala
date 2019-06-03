@@ -52,6 +52,7 @@ class KernelDensity extends Serializable {
 
   /**
    * Sets the bandwidth (standard deviation) of the Gaussian kernel (default: `1.0`).
+    * 设置带宽
    */
   @Since("1.4.0")
   def setBandwidth(bandwidth: Double): this.type = {
@@ -84,7 +85,7 @@ class KernelDensity extends Serializable {
   @Since("1.4.0")
   def estimate(points: Array[Double]): Array[Double] = {
     val sample = this.sample
-    val bandwidth = this.bandwidth
+    val bandwidth = this.bandwidth //正态分布的方差
 
     require(sample != null, "Must set sample before calling estimate.")
 
@@ -92,7 +93,7 @@ class KernelDensity extends Serializable {
     // This gets used in each Gaussian PDF computation, so compute it up front
     val logStandardDeviationPlusHalfLog2Pi = math.log(bandwidth) + 0.5 * math.log(2 * math.Pi)
     val (densities, count) = sample.aggregate((new Array[Double](n), 0L))(
-      (x, y) => {
+      (x, y) => {//map过程
         var i = 0
         while (i < n) {
           x._1(i) += normPdf(y, bandwidth, logStandardDeviationPlusHalfLog2Pi, points(i))
@@ -100,20 +101,23 @@ class KernelDensity extends Serializable {
         }
         (x._1, x._2 + 1)
       },
-      (x, y) => {
+      (x, y) => {//reduce过程
         blas.daxpy(n, 1.0, y._1, 1, x._1, 1)
         (x._1, x._2 + y._2)
       })
-    blas.dscal(n, 1.0 / count, densities, 1)
+    blas.dscal(n, 1.0 / count, densities, 1) //densities的每一个元素*1/n
     densities
   }
 }
 
 private object KernelDensity {
 
-  /** Evaluates the PDF of a normal distribution. 求正态分布的值*/
+  /** Evaluates the PDF of a normal distribution. 求正态分布的值
+    * 数学小技巧 将一个数字 转换成对数形式
+    * 8 = 2^3 = 2 ^ log 2^8
+    **/
   def normPdf(
-      mean: Double,
+      mean: Double,//正太分布的均值
       standardDeviation: Double,
       logStandardDeviationPlusHalfLog2Pi: Double,
       x: Double): Double = {

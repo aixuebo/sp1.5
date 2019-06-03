@@ -31,14 +31,14 @@ abstract class Gradient extends Serializable {
   /**
    * Compute the gradient and loss given the features of a single data point.
    *
-   * @param data features for one data point
-   * @param label label for this data point
-   * @param weights weights/coefficients corresponding to features
+   * @param data features for one data point ,x向量具体的值
+   * @param label label for this data point ,y具体的输出值
+   * @param weights weights/coefficients corresponding to features  x向量的系数
    *
    * @return (gradient: Vector, loss: Double)
    */
   def compute(data: Vector, label: Double, weights: Vector): (Vector, Double) = {
-    val gradient = Vectors.zeros(weights.size)
+    val gradient = Vectors.zeros(weights.size) //初始化梯度值
     val loss = compute(data, label, weights, gradient)
     (gradient, loss)
   }
@@ -283,13 +283,22 @@ class LeastSquaresGradient extends Gradient {
   }
 
   //返回损失值,梯度使用cumGradient对象更新
+  /**
+    *
+    * @param data features for one data point ,x向量具体的值
+    * @param label label for this data point,y具体的真实输出
+    * @param weights weights/coefficients corresponding to features ,x向量的系数
+    * @param cumGradient the computed gradient will be added to this vector
+    *
+    * @return loss
+    */
   override def compute(
       data: Vector,
       label: Double,
       weights: Vector,
       cumGradient: Vector): Double = {
-    val diff = dot(data, weights) - label //损失函数
-    axpy(diff, data, cumGradient) //cumGradient += diff * data
+    val diff = dot(data, weights) - label //损失值---x向量真实值 * 系数权重 = 预测值，然后 - label(y真实值) = 损失
+    axpy(diff, data, cumGradient) //cumGradient += diff * data ,即 y = y + a x
     diff * diff / 2.0 //损失函数平方
   }
 }

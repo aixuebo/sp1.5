@@ -31,6 +31,9 @@ import org.apache.spark.mllib.util.MLUtils
  * The log loss is defined as:
  *   2 log(1 + exp(-2 y F(x)))
  * where y is a label in {-1, 1} and F(x) is the model prediction for features x.
+  * 适用于逻辑回归2分类问题，因此y是-1和1，x是预测值。
+  *
+  * 逻辑回归损失函数
  */
 @Since("1.2.0")
 @DeveloperApi

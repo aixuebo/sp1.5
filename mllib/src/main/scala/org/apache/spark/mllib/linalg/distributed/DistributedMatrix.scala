@@ -28,11 +28,11 @@ import org.apache.spark.annotation.Since
 @Since("1.0.0")
 trait DistributedMatrix extends Serializable {
 
-  /** Gets or computes the number of rows. 矩阵行数*/
+  /** Gets or computes the number of rows. 分布式矩阵的总行数 */
   @Since("1.0.0")
   def numRows(): Long
 
-  /** Gets or computes the number of columns. 矩阵列数*/
+  /** Gets or computes the number of columns. 分布式矩阵的总列数*/
   @Since("1.0.0")
   def numCols(): Long
 

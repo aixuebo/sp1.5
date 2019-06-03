@@ -25,6 +25,7 @@ import org.apache.spark.rdd.RDD
 /**
  * :: DeveloperApi ::
  * A collection of methods used to validate data before applying ML algorithms.
+  * 数据校验
  */
 @DeveloperApi
 @Since("0.8.0")
@@ -34,14 +35,15 @@ object DataValidators extends Logging {
    * Function to check if labels used for classification are either zero or one.
    *
    * @return True if labels are all zero or one, false otherwise.
+    *         校验lable是否只有1和0两种
    */
   @Since("1.0.0")
   val binaryLabelValidator: RDD[LabeledPoint] => Boolean = { data =>
-    val numInvalid = data.filter(x => x.label != 1.0 && x.label != 0.0).count()
+    val numInvalid = data.filter(x => x.label != 1.0 && x.label != 0.0).count() //计算非1和0的数量
     if (numInvalid != 0) {
       logError("Classification labels should be 0 or 1. Found " + numInvalid + " invalid labels")
     }
-    numInvalid == 0
+    numInvalid == 0 //true表示只有1和0两种label
   }
 
   /**
@@ -49,11 +51,12 @@ object DataValidators extends Logging {
    * in the range of {0, 1, ..., k - 1}.
    *
    * @return True if labels are all in the range of {0, 1, ..., k-1}, false otherwise.
+    * 判断labelid在0到k之间
    */
   @Since("1.3.0")
   def multiLabelValidator(k: Int): RDD[LabeledPoint] => Boolean = { data =>
     val numInvalid = data.filter(x =>
-      x.label - x.label.toInt != 0.0 || x.label < 0 || x.label > k - 1).count()
+      x.label - x.label.toInt != 0.0 || x.label < 0 || x.label > k - 1).count() //计算非法的数量
     if (numInvalid != 0) {
       logError("Classification labels should be in {0 to " + (k - 1) + "}. " +
         "Found " + numInvalid + " invalid labels")

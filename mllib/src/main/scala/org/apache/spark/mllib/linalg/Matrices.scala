@@ -81,7 +81,7 @@ sealed trait Matrix extends Serializable {
   @Since("1.3.0")
   def transpose: Matrix
 
-  /** Convenience method for `Matrix`-`DenseMatrix` multiplication. */
+  /** Convenience method for `Matrix`-`DenseMatrix` multiplication. 矩阵乘法*/
   @Since("1.2.0")
   def multiply(y: DenseMatrix): DenseMatrix = {
     val C: DenseMatrix = DenseMatrix.zeros(numRows, y.numCols)
@@ -112,7 +112,9 @@ sealed trait Matrix extends Serializable {
 
   /** Map the values of this matrix using a function. Generates a new matrix. Performs the
     * function on only the backing array. For example, an operation such as addition or
-    * subtraction will only be performed on the non-zero values in a `SparseMatrix`. */
+    * subtraction will only be performed on the non-zero values in a `SparseMatrix`.
+    * 对每一个元素值进行更新
+    **/
   private[spark] def map(f: Double => Double): Matrix
 
   /** Update all the values of this matrix using the function f. Performed in-place on the
@@ -143,6 +145,7 @@ sealed trait Matrix extends Serializable {
   def numActives: Int
 }
 
+//自定义sql的数据类型--矩阵类型
 @DeveloperApi
 private[spark] class MatrixUDT extends UserDefinedType[Matrix] {
 
@@ -154,16 +157,17 @@ private[spark] class MatrixUDT extends UserDefinedType[Matrix] {
     // the sparse matrix needs colPtrs and rowIndices, which are set as
     // null, while building the dense matrix.
     StructType(Seq(
-      StructField("type", ByteType, nullable = false),
-      StructField("numRows", IntegerType, nullable = false),
-      StructField("numCols", IntegerType, nullable = false),
-      StructField("colPtrs", ArrayType(IntegerType, containsNull = false), nullable = true),
-      StructField("rowIndices", ArrayType(IntegerType, containsNull = false), nullable = true),
-      StructField("values", ArrayType(DoubleType, containsNull = false), nullable = true),
-      StructField("isTransposed", BooleanType, nullable = false)
+      StructField("type", ByteType, nullable = false),//0表示稀松 1表示密集
+      StructField("numRows", IntegerType, nullable = false),//行数
+      StructField("numCols", IntegerType, nullable = false),//列数
+      StructField("colPtrs", ArrayType(IntegerType, containsNull = false), nullable = true),//用于稀松矩阵
+      StructField("rowIndices", ArrayType(IntegerType, containsNull = false), nullable = true),//用于稀松矩阵
+      StructField("values", ArrayType(DoubleType, containsNull = false), nullable = true),//存储所有的矩阵的值
+      StructField("isTransposed", BooleanType, nullable = false) //矩阵是行存储还是列存储
       ))
   }
 
+  //序列化
   override def serialize(obj: Any): InternalRow = {
     val row = new GenericMutableRow(7)
     obj match {
@@ -176,13 +180,13 @@ private[spark] class MatrixUDT extends UserDefinedType[Matrix] {
         row.update(5, new GenericArrayData(sm.values.map(_.asInstanceOf[Any])))
         row.setBoolean(6, sm.isTransposed)
 
-      case dm: DenseMatrix =>
+      case dm: DenseMatrix => //密集矩阵
         row.setByte(0, 1)
         row.setInt(1, dm.numRows)
         row.setInt(2, dm.numCols)
-        row.setNullAt(3)
-        row.setNullAt(4)
-        row.update(5, new GenericArrayData(dm.values.map(_.asInstanceOf[Any])))
+        row.setNullAt(3) //稀疏矩阵的特征,因此设置为null
+        row.setNullAt(4) //稀疏矩阵的特征,因此设置为null
+        row.update(5, new GenericArrayData(dm.values.map(_.asInstanceOf[Any])))//存储value值
         row.setBoolean(6, dm.isTransposed)
     }
     row
@@ -244,14 +248,15 @@ private[spark] class MatrixUDT extends UserDefinedType[Matrix] {
  * @param values matrix entries in column major if not transposed or in row major otherwise
  * @param isTransposed whether the matrix is transposed. If true, `values` stores the matrix in
  *                     row major.
+  *  密集矩阵
  */
 @Since("1.0.0")
 @SQLUserDefinedType(udt = classOf[MatrixUDT])
 class DenseMatrix @Since("1.3.0") (
     @Since("1.0.0") val numRows: Int,
     @Since("1.0.0") val numCols: Int,
-    @Since("1.0.0") val values: Array[Double],
-    @Since("1.3.0") override val isTransposed: Boolean) extends Matrix {
+    @Since("1.0.0") val values: Array[Double],//列的方式存储该矩阵
+    @Since("1.3.0") override val isTransposed: Boolean) extends Matrix {//true表示value的数据是以行的方式录入的
 
   require(values.length == numRows * numCols, "The number of values supplied doesn't match the " +
     s"size of the matrix! values.length: ${values.length}, numRows * numCols: ${numRows * numCols}")
@@ -284,22 +289,25 @@ class DenseMatrix @Since("1.3.0") (
     com.google.common.base.Objects.hashCode(numRows : Integer, numCols: Integer, toArray)
   }
 
+  //BM对象会有更丰富的矩阵操作
   private[mllib] def toBreeze: BM[Double] = {
     if (!isTransposed) {
       new BDM[Double](numRows, numCols, values)
     } else {
-      val breezeMatrix = new BDM[Double](numCols, numRows, values)
+      val breezeMatrix = new BDM[Double](numCols, numRows, values) //先转置
       breezeMatrix.t
     }
   }
 
   private[mllib] def apply(i: Int): Double = values(i)
 
+  //获取i行 j列的值
   @Since("1.3.0")
   override def apply(i: Int, j: Int): Double = values(index(i, j))
 
+  //i表示row j表示列
   private[mllib] def index(i: Int, j: Int): Int = {
-    if (!isTransposed) i + numRows * j else j + numCols * i
+    if (!isTransposed) i + numRows * j else j + numCols * i //i从0开始计算
   }
 
   private[mllib] def update(i: Int, j: Int, v: Double): Unit = {
@@ -309,9 +317,11 @@ class DenseMatrix @Since("1.3.0") (
   @Since("1.4.0")
   override def copy: DenseMatrix = new DenseMatrix(numRows, numCols, values.clone())
 
+  //对每一个value进行处理
   private[spark] def map(f: Double => Double) = new DenseMatrix(numRows, numCols, values.map(f),
     isTransposed)
 
+  //更新value每一个元素值
   private[mllib] def update(f: Double => Double): DenseMatrix = {
     val len = values.length
     var i = 0
@@ -323,8 +333,9 @@ class DenseMatrix @Since("1.3.0") (
   }
 
   @Since("1.3.0")
-  override def transpose: DenseMatrix = new DenseMatrix(numCols, numRows, values, !isTransposed)
+  override def transpose: DenseMatrix = new DenseMatrix(numCols, numRows, values, !isTransposed) //isTransposed 进行转置
 
+  //对每一个元素进行处理
   private[spark] override def foreachActive(f: (Int, Int, Double) => Unit): Unit = {
     if (!isTransposed) {
       // outer loop over columns
@@ -353,15 +364,18 @@ class DenseMatrix @Since("1.3.0") (
     }
   }
 
+  //非0的元素数量
   @Since("1.5.0")
   override def numNonzeros: Int = values.count(_ != 0)
 
+  //所有元素值数量
   @Since("1.5.0")
   override def numActives: Int = values.length
 
   /**
    * Generate a `SparseMatrix` from the given `DenseMatrix`. The new matrix will have isTransposed
    * set to false.
+    * 转换成稀松矩阵
    */
   @Since("1.3.0")
   def toSparse: SparseMatrix = {
@@ -399,6 +413,7 @@ object DenseMatrix {
    * @param numRows number of rows of the matrix
    * @param numCols number of columns of the matrix
    * @return `DenseMatrix` with size `numRows` x `numCols` and values of zeros
+    *        创建都为0的矩阵
    */
   @Since("1.3.0")
   def zeros(numRows: Int, numCols: Int): DenseMatrix = {
@@ -412,6 +427,7 @@ object DenseMatrix {
    * @param numRows number of rows of the matrix
    * @param numCols number of columns of the matrix
    * @return `DenseMatrix` with size `numRows` x `numCols` and values of ones
+    *     创建都为1的矩阵
    */
   @Since("1.3.0")
   def ones(numRows: Int, numCols: Int): DenseMatrix = {
@@ -424,6 +440,7 @@ object DenseMatrix {
    * Generate an Identity Matrix in `DenseMatrix` format.
    * @param n number of rows and columns of the matrix
    * @return `DenseMatrix` with size `n` x `n` and values of ones on the diagonal
+    * 创建方阵,并且对角线元素都是1,其他元素都是0的方阵
    */
   @Since("1.3.0")
   def eye(n: Int): DenseMatrix = {
@@ -442,6 +459,7 @@ object DenseMatrix {
    * @param numCols number of columns of the matrix
    * @param rng a random number generator
    * @return `DenseMatrix` with size `numRows` x `numCols` and values in U(0, 1)
+    *        产生0-1的随机矩阵,当然随机函数可以自己定义,默认是0-1的随机数
    */
   @Since("1.3.0")
   def rand(numRows: Int, numCols: Int, rng: Random): DenseMatrix = {
@@ -456,6 +474,8 @@ object DenseMatrix {
    * @param numCols number of columns of the matrix
    * @param rng a random number generator
    * @return `DenseMatrix` with size `numRows` x `numCols` and values in N(0, 1)
+    *        产生0-1的随机矩阵,当然随机函数可以自己定义,默认是0-1的随机数
+    *        注意随机数符合高斯分布
    */
   @Since("1.3.0")
   def randn(numRows: Int, numCols: Int, rng: Random): DenseMatrix = {
@@ -469,6 +489,7 @@ object DenseMatrix {
    * @param vector a `Vector` that will form the values on the diagonal of the matrix
    * @return Square `DenseMatrix` with size `values.length` x `values.length` and `values`
    *         on the diagonal
+    *         产生一个方阵，方阵的其他元素都是0，对角线元素为参数向量
    */
   @Since("1.3.0")
   def diag(vector: Vector): DenseMatrix = {
@@ -505,6 +526,8 @@ object DenseMatrix {
  * @param isTransposed whether the matrix is transposed. If true, the matrix can be considered
  *                     Compressed Sparse Row (CSR) format, where `colPtrs` behaves as rowPtrs,
  *                     and `rowIndices` behave as colIndices, and `values` are stored in row major.
+  * 稀疏矩阵
+  * 只存储非0的元素
  */
 @Since("1.2.0")
 @SQLUserDefinedType(udt = classOf[MatrixUDT])
@@ -513,15 +536,18 @@ class SparseMatrix @Since("1.3.0") (
     @Since("1.2.0") val numCols: Int,
     @Since("1.2.0") val colPtrs: Array[Int],
     @Since("1.2.0") val rowIndices: Array[Int],
-    @Since("1.2.0") val values: Array[Double],
+    @Since("1.2.0") val values: Array[Double],//存储非0的值
     @Since("1.3.0") override val isTransposed: Boolean) extends Matrix {
 
+  //每一个数据对应一个元素
   require(values.length == rowIndices.length, "The number of row indices and values don't match! " +
     s"values.length: ${values.length}, rowIndices.length: ${rowIndices.length}")
   // The Or statement is for the case when the matrix is transposed
+  //colPtrs为列数+1 或者 行数+1,取决于转置
   require(colPtrs.length == numCols + 1 || colPtrs.length == numRows + 1, "The length of the " +
     "column indices should be the number of columns + 1. Currently, colPointers.length: " +
     s"${colPtrs.length}, numCols: $numCols")
+  //value的元素数量 = colPtrs的最后一个数字
   require(values.length == colPtrs.last, "The last value of colPtrs must equal the number of " +
     s"elements. values.length: ${values.length}, colPtrs.last: ${colPtrs.last}")
 
@@ -548,8 +574,8 @@ class SparseMatrix @Since("1.3.0") (
   def this(
       numRows: Int,
       numCols: Int,
-      colPtrs: Array[Int],
-      rowIndices: Array[Int],
+      colPtrs: Array[Int],//表示以列为单位,截止到该列时，存储了多少个有效的值
+      rowIndices: Array[Int],//以列为单位，计算存储该列的位置
       values: Array[Double]) = this(numRows, numCols, colPtrs, rowIndices, values, false)
 
   override def equals(o: Any): Boolean = o match {
@@ -572,6 +598,7 @@ class SparseMatrix @Since("1.3.0") (
     if (ind < 0) 0.0 else values(ind)
   }
 
+  //找不到元素则返回-1
   private[mllib] def index(i: Int, j: Int): Int = {
     if (!isTransposed) {
       Arrays.binarySearch(rowIndices, colPtrs(j), colPtrs(j + 1), i)
@@ -580,6 +607,7 @@ class SparseMatrix @Since("1.3.0") (
     }
   }
 
+  //只能更改非0的值,如果该位置无有效的值,因此index返回是-1,会报错
   private[mllib] def update(i: Int, j: Int, v: Double): Unit = {
     val ind = index(i, j)
     if (ind == -1) {
@@ -616,9 +644,9 @@ class SparseMatrix @Since("1.3.0") (
     if (!isTransposed) {
       var j = 0
       while (j < numCols) {
-        var idx = colPtrs(j)
-        val idxEnd = colPtrs(j + 1)
-        while (idx < idxEnd) {
+        var idx = colPtrs(j) //找到该列的开始元素位置
+        val idxEnd = colPtrs(j + 1) //该列的咱以后元素位置
+        while (idx < idxEnd) { //循环输出一列数据
           f(rowIndices(idx), j, values(idx))
           idx += 1
         }
@@ -673,7 +701,7 @@ object SparseMatrix {
    */
   @Since("1.3.0")
   def fromCOO(numRows: Int, numCols: Int, entries: Iterable[(Int, Int, Double)]): SparseMatrix = {
-    val sortedEntries = entries.toSeq.sortBy(v => (v._2, v._1))
+    val sortedEntries = entries.toSeq.sortBy(v => (v._2, v._1)) //按照列 行排序
     val numEntries = sortedEntries.size
     if (sortedEntries.nonEmpty) {
       // Since the entries are sorted by column index, we only need to check the first and the last.
@@ -719,6 +747,7 @@ object SparseMatrix {
    * Generate an Identity Matrix in `SparseMatrix` format.
    * @param n number of rows and columns of the matrix
    * @return `SparseMatrix` with size `n` x `n` and values of ones on the diagonal
+    *        方阵,并且对角线都是1,其他都是0
    */
   @Since("1.3.0")
   def speye(n: Int): SparseMatrix = {
@@ -815,17 +844,18 @@ object SparseMatrix {
    * @param vector a `Vector` that will form the values on the diagonal of the matrix
    * @return Square `SparseMatrix` with size `values.length` x `values.length` and non-zero
    *         `values` on the diagonal
+    *         方阵,对角线是参数向量的值,但是刨除0的参数值
    */
   @Since("1.3.0")
   def spdiag(vector: Vector): SparseMatrix = {
     val n = vector.size
     vector match {
-      case sVec: SparseVector =>
+      case sVec: SparseVector => //稀松向量
         SparseMatrix.fromCOO(n, n, sVec.indices.zip(sVec.values).map(v => (v._1, v._1, v._2)))
-      case dVec: DenseVector =>
+      case dVec: DenseVector => //密集向量
         val entries = dVec.values.zipWithIndex
         val nnzVals = entries.filter(v => v._1 != 0.0)
-        SparseMatrix.fromCOO(n, n, nnzVals.map(v => (v._2, v._2, v._1)))
+        SparseMatrix.fromCOO(n, n, nnzVals.map(v => (v._2, v._2, v._1))) //对角线就是11 22 33,因此是v._2,v._1是具体的值
     }
   }
 }
@@ -980,6 +1010,8 @@ object Matrices {
    * a sparse matrix. If the Array is empty, an empty `DenseMatrix` will be returned.
    * @param matrices array of matrices
    * @return a single `Matrix` composed of the matrices that were horizontally concatenated
+    * 所有参数的矩阵的行数都相同，拼接起来
+    * 比如 参数是 4*3 4*6 4* 8 三个矩阵，结果是4*(3+6+8)的矩阵
    */
   @Since("1.3.0")
   def horzcat(matrices: Array[Matrix]): Matrix = {
@@ -988,9 +1020,10 @@ object Matrices {
     } else if (matrices.size == 1) {
       return matrices(0)
     }
-    val numRows = matrices(0).numRows
-    var hasSparse = false
-    var numCols = 0
+    val numRows = matrices(0).numRows //多少行
+    var hasSparse = false //true表示有稀松矩阵
+    var numCols = 0 //总列数
+    //确保行数都相同
     matrices.foreach { mat =>
       require(numRows == mat.numRows, "The number of rows of the matrices in this sequence, " +
         "don't match!")
@@ -1005,7 +1038,7 @@ object Matrices {
     if (!hasSparse) {
       new DenseMatrix(numRows, numCols, matrices.flatMap(_.toArray))
     } else {
-      var startCol = 0
+      var startCol = 0 //每一个矩阵迭代后 都会累加该矩阵的列数
       val entries: Array[(Int, Int, Double)] = matrices.flatMap { mat =>
         val nCols = mat.numCols
         mat match {
@@ -1017,7 +1050,7 @@ object Matrices {
               cnt += 1
             }
             startCol += nCols
-            data
+            data //返回数组可以迭代的
           case dnMat: DenseMatrix =>
             val data = new ArrayBuffer[(Int, Int, Double)]()
             dnMat.foreachActive { (i, j, v) =>
@@ -1039,6 +1072,8 @@ object Matrices {
    * a sparse matrix. If the Array is empty, an empty `DenseMatrix` will be returned.
    * @param matrices array of matrices
    * @return a single `Matrix` composed of the matrices that were vertically concatenated
+    *  列相同的矩阵进行拼接
+    *  比如 3*4 4*4 5*4 的矩阵，返回值是(3+4+5) * 4 的矩阵
    */
   @Since("1.3.0")
   def vertcat(matrices: Array[Matrix]): Matrix = {

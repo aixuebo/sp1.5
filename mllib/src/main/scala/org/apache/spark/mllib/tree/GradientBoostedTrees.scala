@@ -67,6 +67,7 @@ class GradientBoostedTrees @Since("1.2.0") (private val boostingStrategy: Boosti
         GradientBoostedTrees.boost(input, input, boostingStrategy, validate = false)
       case Classification =>
         // Map labels to -1, +1 so binary classification can be treated as regression.
+        //映射lable原始值为0,1，英社称1和-1，因此可以走回归模型
         val remappedInput = input.map(x => new LabeledPoint((x.label * 2) - 1, x.features))
         GradientBoostedTrees.boost(remappedInput, remappedInput, boostingStrategy, validate = false)
       case _ =>
@@ -91,6 +92,7 @@ class GradientBoostedTrees @Since("1.2.0") (private val boostingStrategy: Boosti
    *                        E.g., these two datasets could be created from an original dataset
    *                        by using [[org.apache.spark.rdd.RDD.randomSplit()]]
    * @return a gradient boosted trees model that can be used for prediction
+    * 校验数据
    */
   @Since("1.4.0")
   def runWithValidation(

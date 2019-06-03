@@ -177,10 +177,12 @@ private class RandomForest (
     val maxMemoryUsage: Long = strategy.maxMemoryInMB * 1024L * 1024L
     logDebug("max memory usage for aggregates = " + maxMemoryUsage + " bytes.")
     val maxMemoryPerNode = {
-      val featureSubset: Option[Array[Int]] = if (metadata.subsamplingFeatures) {
+      //计算需要选择的特征集合
+      val featureSubset: Option[Array[Int]] = if (metadata.subsamplingFeatures) { //说明不是全部特征参与选择
         // Find numFeaturesPerNode largest bins to get an upper bound on memory usage.
-        Some(metadata.numBins.zipWithIndex.sortBy(- _._1)
-          .take(metadata.numFeaturesPerNode).map(_._2))
+        Some(metadata.numBins.zipWithIndex.sortBy(- _._1) //特征值数量进行排序
+          .take(metadata.numFeaturesPerNode) //获取前top的特征
+          .map(_._2)) //返回前top特征的序号集合
       } else {
         None
       }
@@ -511,17 +513,18 @@ object RandomForest extends Serializable with Logging {
   /**
    * Get the number of values to be stored for this node in the bin aggregates.
    * @param featureSubset  Indices of features which may be split at this node.
-   *                       If None, then use all features.
+   *                       If None, then use all features. 指示哪些特征参与划分节点，如果是None说明全部特征都参与划分节点
    */
   private[tree] def aggregateSizeForNode(
       metadata: DecisionTreeMetadata,
       featureSubset: Option[Array[Int]]): Long = {
+    //总划分数量
     val totalBins = if (featureSubset.nonEmpty) {
       featureSubset.get.map(featureIndex => metadata.numBins(featureIndex).toLong).sum
     } else {
       metadata.numBins.map(_.toLong).sum
     }
-    if (metadata.isClassification) {
+    if (metadata.isClassification) { //分类问题
       metadata.numClasses * totalBins
     } else {
       3 * totalBins

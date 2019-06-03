@@ -80,7 +80,7 @@ private[spark] object BLAS extends Serializable with Logging {
     if (a == 1.0) {
       var k = 0
       while (k < nnz) {
-        yValues(xIndices(k)) += xValues(k)
+        yValues(xIndices(k)) += xValues(k) //直接+x即可,因为a的系数是1,其实没有必要进行if else我觉得
         k += 1
       }
     } else {
@@ -232,6 +232,8 @@ private[spark] object BLAS extends Serializable with Logging {
 
   /**
    * A := alpha * x * x^T^ + A
+    * X * X的转置,即等于n*n的矩阵。*系数 最后再加上A本身，返回值也是A。默认A可以为0的矩阵
+    *  x有n个元素  A是 n x n.方阵
    * @param alpha a real scalar that will be multiplied to x * x^T^.
    * @param x the vector x that contains the n elements.
    * @param A the symmetric matrix A. Size of n x n.
@@ -290,7 +292,13 @@ private[spark] object BLAS extends Serializable with Logging {
 
   /**
    * C := alpha * A * B + beta * C
-   * @param alpha a scalar to scale the multiplication A * B.
+    * 矩阵相乘 并且可以设置相乘矩阵的一个系数 同时还可以加上另外一个矩阵。C是最后的结果，默认应该是0的矩阵
+    *
+    * * A:m x k.
+    * * B:k x n
+    * * C: m x n.
+    *
+    * @param alpha a scalar to scale the multiplication A * B.
    * @param A the matrix A that will be left multiplied to B. Size of m x k.
    * @param B the matrix B that will be left multiplied by A. Size of k x n.
    * @param beta a scalar that can be used to scale matrix C.
@@ -304,9 +312,9 @@ private[spark] object BLAS extends Serializable with Logging {
       C: DenseMatrix): Unit = {
     require(!C.isTransposed,
       "The matrix C cannot be the product of a transpose() call. C.isTransposed must be false.")
-    if (alpha == 0.0 && beta == 1.0) {
+    if (alpha == 0.0 && beta == 1.0) { //alpha = 0 ，说明A*B =0 ,beta = 1,说明结果就是C
       logDebug("gemm: alpha is equal to 0 and beta is equal to 1. Returning C.")
-    } else if (alpha == 0.0) {
+    } else if (alpha == 0.0) {//说明结果是beta*C
       f2jBLAS.dscal(C.values.length, beta, C.values, 1)
     } else {
       A match {
@@ -457,7 +465,12 @@ private[spark] object BLAS extends Serializable with Logging {
 
   /**
    * y := alpha * A * x + beta * y
-   * @param alpha a scalar to scale the multiplication A * x.
+    *  *系数 矩阵*向量 = m*1的向量   然后与 系数*Y的向量做加法。
+    *  结果是Y
+    * * A: m x n
+    * * x:n x 1
+    * * y:m x 1
+    * @param alpha a scalar to scale the multiplication A * x.
    * @param A the matrix A that will be left multiplied to x. Size of m x n.
    * @param x the vector x that will be left multiplied by A. Size of n x 1.
    * @param beta a scalar that can be used to scale vector y.

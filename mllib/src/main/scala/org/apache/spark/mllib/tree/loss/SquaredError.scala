@@ -29,6 +29,7 @@ import org.apache.spark.mllib.tree.model.TreeEnsembleModel
  * The squared (L2) error is defined as:
  *   (y - F(x))**2
  * where y is the label and F(x) is the model prediction for features x.
+  * L2范式计算损失函数
  */
 @Since("1.2.0")
 @DeveloperApi
@@ -41,12 +42,14 @@ object SquaredError extends Loss {
    * @param prediction Predicted label.
    * @param label True label.
    * @return Loss gradient
+    * 计算梯度方向:梯度就是损失函数求导,取负数
    */
   @Since("1.2.0")
   override def gradient(prediction: Double, label: Double): Double = {
     - 2.0 * (label - prediction)
   }
 
+  //L2范式计算损失函数
   override private[mllib] def computeError(prediction: Double, label: Double): Double = {
     val err = label - prediction
     err * err

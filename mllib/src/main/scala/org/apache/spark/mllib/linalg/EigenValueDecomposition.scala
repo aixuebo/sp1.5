@@ -26,6 +26,7 @@ import org.apache.spark.annotation.Experimental
 /**
  * :: Experimental ::
  * Compute eigen-decomposition.
+  * 计算特征值分解
  */
 @Experimental
 private[mllib] object EigenValueDecomposition {
@@ -35,23 +36,24 @@ private[mllib] object EigenValueDecomposition {
    * memory for `n*(4*k+4)` doubles.
    *
    * @param mul a function that multiplies the symmetric matrix with a DenseVector.
-   * @param n dimension of the square matrix (maximum Int.MaxValue).
-   * @param k number of leading eigenvalues required, 0 < k < n.
+   * @param n dimension of the square matrix (maximum Int.MaxValue).n维方阵
+   * @param k number of leading eigenvalues required, 0 < k < n.  多少个特征值
    * @param tol tolerance of the eigs computation.
-   * @param maxIterations the maximum number of Arnoldi update iterations.
-   * @return a dense vector of eigenvalues in descending order and a dense matrix of eigenvectors
-   *         (columns of the matrix).
+   * @param maxIterations the maximum number of Arnoldi update iterations.最大更新迭代次数
+   * @return a dense vector of eigenvalues in descending order  返回值是密集向量组成的特征值，降序排序
+    *         and a dense matrix of eigenvectors 密集矩阵组成的 特征向量
+   *         (columns of the matrix). 是列组成的向量
    * @note The number of computed eigenvalues might be smaller than k when some Ritz values do not
    *       satisfy the convergence criterion specified by tol (see ARPACK Users Guide, Chapter 4.6
    *       for more details). The maximum number of Arnoldi update iterations is set to 300 in this
    *       function.
    */
   private[mllib] def symmetricEigs(
-      mul: BDV[Double] => BDV[Double],
+      mul: BDV[Double] => BDV[Double],//向量到向量的计算
       n: Int,
       k: Int,
       tol: Double,
-      maxIterations: Int): (BDV[Double], BDM[Double]) = {
+      maxIterations: Int): (BDV[Double], BDM[Double]) = { //前者V表示向量 ，后者M表示矩阵
     // TODO: remove this function and use eigs in breeze when switching breeze version
     require(n > k, s"Number of required eigenvalues $k must be smaller than matrix dimension $n")
 

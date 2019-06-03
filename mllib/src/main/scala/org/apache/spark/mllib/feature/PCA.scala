@@ -25,7 +25,7 @@ import org.apache.spark.rdd.RDD
 
 /**
  * A feature transformer that projects vectors to a low-dimensional space using PCA.
- *
+ * 获取top k个特征
  * @param k number of principal components
  */
 @Since("1.4.0")
@@ -40,7 +40,7 @@ class PCA @Since("1.4.0") (@Since("1.4.0") val k: Int) {
   @Since("1.4.0")
   def fit(sources: RDD[Vector]): PCAModel = {
     require(k <= sources.first().size,
-      s"source vector size is ${sources.first().size} must be greater than k=$k")
+      s"source vector size is ${sources.first().size} must be greater than k=$k") //特征数量 一定大于 k,才能获取top K
 
     val mat = new RowMatrix(sources)
     val pc = mat.computePrincipalComponents(k) match {

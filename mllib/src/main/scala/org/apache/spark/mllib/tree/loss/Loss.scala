@@ -26,6 +26,7 @@ import org.apache.spark.rdd.RDD
 /**
  * :: DeveloperApi ::
  * Trait for adding "pluggable" loss functions for the gradient boosting algorithm.
+  * 通过损失函数计算梯度
  */
 @Since("1.2.0")
 @DeveloperApi
@@ -33,9 +34,11 @@ trait Loss extends Serializable {
 
   /**
    * Method to calculate the gradients for the gradient boosting calculation.
-   * @param prediction Predicted feature
+    *
+    * @param prediction Predicted feature
    * @param label true label.
    * @return Loss gradient.
+    * 计算梯度方向:梯度就是损失函数求导,取负数
    */
   @Since("1.2.0")
   def gradient(prediction: Double, label: Double): Double
@@ -47,6 +50,7 @@ trait Loss extends Serializable {
    * @param model Model of the weak learner.
    * @param data Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
    * @return Measure of model error on data
+    * 如何计算损失函数的均值
    */
   @Since("1.2.0")
   def computeError(model: TreeEnsembleModel, data: RDD[LabeledPoint]): Double = {
@@ -60,6 +64,7 @@ trait Loss extends Serializable {
    * @param prediction Predicted label.
    * @param label True label.
    * @return Measure of model error on datapoint.
+    * 如何计算损失函数
    */
   private[mllib] def computeError(prediction: Double, label: Double): Double
 }
