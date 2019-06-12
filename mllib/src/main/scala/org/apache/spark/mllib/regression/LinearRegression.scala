@@ -60,14 +60,14 @@ object LinearRegressionModel extends Loader[LinearRegressionModel] {
 
   @Since("1.3.0")
   override def load(sc: SparkContext, path: String): LinearRegressionModel = {
-    val (loadedClassName, version, metadata) = Loader.loadMetadata(sc, path)
+    val (loadedClassName, version, metadata) = Loader.loadMetadata(sc, path) //加载元数据
     // Hard-code class name string in case it changes in the future
     val classNameV1_0 = "org.apache.spark.mllib.regression.LinearRegressionModel"
     (loadedClassName, version) match {
-      case (className, "1.0") if className == classNameV1_0 =>
-        val numFeatures = RegressionModel.getNumFeatures(metadata)
-        val data = GLMRegressionModel.SaveLoadV1_0.loadData(sc, path, classNameV1_0, numFeatures)
-        new LinearRegressionModel(data.weights, data.intercept)
+      case (className, "1.0") if className == classNameV1_0 => //元数据的class能对得上
+        val numFeatures = RegressionModel.getNumFeatures(metadata) //从元数据中获取特征数量
+        val data = GLMRegressionModel.SaveLoadV1_0.loadData(sc, path, classNameV1_0, numFeatures) //获取权重以及截距
+        new LinearRegressionModel(data.weights, data.intercept) //还原成线性回归模型
       case _ => throw new Exception(
         s"LinearRegressionModel.load did not recognize model with (className, format version):" +
         s"($loadedClassName, $version).  Supported:\n" +

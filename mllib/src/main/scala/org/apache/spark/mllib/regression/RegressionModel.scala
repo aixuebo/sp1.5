@@ -63,6 +63,7 @@ private[mllib] object RegressionModel {
   /**
    * Helper method for loading GLM regression model metadata.
    * @return numFeatures
+    * 从元数据的json中获取特征数量
    */
   def getNumFeatures(metadata: JValue): Int = {
     implicit val formats = DefaultFormats

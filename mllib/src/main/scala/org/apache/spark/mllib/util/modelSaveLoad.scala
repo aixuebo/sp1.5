@@ -88,10 +88,10 @@ trait Loader[M <: Saveable] {
  */
 private[mllib] object Loader {
 
-  /** Returns URI for path/data using the Hadoop filesystem */
+  /** Returns URI for path/data using the Hadoop filesystem 保存数据信息路径 */
   def dataPath(path: String): String = new Path(path, "data").toUri.toString
 
-  /** Returns URI for path/metadata using the Hadoop filesystem */
+  /** Returns URI for path/metadata using the Hadoop filesystem 保存元数据信息路径*/
   def metadataPath(path: String): String = new Path(path, "metadata").toUri.toString
 
   /**
@@ -123,12 +123,13 @@ private[mllib] object Loader {
   /**
    * Load metadata from the given path.
    * @return (class name, version, metadata)
+    * 加载元数据
    */
   def loadMetadata(sc: SparkContext, path: String): (String, String, JValue) = {
     implicit val formats = DefaultFormats
-    val metadata = parse(sc.textFile(metadataPath(path)).first())
-    val clazz = (metadata \ "class").extract[String]
-    val version = (metadata \ "version").extract[String]
-    (clazz, version, metadata)
+    val metadata = parse(sc.textFile(metadataPath(path)).first()) //获取元数据内容
+    val clazz = (metadata \ "class").extract[String] //元数据class
+    val version = (metadata \ "version").extract[String] //元数据存储的版本格式
+    (clazz, version, metadata) //元数据json具体内容
   }
 }

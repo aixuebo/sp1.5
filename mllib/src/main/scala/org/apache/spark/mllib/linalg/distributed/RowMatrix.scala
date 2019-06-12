@@ -419,18 +419,19 @@ class RowMatrix @Since("1.0.0") (
   /**
    * Multiply this matrix by a local matrix on the right.
    *
-   * @param B a local matrix whose number of rows must match the number of columns of this matrix
+   * @param B a local matrix whose number of rows must match the number of columns of this matrix, B是一个本地的矩阵
    * @return a [[org.apache.spark.mllib.linalg.distributed.RowMatrix]] representing the product,
    *         which preserves partitioning
+    * 矩阵乘法
    */
   @Since("1.0.0")
   def multiply(B: Matrix): RowMatrix = {
     val n = numCols().toInt
     val k = B.numCols
-    require(n == B.numRows, s"Dimension mismatch: $n vs ${B.numRows}")
+    require(n == B.numRows, s"Dimension mismatch: $n vs ${B.numRows}") //列数 = 另外矩阵的行数
 
     require(B.isInstanceOf[DenseMatrix],
-      s"Only support dense matrix at this time but found ${B.getClass.getName}.")
+      s"Only support dense matrix at this time but found ${B.getClass.getName}.") //b必须是本地矩阵
 
     val Bb = rows.context.broadcast(B.toBreeze.asInstanceOf[BDM[Double]].toDenseVector.toArray)
     val AB = rows.mapPartitions { iter =>

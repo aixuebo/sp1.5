@@ -39,6 +39,8 @@ import org.apache.spark.mllib.linalg.Vector
  *    .setNumIterations(10)
  *    .setInitialWeights(Vectors.dense(...))
  *    .trainOn(DStream)
+  *
+  *    设置线上训练模型的迭代器参数
  */
 @Experimental
 @Since("1.1.0")

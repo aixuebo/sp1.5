@@ -34,12 +34,12 @@ import org.apache.spark.storage.StorageLevel
  *
  * @param weights Weights computed for every feature.
  * @param intercept Intercept computed for this model.
- *
+ * 线性回归的模型--权重向量 以及 截距即可
  */
 @Since("0.8.0")
 @DeveloperApi
 abstract class GeneralizedLinearModel @Since("1.0.0") (
-    @Since("1.0.0") val weights: Vector,
+    @Since("1.0.0") val weights: Vector,//权重向量
     @Since("0.8.0") val intercept: Double)
   extends Serializable {
 
@@ -194,7 +194,7 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
 
   /**
    * Set if the algorithm should validate data before training. Default true.
-   *
+   * true表示 算法在训练之前要对数据进行校验
    */
   @Since("0.8.0")
   def setValidateData(validateData: Boolean): this.type = {
@@ -292,13 +292,13 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
     // TODO: Apply feature scaling to the weight vector instead of input data.
     val data =
       if (addIntercept) {
-        if (useFeatureScaling) {
+        if (useFeatureScaling) { //添加截距
           input.map(lp => (lp.label, appendBias(scaler.transform(lp.features)))).cache()
         } else {
           input.map(lp => (lp.label, appendBias(lp.features))).cache()
         }
       } else {
-        if (useFeatureScaling) {
+        if (useFeatureScaling) { //不添加截距
           input.map(lp => (lp.label, scaler.transform(lp.features))).cache()
         } else {
           input.map(lp => (lp.label, lp.features))
@@ -311,9 +311,11 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
      * the intercept should be set as the average of response.
      */
     val initialWeightsWithIntercept = if (addIntercept && numOfLinearPredictor == 1) {
-      appendBias(initialWeights)
+      appendBias(initialWeights) //添加截距了,因此权重也要加入1
     } else {
-      /** If `numOfLinearPredictor > 1`, initialWeights already contains intercepts. */
+      /** If `numOfLinearPredictor > 1`, initialWeights already contains intercepts.
+        * 如果不是一个线性分类器，则权重中已经包含了截距，因此不需要追加截距
+        **/
       initialWeights
     }
 

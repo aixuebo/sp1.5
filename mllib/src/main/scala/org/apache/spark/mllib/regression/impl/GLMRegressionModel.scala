@@ -27,14 +27,17 @@ import org.apache.spark.sql.{DataFrame, Row, SQLContext}
 
 /**
  * Helper methods for import/export of GLM regression models.
+  * GML 表示GeneralizedLinearModel ,即通用回归模型
+  *
+  * 该类的意义是如何保存和加载模型
  */
 private[regression] object GLMRegressionModel {
 
   object SaveLoadV1_0 {
 
-    def thisFormatVersion: String = "1.0"
+    def thisFormatVersion: String = "1.0" //保存模型的版本号
 
-    /** Model data for model import/export */
+    /** Model data for model import/export 模型权重以及截距*/
     case class Data(weights: Vector, intercept: Double)
 
     /**
@@ -50,17 +53,17 @@ private[regression] object GLMRegressionModel {
       val sqlContext = new SQLContext(sc)
       import sqlContext.implicits._
 
-      // Create JSON metadata.
+      // Create JSON metadata. 创建json形式的元数据
       val metadata = compact(render(
         ("class" -> modelClass) ~ ("version" -> thisFormatVersion) ~
-          ("numFeatures" -> weights.size)))
-      sc.parallelize(Seq(metadata), 1).saveAsTextFile(Loader.metadataPath(path))
+          ("numFeatures" -> weights.size))) //特征维度等信息用json表示
+      sc.parallelize(Seq(metadata), 1).saveAsTextFile(Loader.metadataPath(path)) //保存元数据
 
       // Create Parquet data.
       val data = Data(weights, intercept)
       val dataRDD: DataFrame = sc.parallelize(Seq(data), 1).toDF()
       // TODO: repartition with 1 partition after SPARK-5532 gets fixed
-      dataRDD.write.parquet(Loader.dataPath(path))
+      dataRDD.write.parquet(Loader.dataPath(path)) //保存模型信息
     }
 
     /**
@@ -72,16 +75,16 @@ private[regression] object GLMRegressionModel {
     def loadData(sc: SparkContext, path: String, modelClass: String, numFeatures: Int): Data = {
       val datapath = Loader.dataPath(path)
       val sqlContext = new SQLContext(sc)
-      val dataRDD = sqlContext.read.parquet(datapath)
+      val dataRDD = sqlContext.read.parquet(datapath) //加载数据
       val dataArray = dataRDD.select("weights", "intercept").take(1)
-      assert(dataArray.size == 1, s"Unable to load $modelClass data from: $datapath")
+      assert(dataArray.size == 1, s"Unable to load $modelClass data from: $datapath") //确保获取到了1条数据
       val data = dataArray(0)
-      assert(data.size == 2, s"Unable to load $modelClass data from: $datapath")
+      assert(data.size == 2, s"Unable to load $modelClass data from: $datapath") // 确保数据是有2部分组成，一个是权重   一个是截距
       data match {
         case Row(weights: Vector, intercept: Double) =>
           assert(weights.size == numFeatures, s"Expected $numFeatures features, but" +
             s" found ${weights.size} features when loading $modelClass weights from $datapath")
-          Data(weights, intercept)
+          Data(weights, intercept) //返回具体的数据
       }
     }
   }

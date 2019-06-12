@@ -45,7 +45,7 @@ import org.apache.spark.sql.SQLContext
  *                   Boundaries must be sorted in increasing order.
  * @param predictions Array of predictions associated to the boundaries at the same index.
  *                    Results of isotonic regression and therefore monotone.
- * @param isotonic indicates whether this is isotonic or antitonic.
+ * @param isotonic indicates whether this is isotonic or antitonic. 其默认值为真，它指定保序回归为保序（单调递增）或者反序（单调递减）
  *
  */
 @Since("1.3.0")
@@ -53,7 +53,8 @@ import org.apache.spark.sql.SQLContext
 class IsotonicRegressionModel @Since("1.3.0") (
     @Since("1.3.0") val boundaries: Array[Double],
     @Since("1.3.0") val predictions: Array[Double],
-    @Since("1.3.0") val isotonic: Boolean) extends Serializable with Saveable {
+    @Since("1.3.0") val isotonic: Boolean)
+    extends Serializable with Saveable {
 
   private val predictionOrd = if (isotonic) Ordering[Double] else Ordering[Double].reverse
 

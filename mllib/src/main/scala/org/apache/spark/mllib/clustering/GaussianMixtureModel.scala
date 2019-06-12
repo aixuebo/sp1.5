@@ -40,7 +40,7 @@ import org.apache.spark.sql.{SQLContext, Row}
  * the respective mean and covariance for each Gaussian distribution i=1..k.
  *
  * @param weights Weights for each Gaussian distribution in the mixture, where weights(i) is
- *                the weight for Gaussian i, and weights.sum == 1
+ *                the weight for Gaussian i, and weights.sum == 1 每一个高斯分布的权重，权重和等于1
  * @param gaussians Array of MultivariateGaussian where gaussians(i) represents
  *                  the Multivariate Gaussian (Normal) Distribution for Gaussian i
  */
@@ -60,7 +60,7 @@ class GaussianMixtureModel @Since("1.3.0") (
   }
 
   /**
-   * Number of gaussians in mixture
+   * Number of gaussians in mixture 多少个高斯分布
    */
   @Since("1.3.0")
   def k: Int = weights.length

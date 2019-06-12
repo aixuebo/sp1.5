@@ -75,11 +75,12 @@ abstract class Updater extends Serializable {
 class SimpleUpdater extends Updater {
   override def compute(
       weightsOld: Vector,//老权重
-      gradient: Vector,//diff损失梯度向量
+      gradient: Vector,//diff损失梯度向量--即梯度向量
       stepSize: Double,//步长
       iter: Int,//迭代次数
       regParam: Double): (Vector, Double) = { //返回新的权重
-    val thisIterStepSize = stepSize / math.sqrt(iter)
+    //原则是一开始大步走,后期小步走
+    val thisIterStepSize = stepSize / math.sqrt(iter) //因为迭代次数越大,math.sqrt(iter) 变越越小，比如81-100迭代都是转换成10. 总体上步长相同,迭代次数越多,分母越大,该值越小,即步长越小
     val brzWeights: BV[Double] = weightsOld.toBreeze.toDenseVector //老权重转换成向量
     //更新老权重,因为是梯度下降,因此反方向,即-,步长 * 梯度方向
     brzAxpy(-thisIterStepSize, gradient.toBreeze, brzWeights) //y += x * a ,即 brzWeights = brzWeights + -thisIterStepSize * gradient
@@ -106,6 +107,8 @@ class SimpleUpdater extends Updater {
  * If -shrinkageVal < w < shrinkageVal, set weight component to 0.
  *
  * Equivalently, set weight component to signum(w) * max(0.0, abs(w) - shrinkageVal)
+  *
+  * 加入L1范式
  */
 @DeveloperApi
 class L1Updater extends Updater {
@@ -114,18 +117,20 @@ class L1Updater extends Updater {
       gradient: Vector,
       stepSize: Double,
       iter: Int,
-      regParam: Double): (Vector, Double) = {
+      regParam: Double) //泛化系数
+    : (Vector, Double) = {
     val thisIterStepSize = stepSize / math.sqrt(iter)
     // Take gradient step
     val brzWeights: BV[Double] = weightsOld.toBreeze.toDenseVector
-    brzAxpy(-thisIterStepSize, gradient.toBreeze, brzWeights)
-    // Apply proximal operator (soft thresholding)
+    brzAxpy(-thisIterStepSize, gradient.toBreeze, brzWeights) //更新老权重
+    // Apply proximal operator (soft thresholding) 计算泛化系数
     val shrinkageVal = regParam * thisIterStepSize
     var i = 0
     val len = brzWeights.length
     while (i < len) {
-      val wi = brzWeights(i)
-      brzWeights(i) = signum(wi) * max(0.0, abs(wi) - shrinkageVal)
+      val wi = brzWeights(i) //新的权重
+      //signum(wi) 如果x大于0则返回1.0，小于0则返回-1.0，等于0则返回0
+      brzWeights(i) = signum(wi) * max(0.0, abs(wi) - shrinkageVal) //更新权重
       i += 1
     }
 
@@ -138,6 +143,7 @@ class L1Updater extends Updater {
  * Updater for L2 regularized problems.
  *          R(w) = 1/2 ||w||^2
  * Uses a step-size decreasing with the square root of the number of iterations.
+  * 加入L2范式
  */
 @DeveloperApi
 class SquaredL2Updater extends Updater {

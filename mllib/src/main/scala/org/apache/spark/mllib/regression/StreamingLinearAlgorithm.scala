@@ -53,8 +53,8 @@ import org.apache.spark.streaming.dstream.DStream
  * It is also ok to call trainOn on different streams; this will update
  * the model using each of the different sources, in sequence.
  *
- *
- */
+  * 在线的方式进行预测和训练模型
+ **/
 @Since("1.1.0")
 @DeveloperApi
 abstract class StreamingLinearAlgorithm[
@@ -83,6 +83,7 @@ abstract class StreamingLinearAlgorithm[
    * batch of data from the stream.
    *
    * @param data DStream containing labeled data
+    * 线上训练模型，打印权重
    */
   @Since("1.1.0")
   def trainOn(data: DStream[LabeledPoint]): Unit = {
@@ -91,10 +92,10 @@ abstract class StreamingLinearAlgorithm[
     }
     data.foreachRDD { (rdd, time) =>
       if (!rdd.isEmpty) {
-        model = Some(algorithm.run(rdd, model.get.weights))
+        model = Some(algorithm.run(rdd, model.get.weights)) //对数据进行训练,获取权重和截距模型
         logInfo(s"Model updated at time ${time.toString}")
         val display = model.get.weights.size match {
-          case x if x > 100 => model.get.weights.toArray.take(100).mkString("[", ",", "...")
+          case x if x > 100 => model.get.weights.toArray.take(100).mkString("[", ",", "...") //获取前100个参数的权重
           case _ => model.get.weights.toArray.mkString("[", ",", "]")
         }
         logInfo(s"Current model: weights, ${display}")
@@ -113,7 +114,7 @@ abstract class StreamingLinearAlgorithm[
    *
    * @param data DStream containing feature vectors
    * @return DStream containing predictions
-   *
+   * 线上预测
    */
   @Since("1.1.0")
   def predictOn(data: DStream[Vector]): DStream[Double] = {
@@ -137,7 +138,7 @@ abstract class StreamingLinearAlgorithm[
    * @param data DStream containing feature vectors
    * @tparam K key type
    * @return DStream containing the input keys and the predictions as values
-   *
+   * 线上对vector进行预测.返回k和预测值组成的元祖Rdd
    */
   @Since("1.1.0")
   def predictOnValues[K: ClassTag](data: DStream[(K, Vector)]): DStream[(K, Double)] = {

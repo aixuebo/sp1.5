@@ -156,19 +156,21 @@ object GradientDescent extends Logging {
    * spark map-reduce in each iteration.
    *
    * @param data Input data for SGD. RDD of the set of data examples, each of
-   *             the form (label, [feature values]).
+   *             the form (label, [feature values])。数据集合
    * @param gradient Gradient object (used to compute the gradient of the loss function of
-   *                 one single data example)
-   * @param updater Updater function to actually perform a gradient step in a given direction.
-   * @param stepSize initial step size for the first step
-   * @param numIterations number of iterations that SGD should be run.
-   * @param regParam regularization parameter
+   *                 one single data example) 如何计算梯度
+   * @param updater Updater function to actually perform a gradient step in a given direction. 如何更新权重
+   * @param stepSize initial step size for the first step 第一步的步长
+   * @param numIterations number of iterations that SGD should be run.最大迭代次数
+   * @param regParam regularization parameter 正则化参数
    * @param miniBatchFraction fraction of the input data set that should be used for
-   *                          one iteration of SGD. Default value 1.0.
+   *                          one iteration of SGD. Default value 1.0. 抽样比例,默认1,表示数据全部拿来训练
    * @param convergenceTol Minibatch iteration will end before numIterations if the relative
    *                       difference between the current weight and the previous weight is less
    *                       than this value. In measuring convergence, L2 norm is calculated.
    *                       Default value 0.001. Must be between 0.0 and 1.0 inclusively.
+    *                       收敛值.如果权重更新后的差异 < convergenceTol收敛值,因此将会在最大迭代次数前终止迭代。
+    *                       该值默认是0.001.必须在0-1之间
    * @return A tuple containing two elements.
     *         The first element is a column matrix containing weights for every feature, 最终权重系数
     *         and the second element is an array containing the stochastic loss computed for every iteration.损失信息
@@ -196,7 +198,7 @@ object GradientDescent extends Logging {
     var previousWeights: Option[Vector] = None
     var currentWeights: Option[Vector] = None
 
-    val numExamples = data.count()
+    val numExamples = data.count() //样本条数
 
     // if no data, return initial weights to avoid NaNs
     if (numExamples == 0) {
@@ -209,19 +211,20 @@ object GradientDescent extends Logging {
     }
 
     // Initialize weights as a column vector
-    var weights = Vectors.dense(initialWeights.toArray)
-    val n = weights.size
+    var weights = Vectors.dense(initialWeights.toArray) //权重
+    val n = weights.size //特征size
 
     /**
      * For the first iteration, the regVal will be initialized as sum of weight squares
      * if it's L2 updater; for L1 updater, the same logic is followed.
+      * 初始化损失函数
      */
     var regVal = updater.compute(
       weights, Vectors.zeros(weights.size), 0, 1, regParam)._2
 
     var converged = false // indicates whether converged based on convergenceTol 是否收敛了,默认没有收敛
     var i = 1
-    while (!converged && i <= numIterations) {
+    while (!converged && i <= numIterations) { //没有收敛、没有达到最大次数,就不断循环
       val bcWeights = data.context.broadcast(weights)
       // Sample a subset (fraction miniBatchFraction) of the total data
       // compute and sum up the subgradients on this subset (this is one map-reduce)
@@ -229,7 +232,7 @@ object GradientDescent extends Logging {
         .treeAggregate((BDV.zeros[Double](n), 0.0, 0L))( //返回值是向量,double,long组成的---分别表示 xxx  损失值求和  出现的次数
           seqOp = (c, v) => { //c是merge的值,v是lable和特征组成的元组
             // c: (grad, loss, count), v: (label, features)
-            val l = gradient.compute(v._2, v._1, bcWeights.value, Vectors.fromBreeze(c._1))
+            val l = gradient.compute(v._2, v._1, bcWeights.value, Vectors.fromBreeze(c._1)) //计算梯度
             (c._1, c._2 + l, c._3 + 1)
           },
           combOp = (c1, c2) => {
@@ -258,7 +261,7 @@ object GradientDescent extends Logging {
       } else {
         logWarning(s"Iteration ($i/$numIterations). The size of sampled batch is zero")
       }
-      i += 1
+      i += 1 //迭代次数+1
     }
 
     logInfo("GradientDescent.runMiniBatchSGD finished. Last 10 stochastic losses %s".format(
@@ -285,9 +288,10 @@ object GradientDescent extends Logging {
 
   //是否收敛
   private def isConverged(
-      previousWeights: Vector,
-      currentWeights: Vector,
-      convergenceTol: Double): Boolean = {
+      previousWeights: Vector,//以前的权重
+      currentWeights: Vector,//现在的权重
+      convergenceTol: Double) //收敛值
+     : Boolean = { //true表示收敛
     // To compare with convergence tolerance.
     val previousBDV = previousWeights.toBreeze.toDenseVector
     val currentBDV = currentWeights.toBreeze.toDenseVector
