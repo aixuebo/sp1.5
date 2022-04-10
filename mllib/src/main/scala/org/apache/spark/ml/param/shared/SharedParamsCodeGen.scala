@@ -30,6 +30,8 @@ import scala.reflect.ClassTag
 private[shared] object SharedParamsCodeGen {
 
   def main(args: Array[String]): Unit = {
+
+    //定义若干个参数对象
     val params = Seq(
       ParamDesc[Double]("regParam", "regularization parameter (>= 0)",
         isValid = "ParamValidators.gtEq(0)"),
@@ -71,23 +73,28 @@ private[shared] object SharedParamsCodeGen {
         "all instance weights as 1.0."))
 
     val code = genSharedParams(params)
+    //创建该对象的class对象,输出到本地file文件中
     val file = "src/main/scala/org/apache/spark/ml/param/shared/sharedParams.scala"
     val writer = new PrintWriter(file)
     writer.write(code)
     writer.close()
   }
 
-  /** Description of a param. */
-  private case class ParamDesc[T: ClassTag](
-      name: String,
-      doc: String,
-      defaultValueStr: Option[String] = None,
-      isValid: String = "",
-      finalMethods: Boolean = true) {
+  /** Description of a param.
+    * 定义一个参数对象
+    **/
+  private case class ParamDesc[T: ClassTag]( //T表示参数值的类型
+      name: String,//参数name
+      doc: String,//参数的描述内容
+      defaultValueStr: Option[String] = None,//参数值的默认值
+      isValid: String = "",//参数值的校验函数,因为是函数反射,所以是函数的字符串形式
+      finalMethods: Boolean = true) { //方法是否是final的方法
 
+    //要求参数名字合法  参数描述内容必须存在
     require(name.matches("[a-z][a-zA-Z0-9]*"), s"Param name $name is invalid.")
     require(doc.nonEmpty) // TODO: more rigorous on doc
 
+    //参数值对应的类型
     def paramTypeName: String = {
       val c = implicitly[ClassTag[T]].runtimeClass
       c match {
@@ -102,11 +109,13 @@ private[shared] object SharedParamsCodeGen {
       }
     }
 
+    //校验参数的value值类型
     def valueTypeName: String = {
       val c = implicitly[ClassTag[T]].runtimeClass
       getTypeString(c)
     }
 
+    //参数的value值类型必须是以下类型,即是是数组类型的话,也哟啊进一步匹配
     private def getTypeString(c: Class[_]): String = {
       c match {
         case _ if c == classOf[Int] => "Int"
@@ -120,7 +129,9 @@ private[shared] object SharedParamsCodeGen {
     }
   }
 
-  /** Generates the HasParam trait code for the input param. */
+  /** Generates the HasParam trait code for the input param.
+    * 每一个参数对象如何生成代码
+    **/
   private def genHasParamTrait(param: ParamDesc[_]): String = {
     val name = param.name
     val Name = name(0).toUpper +: name.substring(1)
@@ -165,8 +176,11 @@ private[shared] object SharedParamsCodeGen {
       |""".stripMargin
   }
 
-  /** Generates Scala source code for the input params with header. */
+  /** Generates Scala source code for the input params with header.
+    * 生成class文件代码内容
+    */
   private def genSharedParams(params: Seq[ParamDesc[_]]): String = {
+    //定义头部代码
     val header =
       """/*
         | * Licensed to the Apache Software Foundation (ASF) under one or more
@@ -194,10 +208,13 @@ private[shared] object SharedParamsCodeGen {
         |// scalastyle:off
         |""".stripMargin
 
+    //定义尾部代码
     val footer = "// scalastyle:on\n"
 
-    val traits = params.map(genHasParamTrait).mkString
+    //定义中间代码
+    val traits = params.map(genHasParamTrait).mkString //每一个参数对象如何生成代码
 
+    //组装代码
     header + traits + footer
   }
 }

@@ -399,7 +399,7 @@ scala> val a = sc.parallelize(1 to 4, 2) scala> val b = a.flatMap(x => 1 to x) s
   /**
    * Return a new RDD containing only the elements that satisfy a predicate.
    * 每一个partition对每一行记录进行filter处理,处理函数是f
-   * 参数f表示传入RDD的每一条记录,返回boolean值,true表示需要被保留
+   * 参数f表示传入RDD的每一条记录,返回repartitionAndSorboolean值,true表示需要被保留
    */
   def filter(f: T => Boolean): RDD[T] = withScope {
     val cleanF = sc.clean(f)

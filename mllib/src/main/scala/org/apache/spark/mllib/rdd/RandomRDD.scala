@@ -26,15 +26,18 @@ import org.apache.spark.util.Utils
 import scala.reflect.ClassTag
 import scala.util.Random
 
-private[mllib] class RandomRDDPartition[T](override val index: Int,
-    val size: Int,
-    val generator: RandomDataGenerator[T],
-    val seed: Long) extends Partition {
+private[mllib] class RandomRDDPartition[T](
+    override val index: Int,//第几个分区,即分区序号
+    val size: Int,//产生多少条数据
+    val generator: RandomDataGenerator[T],//如何产生数据
+    val seed: Long //随机种子
+ ) extends Partition {
 
   require(size >= 0, "Non-negative partition size required.")
 }
 
 // These two classes are necessary since Range objects in Scala cannot have size > Int.MaxValue
+//如何产生随机数RDD
 private[mllib] class RandomRDD[T: ClassTag](@transient sc: SparkContext,
     size: Long,
     numPartitions: Int,
@@ -56,6 +59,7 @@ private[mllib] class RandomRDD[T: ClassTag](@transient sc: SparkContext,
   }
 }
 
+//如何产生随机数向量RDD
 private[mllib] class RandomVectorRDD(@transient sc: SparkContext,
     size: Long,
     vectorSize: Int,
@@ -81,17 +85,19 @@ private[mllib] class RandomVectorRDD(@transient sc: SparkContext,
 
 private[mllib] object RandomRDD {
 
-  def getPartitions[T](size: Long,
-      numPartitions: Int,
-      rng: RandomDataGenerator[T],
-      seed: Long): Array[Partition] = {
+  //产生partition集合
+  def getPartitions[T](
+      size: Long,//产生多少条数据,即输入源
+      numPartitions: Int,//多少个分区
+      rng: RandomDataGenerator[T],//如何产生数据
+      seed: Long): Array[Partition] = { //随机种子
 
-    val partitions = new Array[RandomRDDPartition[T]](numPartitions)
-    var i = 0
+    val partitions = new Array[RandomRDDPartition[T]](numPartitions) //产生若干个随机partition
+    var i = 0//第几个分区
     var start: Long = 0
     var end: Long = 0
     val random = new Random(seed)
-    while (i < numPartitions) {
+    while (i < numPartitions) {//循环，产生若干个分组
       end = ((i + 1) * size) / numPartitions
       partitions(i) = new RandomRDDPartition(i, (end - start).toInt, rng, random.nextLong())
       start = end
@@ -102,19 +108,21 @@ private[mllib] object RandomRDD {
 
   // The RNG has to be reset every time the iterator is requested to guarantee same data
   // every time the content of the RDD is examined.
+  //随机产生若干条数据,充实该partition
   def getPointIterator[T: ClassTag](partition: RandomRDDPartition[T]): Iterator[T] = {
-    val generator = partition.generator.copy()
-    generator.setSeed(partition.seed)
+    val generator = partition.generator.copy()//拷贝 如何生成随机数对象
+    generator.setSeed(partition.seed)//设置随机种子
     Iterator.fill(partition.size)(generator.nextValue())
   }
 
   // The RNG has to be reset every time the iterator is requested to guarantee same data
   // every time the content of the RDD is examined.
+  //产生随机向量
   def getVectorIterator(
       partition: RandomRDDPartition[Double],
       vectorSize: Int): Iterator[Vector] = {
-    val generator = partition.generator.copy()
-    generator.setSeed(partition.seed)
+    val generator = partition.generator.copy() //拷贝 如何生成随机数对象
+    generator.setSeed(partition.seed) //设置随机种子
     Iterator.fill(partition.size)(new DenseVector(Array.fill(vectorSize)(generator.nextValue())))
   }
 }

@@ -32,13 +32,16 @@ import org.apache.spark.mllib.util.MLUtils
  *
  * @param mu The mean vector of the distribution
  * @param sigma The covariance matrix of the distribution
+  *   多元高斯分布
  */
 @Since("1.3.0")
 @DeveloperApi
 class MultivariateGaussian @Since("1.3.0") (
+    //参数是多元的均值向量、协方差矩阵
     @Since("1.3.0") val mu: Vector,
     @Since("1.3.0") val sigma: Matrix) extends Serializable {
 
+  //必须是方阵，同时与多元数量相同
   require(sigma.numCols == sigma.numRows, "Covariance matrix must be square")
   require(mu.size == sigma.numCols, "Mean vector length must match covariance matrix size")
 
@@ -62,6 +65,7 @@ class MultivariateGaussian @Since("1.3.0") (
   private val (rootSigmaInv: DBM[Double], u: Double) = calculateCovarianceConstants
 
   /** Returns density of this multivariate Gaussian at given point, x
+    * 返回多元函数点x向量的概率密度值
     */
    @Since("1.3.0")
   def pdf(x: Vector): Double = {

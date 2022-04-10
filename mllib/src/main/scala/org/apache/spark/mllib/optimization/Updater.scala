@@ -159,10 +159,10 @@ class SquaredL2Updater extends Updater {
     // w' = (1 - thisIterStepSize * regParam) * w - thisIterStepSize * gradient
     val thisIterStepSize = stepSize / math.sqrt(iter)
     val brzWeights: BV[Double] = weightsOld.toBreeze.toDenseVector
-    brzWeights :*= (1.0 - thisIterStepSize * regParam)
+    brzWeights :*= (1.0 - thisIterStepSize * regParam) //表示 向量brzWeights每一个特征 * 固定系数,系数的值就是(1.0 - thisIterStepSize * regParam)
     brzAxpy(-thisIterStepSize, gradient.toBreeze, brzWeights)
-    val norm = brzNorm(brzWeights, 2.0)
-
+    val norm = brzNorm(brzWeights, 2.0) //2次正则化norm = 向量每一个维度^2之和，然后开根号，比如 10,10,10的结果就是17.320508075688775
+    //如果brzNorm(brzWeights, 1.0) 表示1次正则化，即绝对值之和,比如-10,-10,-10,结果就是30
     (Vectors.fromBreeze(brzWeights), 0.5 * regParam * norm * norm)
   }
 }

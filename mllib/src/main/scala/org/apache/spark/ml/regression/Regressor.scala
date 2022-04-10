@@ -25,7 +25,7 @@ import org.apache.spark.ml.{PredictionModel, PredictorParams, Predictor}
  * :: DeveloperApi ::
  *
  * Single-label regression
- *
+ * 单标签的回归
  * @tparam FeaturesType  Type of input features.  E.g., [[org.apache.spark.mllib.linalg.Vector]]
  * @tparam Learner  Concrete Estimator type
  * @tparam M  Concrete Model type

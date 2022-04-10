@@ -28,32 +28,38 @@ import org.apache.spark.sql.DataFrame
 /**
  * ::Experimental::
  * Evaluator for multiclass classification.
- *
+ * 多分类评估,混淆矩阵,准确率、召回率评估
  * @param predictionAndLabels an RDD of (prediction, label) pairs.
  */
 @Since("1.1.0")
 @Experimental
-class MulticlassMetrics @Since("1.1.0") (predictionAndLabels: RDD[(Double, Double)]) {
+class MulticlassMetrics @Since("1.1.0") (predictionAndLabels: RDD[(Double, Double)]) {//RDD:预测值和真实值
 
   /**
    * An auxiliary constructor taking a DataFrame.
    * @param predictionAndLabels a DataFrame with two double columns: prediction and label
    */
-  private[mllib] def this(predictionAndLabels: DataFrame) =
+  private[mllib] def this(predictionAndLabels: DataFrame) = //参数是预测值 和 真实值 组成的RDD
     this(predictionAndLabels.map(r => (r.getDouble(0), r.getDouble(1))))
 
-  private lazy val labelCountByClass: Map[Double, Long] = predictionAndLabels.values.countByValue()
-  private lazy val labelCount: Long = labelCountByClass.values.sum
-  private lazy val tpByClass: Map[Double, Int] = predictionAndLabels
+  //key是真实的label,value是该label出现次数,即样本中有该label的数据条数
+  private lazy val labelCountByClass: Map[Double, Long] = predictionAndLabels.values.countByValue() //计算真实值出现的次数
+  private lazy val labelCount: Long = labelCountByClass.values.sum //样本总数
+  //key是真实label,value是预测正确的个数
+  private lazy val tpByClass: Map[Double, Int] = predictionAndLabels //预测值-真实值
     .map { case (prediction, label) =>
-      (label, if (label == prediction) 1 else 0)
+      (label, if (label == prediction) 1 else 0) //转换为 真实值-预测是否正确
     }.reduceByKey(_ + _)
-    .collectAsMap()
+    .collectAsMap() //预测label正确的个数
+
+  //key是真实label,value是预测错误的个数
   private lazy val fpByClass: Map[Double, Int] = predictionAndLabels
     .map { case (prediction, label) =>
-      (prediction, if (prediction != label) 1 else 0)
+      (prediction, if (prediction != label) 1 else 0) //预测不正确的个数
     }.reduceByKey(_ + _)
     .collectAsMap()
+
+  //key是(真实值,预测值),value是产生这种结果的个数
   private lazy val confusions = predictionAndLabels
     .map { case (prediction, label) =>
       ((label, prediction), 1)
@@ -65,10 +71,11 @@ class MulticlassMetrics @Since("1.1.0") (predictionAndLabels: RDD[(Double, Doubl
    * predicted classes are in columns,
    * they are ordered by class label ascending,
    * as in "labels"
+    * 混淆矩阵---每种case出现的次数,用于查找谁和谁总混淆
    */
   @Since("1.1.0")
   def confusionMatrix: Matrix = {
-    val n = labels.size
+    val n = labels.size //label集合
     val values = Array.ofDim[Double](n * n)
     var i = 0
     while (i < n) {
@@ -85,6 +92,7 @@ class MulticlassMetrics @Since("1.1.0") (predictionAndLabels: RDD[(Double, Doubl
   /**
    * Returns true positive rate for a given label (category)
    * @param label the label.
+    * 该label的召回率
    */
   @Since("1.1.0")
   def truePositiveRate(label: Double): Double = recall(label)
@@ -102,6 +110,7 @@ class MulticlassMetrics @Since("1.1.0") (predictionAndLabels: RDD[(Double, Doubl
   /**
    * Returns precision for a given label (category)
    * @param label the label.
+    * 某一个label的准确率:正确的/(正确的+错误的),即 正确的/label的全部数据
    */
   @Since("1.1.0")
   def precision(label: Double): Double = {
@@ -113,6 +122,7 @@ class MulticlassMetrics @Since("1.1.0") (predictionAndLabels: RDD[(Double, Doubl
   /**
    * Returns recall for a given label (category)
    * @param label the label.
+    * 该label的召回率:该lable预测正确的数量 / 该label总的正确的数量
    */
   @Since("1.1.0")
   def recall(label: Double): Double = tpByClass(label).toDouble / labelCountByClass(label)
@@ -210,6 +220,7 @@ class MulticlassMetrics @Since("1.1.0") (predictionAndLabels: RDD[(Double, Doubl
 
   /**
    * Returns the sequence of labels in ascending order
+    * 返回label的集合
    */
   @Since("1.1.0")
   lazy val labels: Array[Double] = tpByClass.keys.toArray.sorted

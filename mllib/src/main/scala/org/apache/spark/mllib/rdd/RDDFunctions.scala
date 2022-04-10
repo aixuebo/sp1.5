@@ -75,6 +75,6 @@ class RDDFunctions[T: ClassTag](self: RDD[T]) extends Serializable {
 @DeveloperApi
 object RDDFunctions {
 
-  /** Implicit conversion from an RDD to RDDFunctions. */
+  /** Implicit conversion from an RDD to RDDFunctions. 隐式转换成ML需要的RDD*/
   implicit def fromRDD[T: ClassTag](rdd: RDD[T]): RDDFunctions[T] = new RDDFunctions[T](rdd)
 }

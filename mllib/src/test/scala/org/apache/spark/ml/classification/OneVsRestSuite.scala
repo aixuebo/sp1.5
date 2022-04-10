@@ -52,7 +52,7 @@ class OneVsRestSuite extends SparkFunSuite with MLlibTestSparkContext {
     val xMean = Array(5.843, 3.057, 3.758, 1.199)
     val xVariance = Array(0.6856, 0.1899, 3.116, 0.581)
     rdd = sc.parallelize(generateMultinomialLogisticInput(
-      weights, xMean, xVariance, true, nPoints, 42), 2)
+      weights, xMean, xVariance, true, nPoints, 42), 2) //随机产生数据集合
     dataset = sqlContext.createDataFrame(rdd)
   }
 

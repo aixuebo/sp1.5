@@ -109,6 +109,8 @@ class LinearRegressionWithSGD private[mllib] (
   @Since("0.8.0")
   def this() = this(1.0, 100, 1.0)
 
+  //什么时候都可以调用的,不一定要运行run方法后调用,只是run之前调用可能模型是不准的。
+  //原因可以参考 StreamingLinearRegressionWithSGD
   override protected[mllib] def createModel(weights: Vector, intercept: Double) = {
     new LinearRegressionModel(weights, intercept)
   }

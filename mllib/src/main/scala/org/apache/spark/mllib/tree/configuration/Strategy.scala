@@ -32,20 +32,27 @@ import org.apache.spark.mllib.tree.configuration.QuantileStrategy._
  * @param algo  Learning goal.  Supported:
  *              [[org.apache.spark.mllib.tree.configuration.Algo.Classification]],
  *              [[org.apache.spark.mllib.tree.configuration.Algo.Regression]]
+  *              目标是分类还是回归
  * @param impurity Criterion used for information gain calculation.如何计算信息的混乱程度
  *                 Supported for Classification: [[org.apache.spark.mllib.tree.impurity.Gini]],
  *                  [[org.apache.spark.mllib.tree.impurity.Entropy]].
  *                 Supported for Regression: [[org.apache.spark.mllib.tree.impurity.Variance]].
+  *                 混乱程度--分类:熵和gini、回归:方差
  * @param maxDepth Maximum depth of the tree.
- *                 E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes.树的最大深度
+ *                 E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes.
+  *                树的最大深度
  * @param numClasses Number of classes for classification.
  *                                    (Ignored for regression.)
- *                                    Default value is 2 (binary classification).分类数量
+ *                                    Default value is 2 (binary classification).
+  *                  分类数量
  * @param maxBins Maximum number of bins used for discretizing continuous features and
  *                for choosing how to split on features at each node.
- *                More bins give higher granularity.最多分配多少个拆分点，被用来对连续值特征进行离散化
+ *                More bins give higher granularity.
+  *               最多分配多少个拆分点，被用来对连续值特征进行离散化
+  *               分类问题时,不允许超过这个阈值,否则分类数量过大不好
  * @param quantileCalculationStrategy Algorithm for calculating quantiles.  Supported:
- *                             [[org.apache.spark.mllib.tree.configuration.QuantileStrategy.Sort]]如何计算分位数
+ *                             [[org.apache.spark.mllib.tree.configuration.QuantileStrategy.Sort]]
+  *                             如何计算分位数
  * @param categoricalFeaturesInfo A map storing information about the categorical variables and the
  *                                number of discrete values they take. For example, an entry (n ->
  *                                k) implies the feature n is categorical with k categories 0,
@@ -57,18 +64,24 @@ import org.apache.spark.mllib.tree.configuration.QuantileStrategy._
  *                            Default value is 1. If a split cause left or right child
  *                            to have less than minInstancesPerNode,
  *                            this split will not be considered as a valid split.
+  *                           拆分后每一个子节点必须有的最小实例样本数,避免过拟合。
  * @param minInfoGain Minimum information gain a split must get. Default value is 0.0.
  *                    If a split has less information gain than minInfoGain,
  *                    this split will not be considered as a valid split.
+  *                   最少的gini值,默认是0,为了防止过拟合,如果小于该值,是不允许进行split拆分的
  * @param maxMemoryInMB Maximum memory in MB allocated to histogram aggregation. Default value is
  *                      256 MB.
- * @param subsamplingRate Fraction of the training data used for learning decision tree.抽样系数比例
+  *                      内存使用
+ * @param subsamplingRate Fraction of the training data used for learning decision tree.
+  *                        抽样系数比例
  * @param useNodeIdCache If this is true, instead of passing trees to executors, the algorithm will
  *                      maintain a separate RDD of node Id cache for each row.
  * @param checkpointInterval How often to checkpoint when the node Id cache gets updated.
  *                           E.g. 10 means that the cache will get checkpointed every 10 updates. If
  *                           the checkpoint directory is not set in
  *                           [[org.apache.spark.SparkContext]], this setting is ignored.
+  *                           如果checkpoint目录没有被设置,则可以被忽略该设置。
+  *                           设置为10的时候,表示每10次更新,则要将缓存checkpointed一次
  */
 @Since("1.0.0")
 @Experimental

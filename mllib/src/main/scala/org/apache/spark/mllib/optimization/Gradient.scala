@@ -269,6 +269,8 @@ class LogisticGradient(numClasses: Int) extends Gradient {
  * See also the documentation for the precise formulation.
   * 线性回归的方式计算梯度
   * 因为线性方程,求导后就是向量系数本身,比如3*x1 + 2*x2 + 3*x4=0 ,求偏导后就是3 2 4.因此用diff * 3 2 4即可得到梯度
+  *
+  * 最小二乘损失函数的梯度和损失
  */
 @DeveloperApi
 class LeastSquaresGradient extends Gradient {
@@ -278,7 +280,7 @@ class LeastSquaresGradient extends Gradient {
     val diff = dot(data, weights) - label//损失值
     val loss = diff * diff / 2.0 //单值的损失函数
     val gradient = data.copy
-    scal(diff, gradient) //梯度不依赖外界的,因此就是变化data本身的梯度,即 x = a * x  = diff * gradient = diff * data
+    scal(diff, gradient) //梯度不依赖外界的,因此就是变化data本身的梯度,即 x = a * x  = diff * gradient = diff * data ,即误差diff * 相同系数,得到新的向量，就为梯度方向
     (gradient, loss)
   }
 
@@ -293,10 +295,11 @@ class LeastSquaresGradient extends Gradient {
     * @return loss
     */
   override def compute(
-      data: Vector,
-      label: Double,
-      weights: Vector,
-      cumGradient: Vector): Double = {
+      data: Vector,//特征向量
+      label: Double,//具体的label
+      weights: Vector,//原始权重
+      cumGradient: Vector) //用于存储损失值,即data * weights - label
+   : Double = { //返回值是该样本的损失
     val diff = dot(data, weights) - label //损失值---x向量真实值 * 系数权重 = 预测值，然后 - label(y真实值) = 损失
     axpy(diff, data, cumGradient) //cumGradient += diff * data ,即 y = y + a x
     diff * diff / 2.0 //损失函数平方
@@ -308,6 +311,8 @@ class LeastSquaresGradient extends Gradient {
  * Compute gradient and loss for a Hinge loss function, as used in SVM binary classification.
  * See also the documentation for the precise formulation.
  * NOTE: This assumes that the labels are {0,1}
+  *
+  * 最大化分类间距，如SVM二分类中使用
  */
 @DeveloperApi
 class HingeGradient extends Gradient {

@@ -135,8 +135,12 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
    *
    * Thus, the intercepts will be encapsulated into weights, and we leave the value of intercept
    * in GeneralizedLinearModel as zero.
+    * 分类的结果是2分类,即一个预测器就可以知道是正负哪种情况了.因此numOfLinearPredictor = 1 表示2分类
+    * 多分类,则numOfLinearPredictor = k-1,即5个分类,需要4个分类器,numOfLinearPredictor = 4。
+    * 总之,多分类不是表示一个向量同时属于多个分类,而是一个向量,在多个分类中找到一个最匹配的分类
+    * multinomial logistic regression 说明numOfLinearPredictor>1的时候，只被用在多元逻辑回归算法中
    */
-  protected var numOfLinearPredictor: Int = 1
+  protected var numOfLinearPredictor: Int = 1 //非1 用于LogisticRegressionModel 多元逻辑回归模型中
 
   /**
    * Whether to perform feature scaling before model training to reduce the condition numbers
@@ -170,6 +174,8 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
 
   /**
    * Create a model given the weights and intercept 创建一个模型
+    * 什么时候都可以调用的,不一定要运行run方法后调用,只是run之前调用可能模型是不准的。
+    * 原因可以参考 StreamingLinearRegressionWithSGD
    */
   protected def createModel(weights: Vector, intercept: Double): M
 
@@ -226,13 +232,18 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
      * TODO: See if we can deprecate `intercept` in `GeneralizedLinearModel`, and always
      * have the intercept as part of weights to have consistent design.
       * 初始化权重为0
+      *
+      * 1个分类器---都无b,如果真的有b,我就将特征v+1,特征x权重加一个随机数
+      * n个分类器---要考虑有无b。
+      * 有b,权重x就是特征(x+1) * n
+      * 无b,权重x就是特征x*n
      */
     val initialWeights = {
-      if (numOfLinearPredictor == 1) {
+      if (numOfLinearPredictor == 1) {//一个分类器
         Vectors.zeros(numFeatures)
-      } else if (addIntercept) {
+      } else if (addIntercept) {//n个分类,并且有b
         Vectors.zeros((numFeatures + 1) * numOfLinearPredictor)
-      } else {
+      } else {//n个分类
         Vectors.zeros(numFeatures * numOfLinearPredictor)
       }
     }
@@ -242,7 +253,7 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
   /**
    * Run the algorithm with the configured parameters on an input RDD
    * of LabeledPoint entries starting from the initial weights provided.
-   *
+   * 参数 initialWeights 表示x的向量权重,如果是有截距b的时候,在该方法体内,会对权重追加一列,即initialWeights 最后是x+1列,即b的权重也要赋值
    */
   @Since("1.0.0")
   def run(input: RDD[LabeledPoint], initialWeights: Vector): M = {
@@ -283,7 +294,7 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
      * Currently, it's only enabled in LogisticRegressionWithLBFGS
      */
     val scaler = if (useFeatureScaling) {//特征处理函数
-      new StandardScaler(withStd = true, withMean = false).fit(input.map(_.features))
+      new StandardScaler(withStd = true, withMean = false).fit(input.map(_.features)) //跑模型,先计算标准差和均值
     } else {
       null
     }
@@ -309,6 +320,7 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
      * TODO: For better convergence, in logistic regression, the intercepts should be computed
      * from the prior probability distribution of the outcomes; for linear regression,
      * the intercept should be set as the average of response.
+      * 考虑为有权重的数据加入一个权重
      */
     val initialWeightsWithIntercept = if (addIntercept && numOfLinearPredictor == 1) {
       appendBias(initialWeights) //添加截距了,因此权重也要加入1
@@ -357,7 +369,7 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
         var i = 0
         val n = weights.size / numOfLinearPredictor
         val weightsArray = weights.toArray
-        while (i < numOfLinearPredictor) {
+        while (i < numOfLinearPredictor) { //训练多个标签
           val start = i * n
           val end = (i + 1) * n - { if (addIntercept) 1 else 0 }
 

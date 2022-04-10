@@ -47,7 +47,7 @@ import org.apache.spark.sql.{SQLContext, Row}
 private case class VocabWord(
   var word: String,//分词
   var cn: Int,//词频--词出现次数
-  var point: Array[Int],//存储路径，即经过得结点
+  var point: Array[Int],//code的位置，如果是负数表示是叶子节点,即具体的词，正数是Huffman编码产生的虚拟节点
   var code: Array[Int],//记录Huffman编码  根节点到叶子节点的huffman编码
   var codeLen: Int //存储到达该叶子结点，要经过多少个结点
 )
@@ -254,7 +254,7 @@ class Word2Vec extends Serializable with Logging {
       count(vocabSize + a) = count(min1i) + count(min2i)
       parentNode(min1i) = vocabSize + a
       parentNode(min2i) = vocabSize + a
-      binary(min2i) = 1
+      binary(min2i) = 1 //左节点设置为1,右节点设置为0
       a += 1
     }
     // Now assign binary code to each vocabulary word
@@ -290,7 +290,7 @@ class Word2Vec extends Serializable with Logging {
   @Since("1.1.0")
   def fit[S <: Iterable[String]](dataset: RDD[S]): Word2VecModel = {
 
-    val words = dataset.flatMap(x => x) //参数x本身是一个迭代器
+    val words = dataset.flatMap(x => x) //参数x本身是一个迭代器---所有的句子，按照顺序连接在一起,组成的词集合(词允许重复出现,因为句子是重复不同的)
 
     learnVocab(words) //初始化词字典
 
@@ -325,7 +325,7 @@ class Word2Vec extends Serializable with Logging {
       }
     }
 
-    val newSentences = sentences.repartition(numPartitions).cache() //numPartitions个任务并发,每次获取1000个词处理
+    val newSentences = sentences.repartition(numPartitions).cache() //numPartitions个任务并发,每次获取1000个词处理 ---PS:词是句子按照顺序组成的,所以1000个词，相当于连续1000个词组成的若干个句子
     val initRandom = new XORShiftRandom(seed)
 
     //确保所有的词与词的向量,能够存储在256M的内存中
@@ -363,7 +363,7 @@ class Word2Vec extends Serializable with Logging {
               val word = sentence(pos) //某一个词在字典的位置
               val b = random.nextInt(window)
               // Train Skip-gram
-              var a = b
+              var a = brepartitionAndSortWithinPartitions
               while (a < window * 2 + 1 - b) {
                 if (a != window) {
                   val c = pos - window + a

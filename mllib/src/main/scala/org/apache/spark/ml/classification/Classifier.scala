@@ -31,7 +31,7 @@ import org.apache.spark.sql.types.{DataType, StructType}
  * (private[spark]) Params for classification.
  */
 private[spark] trait ClassifierParams
-  extends PredictorParams with HasRawPredictionCol {
+  extends PredictorParams with HasRawPredictionCol { //原始的分类预测label列名 rawPredictionCol
 
   override protected def validateAndTransformSchema(
       schema: StructType,

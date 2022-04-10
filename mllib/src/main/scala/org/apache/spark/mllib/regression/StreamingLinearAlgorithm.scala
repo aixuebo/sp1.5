@@ -92,6 +92,7 @@ abstract class StreamingLinearAlgorithm[
     }
     data.foreachRDD { (rdd, time) =>
       if (!rdd.isEmpty) {
+        //注意:权重模型是不断的更新的,开始是0,不断更新,越来越准,接近离线训练模型的效果
         model = Some(algorithm.run(rdd, model.get.weights)) //对数据进行训练,获取权重和截距模型
         logInfo(s"Model updated at time ${time.toString}")
         val display = model.get.weights.size match {
@@ -105,6 +106,7 @@ abstract class StreamingLinearAlgorithm[
 
   /**
    * Java-friendly version of `trainOn`.
+    * 训练
    */
   @Since("1.3.0")
   def trainOn(data: JavaDStream[LabeledPoint]): Unit = trainOn(data.dstream)

@@ -29,7 +29,7 @@ import org.apache.spark.mllib.tree.configuration.FeatureType.FeatureType
  * @param threshold Threshold for continuous feature.
  *                  Split left if feature <= threshold, else right.
  * @param featureType type of feature -- categorical or continuous
- * @param categories Split left if categorical feature value is in this set, else right.
+ * @param categories Split left if categorical feature value is in this set, else right.如何是分类属性的拆分点,则该节点存储左边分类属性的值
   *   表示决策树的一个分位点
  */
 @Since("1.0.0")
@@ -49,7 +49,7 @@ case class Split(
 /**
  * Split with minimum threshold for continuous features. Helps with the smallest bin creation.
  * @param feature feature index
- * @param featureType type of feature -- categorical or continuous
+ * @param featureType type of feature -- categorical or continuous 分类还是回归问题
   *  最左边边界
  */
 private[tree] class DummyLowSplit(feature: Int, featureType: FeatureType)

@@ -19,7 +19,7 @@ package org.apache.spark.mllib.evaluation.binary
 
 /**
  * A counter for positives and negatives.
- *
+ * 计算正样本、负样本次数
  * @param numPositives number of positive labels
  * @param numNegatives number of negative labels
  */

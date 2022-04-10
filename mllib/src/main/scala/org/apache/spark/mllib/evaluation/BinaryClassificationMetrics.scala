@@ -27,6 +27,7 @@ import org.apache.spark.sql.DataFrame
 /**
  * :: Experimental ::
  * Evaluator for binary classification.
+  * 评估2分类算法
  *
  * @param scoreAndLabels an RDD of (score, label) pairs.
  * @param numBins if greater than 0, then the curves (ROC curve, PR curve) computed internally

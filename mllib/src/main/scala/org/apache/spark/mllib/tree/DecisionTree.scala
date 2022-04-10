@@ -981,15 +981,16 @@ object DecisionTree extends Serializable with Logging {
     // Sample the input only if there are continuous features.有连续性特征的时候会参与抽样
     val hasContinuousFeatures = Range(0, numFeatures).exists(metadata.isContinuous) //true表示有连续性特征
 
-    //获取抽样结果,在本地节点生成一个数组
+    //获取抽样结果,在本地节点生成一个数组--主要针对连续性的特征进行处理,找到连续性特征的划分点
     val sampledInput = if (hasContinuousFeatures) {//有连续性特征
       // Calculate the number of samples for approximate quantile calculation.获取1万条以上抽样样本，正常是 最大分类数量^2个抽样样本
+      //当有100个分类以上的时候,需要获取超过1万个样本,否则抽取1万个样本就够了
       val requiredSamples = math.max(metadata.maxBins * metadata.maxBins, 10000) //设置抽样数量
       //计算抽样样本占比
       val fraction = if (requiredSamples < metadata.numExamples) {
         requiredSamples.toDouble / metadata.numExamples
       } else {
-        1.0
+        1.0 //样本数量较少,全部拿来做样本空间
       }
       logDebug("fraction of data used for calculating quantiles = " + fraction)
       input.sample(withReplacement = false, fraction, new XORShiftRandom().nextInt()).collect()
@@ -1038,8 +1039,8 @@ object DecisionTree extends Serializable with Logging {
             bins(featureIndex)(numSplits) = new Bin(splits(featureIndex)(numSplits - 1),
               new DummyHighSplit(featureIndex, Continuous), Continuous, Double.MinValue)
           } else {//离散型特征
-            val numSplits = metadata.numSplits(featureIndex)
-            val numBins = metadata.numBins(featureIndex)
+            val numSplits = metadata.numSplits(featureIndex) //拆分成多少个桶
+            val numBins = metadata.numBins(featureIndex) //有多少个不同的分类值
             // Categorical feature
             val featureArity = metadata.featureArity(featureIndex) //真实特征值数量
             if (metadata.isUnordered(featureIndex)) {//无序的特征，特征值数量很小
@@ -1131,11 +1132,12 @@ object DecisionTree extends Serializable with Logging {
       val valueCountMap = featureSamples.foldLeft(Map.empty[Double, Int]) { (m, x) =>
         m + ((x, m.getOrElse(x, 0) + 1))
       }
+
       // sort distinct values
-      val valueCounts = valueCountMap.toSeq.sortBy(_._1).toArray //按照value值排序
+      val valueCounts = valueCountMap.toSeq.sortBy(_._1).toArray //按照key值排序
 
       // if possible splits is not enough or just enough, just return all possible splits
-      val possibleSplits = valueCounts.length
+      val possibleSplits = valueCounts.length //多少个不同的value值
       if (possibleSplits <= numSplits) { //比如要求拆分10个,结果抽样value值一共才5个,则不需要进行拆分
         valueCounts.map(_._1) //输出全部value值
       } else {//抽样的分类数量 比 要求的分类数多,因此我们要拆分

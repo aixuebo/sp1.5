@@ -19,15 +19,19 @@ package org.apache.spark.mllib.evaluation.binary
 
 /**
  * Trait for a binary classification evaluation metric computer.
+  * 二分类度量评测统计--接口
  */
 private[evaluation] trait BinaryClassificationMetricComputer extends Serializable {
-  def apply(c: BinaryConfusionMatrix): Double
+  def apply(c: BinaryConfusionMatrix): Double //参数是混淆矩阵
 }
 
-/** Precision. Defined as 1.0 when there are no positive examples. */
+//各种度量实现类
+/** Precision. Defined as 1.0 when there are no positive examples.
+  * 精准
+  **/
 private[evaluation] object Precision extends BinaryClassificationMetricComputer {
   override def apply(c: BinaryConfusionMatrix): Double = {
-    val totalPositives = c.numTruePositives + c.numFalsePositives
+    val totalPositives = c.numTruePositives + c.numFalsePositives //预测正确的总数量
     if (totalPositives == 0) {
       1.0
     } else {

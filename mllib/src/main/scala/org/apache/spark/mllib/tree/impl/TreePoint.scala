@@ -57,7 +57,7 @@ private[spark] object TreePoint {
       bins: Array[Array[Bin]],
       metadata: DecisionTreeMetadata): RDD[TreePoint] = {
     // Construct arrays for featureArity for efficiency in the inner loop.
-    val featureArity: Array[Int] = new Array[Int](metadata.numFeatures)
+    val featureArity: Array[Int] = new Array[Int](metadata.numFeatures) //存储每一个特征有多少属性值,连续特征时该值为0
     var featureIndex = 0
     while (featureIndex < metadata.numFeatures) {//遍历每一个特征
       featureArity(featureIndex) = metadata.featureArity.getOrElse(featureIndex, 0)
@@ -81,7 +81,7 @@ private[spark] object TreePoint {
       bins: Array[Array[Bin]],
       featureArity: Array[Int]): TreePoint = {
     val numFeatures = labeledPoint.features.size
-    val arr = new Array[Int](numFeatures) //特征值存储所在区间位置
+    val arr = new Array[Int](numFeatures) //特征转换---将分类特征转换成对应的序号,连续特征转换到对应的桶
     var featureIndex = 0
     while (featureIndex < numFeatures) {//计算每一个特征值
       arr(featureIndex) = findBin(featureIndex, labeledPoint, featureArity(featureIndex), bins)//每一个特征值所在区间位置
@@ -99,7 +99,7 @@ private[spark] object TreePoint {
   private def findBin(
       featureIndex: Int,//特征序号
       labeledPoint: LabeledPoint,//特征值
-      featureArity: Int,
+      featureArity: Int,//该特征一共有多少种值--用于分类属性特征
       bins: Array[Array[Bin]]) //特征区间
     : Int = { //返回该特征值在第几个区间
 
@@ -131,7 +131,7 @@ private[spark] object TreePoint {
 
     //上面的方法是需要被调用的
 
-    if (featureArity == 0) {
+    if (featureArity == 0) { //说明是连续类型的特征
       // Perform binary search for finding bin for continuous features.
       val binIndex = binarySearchForBins()
       if (binIndex == -1) {

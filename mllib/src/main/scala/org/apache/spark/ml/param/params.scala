@@ -28,10 +28,18 @@ import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.ml.util.Identifiable
 
 /**
+  * 定义一个参数param对象
+  * 定义参数param类型对象
+  * 定义参数和参数值对象 ParamPair
+  *
+  * 定义存储一组参数的集合对象Params  Params 反射的方式获取一个class下所有的param参数对象集合
+  * 定义map存储参数和参数值 ParamMap 相当于ParamPair
+  */
+/**
  * :: DeveloperApi ::
  * A param with self-contained documentation and optionally default value. Primitive-typed param
  * should use the specialized versions, which are more friendly to Java users.
- *
+ * 表示一个参数对象
  * @param parent parent object 该属性属于哪个父的属性
  * @param name param name 该属性的key
  * @param doc documentation 该属性的描述信息
@@ -179,7 +187,9 @@ object ParamValidators {
     allowed.contains(value)
   }
 
-  /** Check for value in an allowed set of values. */
+  /** Check for value in an allowed set of values.
+    * 表示参数值T必须在数组中存在,才返回true
+    **/
   def inArray[T](allowed: java.util.List[T]): T => Boolean = { (value: T) =>
     allowed.contains(value)
   }
@@ -343,7 +353,7 @@ class IntArrayParam(parent: Params, name: String, doc: String, isValid: Array[In
  * 表示一个属性name和属性值
  */
 @Experimental
-case class ParamPair[T](param: Param[T], value: T) {
+case class ParamPair[T](param: Param[T], value: T) {//存储param和对应的value值
   // This is *the* place Param.validate is called.  Whenever a parameter is specified, we should
   // always construct a ParamPair so that validate is called.
   param.validate(value) //对value进行校验
@@ -365,6 +375,7 @@ trait Params extends Identifiable with Serializable {
    * Note: Developer should not use this method in constructor because we cannot guarantee that
    * this variable gets initialized before other params.
    * 反射获取所有的属性集合
+    * 获取public Param xxx(无参数)的方法名字,调用后返回该class的所有Param数组集合
    */
   lazy val params: Array[Param[_]] = {
     val methods = this.getClass.getMethods
@@ -394,7 +405,7 @@ trait Params extends Identifiable with Serializable {
    * @param param input param, must belong to this instance.
    * @return a string that contains the input param name, doc, and optionally its default value and
    *         the user-supplied value
-   * 给定一个参数,
+   * 给定一个参数,做解释,打印该属性的默认值和非默认值
    */
   def explainParam(param: Param[_]): String = {
     shouldOwn(param)
@@ -411,19 +422,22 @@ trait Params extends Identifiable with Serializable {
   /**
    * Explains all params of this instance.
    * @see [[explainParam()]]
+    *     解释所有的参数
    */
   def explainParams(): String = {
     params.map(explainParam).mkString("\n")
   }
 
-  /** Checks whether a param is explicitly set. */
+  /** Checks whether a param is explicitly set.
+    * true表示该参数已经存在了 key=value这种映射了
+    **/
   final def isSet(param: Param[_]): Boolean = {
     shouldOwn(param)
     paramMap.contains(param)
   }
 
   /** Checks whether a param is explicitly set or has a default value.
-    * true表示该参数定义了
+    * true表示该参数定义了---有默认值key=value  或者设置了非默认值key=value
     **/
   final def isDefined(param: Param[_]): Boolean = {
     shouldOwn(param)
@@ -619,15 +633,15 @@ trait Params extends Identifiable with Serializable {
    *          share the same set of default Params.
    *
    * @param to the target instance, which should work with the same set of default Params as this
-   *           source instance
-   * @param extra extra params to be copied to the target's [[paramMap]]
+   *           source instance 目标覆盖到该kv集合
+   * @param extra extra params to be copied to the target's [[paramMap]] 追加额外的kv集合
    * @return the target instance with param values copied
    */
   protected def copyValues[T <: Params](to: T, extra: ParamMap = ParamMap.empty): T = {
-    val map = paramMap ++ extra
-    params.foreach { param =>
+    val map = paramMap ++ extra //内部自定义的kv + 额外的kv
+    params.foreach { param => //循环内部的kv
       // copy default Params
-      if (defaultParamMap.contains(param) && to.hasParam(param.name)) {
+      if (defaultParamMap.contains(param) && to.hasParam(param.name)) { //覆盖默认值
         to.defaultParamMap.put(to.getParam(param.name), defaultParamMap(param))
       }
       // copy explicitly set Params

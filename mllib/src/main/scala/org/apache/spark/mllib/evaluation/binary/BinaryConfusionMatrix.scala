@@ -19,24 +19,37 @@ package org.apache.spark.mllib.evaluation.binary
 
 /**
  * Trait for a binary confusion matrix.
+  * confusion matrix 混淆矩阵也称误差矩阵
+  * 用于二分类
+  *
+  * - True Positive(真正, TP)：将正类预测为正类数.
+  * - True Negative(真负 , TN)：将负类预测为负类数.
+  * - False Positive(假正, FP)：将负类预测为正类数 →→ 误报 (Type I error).
+  * - False Negative(假负 , FN)：将正类预测为负类数 →→ 漏报 (Type II error).
+  *
+  * 横坐标是真实的数据,纵坐标表示预测值
+  * 预测     Positive	   Negative  真实的
+  * True	TP	           FP
+  * False	FN	           TN
  */
 private[evaluation] trait BinaryConfusionMatrix {
-  /** number of true positives */
+  //true表示真实是对的，即真正、真负
+  /** number of true positives 真正, TP   将正类预测为正类数*/
   def numTruePositives: Long
 
-  /** number of false positives */
+  /** number of false positives 假正, FP  将负类预测为正类数 */
   def numFalsePositives: Long
 
-  /** number of false negatives */
+  /** number of false negatives 假负 , FN  将正类预测为负类数*/
   def numFalseNegatives: Long
 
-  /** number of true negatives */
+  /** number of true negatives 真负 , TN  将负类预测为负类数.*/
   def numTrueNegatives: Long
 
-  /** number of positives */
+  /** number of positives 真实的样本中,正样本数量 */
   def numPositives: Long = numTruePositives + numFalseNegatives
 
-  /** number of negatives */
+  /** number of negatives 真实的样本中,负样本数量*/
   def numNegatives: Long = numFalsePositives + numTrueNegatives
 }
 
@@ -50,21 +63,21 @@ private[evaluation] case class BinaryConfusionMatrixImpl(
     count: BinaryLabelCounter,
     totalCount: BinaryLabelCounter) extends BinaryConfusionMatrix {
 
-  /** number of true positives */
+  /** number of true positives 预测正样本数量*/
   override def numTruePositives: Long = count.numPositives
 
-  /** number of false positives */
+  /** number of false positives 预测为负样本数量*/
   override def numFalsePositives: Long = count.numNegatives
 
-  /** number of false negatives */
+  /** number of false negatives 真实正样本数量 - 预测正样本数量 = 预测正样本错误的数量*/
   override def numFalseNegatives: Long = totalCount.numPositives - count.numPositives
 
   /** number of true negatives */
   override def numTrueNegatives: Long = totalCount.numNegatives - count.numNegatives
 
-  /** number of positives */
+  /** number of positives 真实的真正正样本数量*/
   override def numPositives: Long = totalCount.numPositives
 
-  /** number of negatives */
+  /** number of negatives 真实的真正负样本数量*/
   override def numNegatives: Long = totalCount.numNegatives
 }

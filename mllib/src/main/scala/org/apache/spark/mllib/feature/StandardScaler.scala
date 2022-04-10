@@ -61,6 +61,7 @@ class StandardScaler @Since("1.1.0") (withMean: Boolean, withStd: Boolean) exten
     val summary = data.treeAggregate(new MultivariateOnlineSummarizer)(//汇总向量的统计信息
       (aggregator, data) => aggregator.add(data),
       (aggregator1, aggregator2) => aggregator1.merge(aggregator2))
+    //输出每一个特征的标准差和均值
     new StandardScalerModel(
       Vectors.dense(summary.variance.toArray.map(v => math.sqrt(v))),//方差变成标准差
       summary.mean,//均值
@@ -77,6 +78,7 @@ class StandardScaler @Since("1.1.0") (withMean: Boolean, withStd: Boolean) exten
  * @param mean column mean values
  * @param withStd whether to scale the data to have unit standard deviation
  * @param withMean whether to center the data before scaling
+  * 经过计算,已经存在的标准差和均值的模型
  */
 @Since("1.1.0")
 @Experimental
@@ -87,6 +89,7 @@ class StandardScalerModel @Since("1.3.0") (
     @Since("1.3.0") var withMean: Boolean) extends VectorTransformer {
 
   /**
+    * 参数存储每一个特征的标准差和均值
    */
   @Since("1.3.0")
   def this(std: Vector, mean: Vector) {
@@ -134,7 +137,7 @@ class StandardScalerModel @Since("1.3.0") (
     * 对数据进行缩放处理
    */
   @Since("1.1.0")
-  override def transform(vector: Vector): Vector = {
+  override def transform(vector: Vector): Vector = { //对参数进行缩放
     require(mean.size == vector.size)
     if (withMean) {//均值
       // By default, Scala generates Java methods for member variables. So every time when

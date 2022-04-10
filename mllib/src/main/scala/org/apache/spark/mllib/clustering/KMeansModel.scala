@@ -37,7 +37,7 @@ import org.apache.spark.sql.Row
  * A clustering model for K-means. Each point belongs to the cluster with the closest center.
  */
 @Since("0.8.0")
-class KMeansModel @Since("1.1.0") (@Since("1.0.0") val clusterCenters: Array[Vector])
+class KMeansModel @Since("1.1.0") (@Since("1.0.0") val clusterCenters: Array[Vector]) //clusterCenters参数是中心节点集合
   extends Saveable with Serializable with PMMLExportable {
 
   /**

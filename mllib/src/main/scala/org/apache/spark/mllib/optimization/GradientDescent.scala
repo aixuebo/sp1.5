@@ -192,7 +192,7 @@ object GradientDescent extends Logging {
         "< 1.0 can be unstable because of the stochasticity in sampling.")
     }
 
-    val stochasticLossHistory = new ArrayBuffer[Double](numIterations) //存储每一轮迭代的损失值
+    val stochasticLossHistory = new ArrayBuffer[Double](numIterations) //存储每一轮迭代的平均损失值
     // Record previous weight and current one to calculate solution vector difference
 
     var previousWeights: Option[Vector] = None
@@ -201,6 +201,7 @@ object GradientDescent extends Logging {
     val numExamples = data.count() //样本条数
 
     // if no data, return initial weights to avoid NaNs
+    //没有样本,因此权重初始是什么,返回值就是什么,因为没有被训练的可能,只能原封不动的还原回去
     if (numExamples == 0) {
       logWarning("GradientDescent.runMiniBatchSGD returning initial weights, no data found")
       return (initialWeights, stochasticLossHistory.toArray)
@@ -218,6 +219,7 @@ object GradientDescent extends Logging {
      * For the first iteration, the regVal will be initialized as sum of weight squares
      * if it's L2 updater; for L1 updater, the same logic is followed.
       * 初始化损失函数
+      * 初始化开始时的损失和,即最开始的时候损失函数一定会很高
      */
     var regVal = updater.compute(
       weights, Vectors.zeros(weights.size), 0, 1, regParam)._2
@@ -229,7 +231,7 @@ object GradientDescent extends Logging {
       // Sample a subset (fraction miniBatchFraction) of the total data
       // compute and sum up the subgradients on this subset (this is one map-reduce)
       val (gradientSum, lossSum, miniBatchSize) = data.sample(false, miniBatchFraction, 42 + i) //抽样数据
-        .treeAggregate((BDV.zeros[Double](n), 0.0, 0L))( //返回值是向量,double,long组成的---分别表示 xxx  损失值求和  出现的次数
+        .treeAggregate((BDV.zeros[Double](n), 0.0, 0L))( //返回值是向量,double,long组成的---分别表示 梯度方向和  损失值求和  处理的数据条数
           seqOp = (c, v) => { //c是merge的值,v是lable和特征组成的元组
             // c: (grad, loss, count), v: (label, features)
             val l = gradient.compute(v._2, v._1, bcWeights.value, Vectors.fromBreeze(c._1)) //计算梯度
@@ -240,21 +242,23 @@ object GradientDescent extends Logging {
             (c1._1 += c2._1, c1._2 + c2._2, c1._3 + c2._3)
           })
 
-      if (miniBatchSize > 0) {
+      //该更新本轮的权重了
+      if (miniBatchSize > 0) { //执行了多少条数据
         /**
          * lossSum is computed using the weights from the previous iteration
          * and regVal is the regularization value computed in the previous iteration as well.
          */
-        stochasticLossHistory.append(lossSum / miniBatchSize + regVal)
+        stochasticLossHistory.append(lossSum / miniBatchSize + regVal) //相当于计算 损失函数/m,即平均每条样本的损失函数
         val update = updater.compute(
-          weights, Vectors.fromBreeze(gradientSum / miniBatchSize.toDouble),
+          weights, //老权重
+          Vectors.fromBreeze(gradientSum / miniBatchSize.toDouble),//梯度方向---总的梯度/样本数量
           stepSize, i, regParam)
         weights = update._1
         regVal = update._2
 
-        previousWeights = currentWeights
-        currentWeights = Some(weights)
-        if (previousWeights != None && currentWeights != None) {
+        previousWeights = currentWeights //这一轮梯度前的权重
+        currentWeights = Some(weights) //这一轮梯度后的权重
+        if (previousWeights != None && currentWeights != None) { //计算是否还需要梯度下降
           converged = isConverged(previousWeights.get,
             currentWeights.get, convergenceTol)
         }
@@ -297,9 +301,10 @@ object GradientDescent extends Logging {
     val currentBDV = currentWeights.toBreeze.toDenseVector
 
     // This represents the difference of updated weights in the iteration.
-    val solutionVecDiff: Double = norm(previousBDV - currentBDV)
+    val solutionVecDiff: Double = norm(previousBDV - currentBDV) //默认2次正则项,即所有向量元素^2 之和 ，然后开方,比如10,10,10,结果是17.320508075688775 ,相当于两个向量的距离
 
-    solutionVecDiff < convergenceTol * Math.max(norm(currentBDV), 1.0)
+    //比如后面的结果是1,说明只要阈值>差距，即差距已经很小了，停止即可。
+    solutionVecDiff < convergenceTol * Math.max(norm(currentBDV), 1.0) //currentBDV当前向量与0向量的距离 * convergenceTol阈值 > 差距,
   }
 
 }

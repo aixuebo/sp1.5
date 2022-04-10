@@ -27,6 +27,7 @@ import scala.collection.generic.Growable
  * Bounded priority queue. This class wraps the original PriorityQueue
  * class and modifies it such that only the top K elements are retained.
  * The top K elements are defined by an implicit Ordering[A].
+  * 优先队列 ---队列大小maxSize,队列按照ord类型排序
  */
 private[spark] class BoundedPriorityQueue[A](maxSize: Int)(implicit ord: Ordering[A])
   extends Iterable[A] with Growable[A] with Serializable {

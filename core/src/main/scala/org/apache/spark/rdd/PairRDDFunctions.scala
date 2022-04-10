@@ -836,7 +836,7 @@ res7: Array[(Int, Int)] = Array((1,2), (3,10))
    * list of values for that key in `this` as well as `other`.
    */
   def cogroup[W](other: RDD[(K, W)], partitioner: Partitioner)
-      : RDD[(K, (Iterable[V], Iterable[W]))] = self.withScope {
+      : RDD[(K, (Iterable[V], Iterable[W]))] = self.withScope { //两个RDD做join,相同的key,生产两个不同的迭代器,迭代器是不耗费内存的
     if (partitioner.isInstanceOf[HashPartitioner] && keyClass.isArray) {
       throw new SparkException("Default partitioner cannot partition array keys.")
     }

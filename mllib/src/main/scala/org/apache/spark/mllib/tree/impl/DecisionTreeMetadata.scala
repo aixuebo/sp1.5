@@ -40,7 +40,7 @@ import org.apache.spark.rdd.RDD
 private[spark] class DecisionTreeMetadata(
     val numFeatures: Int,//特征维度数量,即向量特征有多少维
     val numExamples: Long,//样本空间大小,即样本条数
-    val numClasses: Int,//样本lable的分类数量,即最终结果是由多少个分类组成的
+    val numClasses: Int,//样本lable的分类数量,即最终结果是由多少个分类组成的,回归问题则该值是0
     val maxBins: Int,//离散型特征组多允许多少个value数量
     val featureArity: Map[Int, Int],//哪些特征是离散型的特征 以及 对应的特征值数量
     val unorderedFeatures: Set[Int],//真实的特征数非常少，少于log2^maxCategories，我们认为他是无序的
@@ -51,7 +51,7 @@ private[spark] class DecisionTreeMetadata(
     val minInstancesPerNode: Int,
     val minInfoGain: Double,
     val numTrees: Int,//森林需要多少颗决策树
-    val numFeaturesPerNode: Int) //每一个节点特征选择的数量
+    val numFeaturesPerNode: Int) //随机森林,每一个节点要选择多少个特征
   extends Serializable {
 
   //true表示该特征非常多的特征值
@@ -104,6 +104,18 @@ private[spark] object DecisionTreeMetadata extends Logging {
    * This computes which categorical features will be ordered vs. unordered,
    * as well as the number of splits and bins for each feature.
     * 根据数据源去更新元数据内容
+    *
+   输入:样本集合、输出lable数量、随机选择特征维度策略、决策策略
+   处理逻辑:
+   1.numFeatures 获取多少个特征。
+   2.numExamples 多少个样本。
+   3.numClasses 多少个分类标签结果 ,回归则为0。
+   4.校验分类特征,个数不允许太大,不能超过阈值。
+   循环校验每一个分类特征序号:元素种类个数。
+   5. val unorderedFeatures = new mutable.HashSet[Int]()//真实的特征数非常少，少于log2^maxCategories，我们认为他是无序的
+   6.val numBins = [maxPossibleBins,maxPossibleBins,maxPossibleBins] . size为特征数量,元素是每一个特征有多少个不同的值,默认是maxPossibleBins
+   连续性特征最后也是会被分配成maxPossibleBins个。
+   7.随机森林,每一个节点要选择多少个特征。
    */
   def buildMetadata(
       input: RDD[LabeledPoint],//样本集合
@@ -137,17 +149,19 @@ private[spark] object DecisionTreeMetadata extends Logging {
     if (strategy.categoricalFeaturesInfo.nonEmpty) {
       val maxCategoriesPerFeature = strategy.categoricalFeaturesInfo.values.max //获取最大的value
       val maxCategory =
-        strategy.categoricalFeaturesInfo.find(_._2 == maxCategoriesPerFeature).get._1 //获取最大value对应的key,即哪个下标定义了最大的权重
+        strategy.categoricalFeaturesInfo.find(_._2 == maxCategoriesPerFeature).get._1 //获取最大value对应的key,即哪个下标定义了最大的分类数量
       //要求最大的特征离散value数量 <= maxPossibleBins
-      require(maxCategoriesPerFeature <= maxPossibleBins,
+      require(maxCategoriesPerFeature <= maxPossibleBins,//不能超过最大分类值的数量
         s"DecisionTree requires maxBins (= $maxPossibleBins) to be at least as large as the " +
         s"number of values in each categorical feature, but categorical feature $maxCategory " +
         s"has $maxCategoriesPerFeature values. Considering remove this and other categorical " +
-        "features with a large number of values, or add more training examples.") //提示哪个key对应的权重设置大了
+        "features with a large number of values, or add more training examples.") //提示哪个分类特征对应的特征值数量超过了最大的特征值数量,特征值数量过多,会影响树的效果。
     }
 
     val unorderedFeatures = new mutable.HashSet[Int]()//真实的特征数非常少，少于log2^maxCategories，我们认为他是无序的
     //经过下面这行代码后,每一个特征有多少个不同的特征值就已经确定了,默认值就是不管连续性还是离散型都是最大的特征值数量
+    //val numBins = [maxPossibleBins,maxPossibleBins,maxPossibleBins] . size为特征数量,元素是每一个特征有多少个不同的值,默认是maxPossibleBins
+    //连续性特征最后也是会被分配成maxPossibleBins个。
     val numBins = Array.fill[Int](numFeatures)(maxPossibleBins) //创建int一维数组,size大小为特征数，默认值都是maxPossibleBins---知道某一个离散型特征有多少个分类值
     if (numClasses > 2) {//多分类问题
       // Multiclass classification //基本上等于log2^maxPossibleBins 比如最大分类数为126，那么返回值是6.但是不是绝对的等于log2^maxPossibleBins
@@ -172,18 +186,20 @@ private[spark] object DecisionTreeMetadata extends Logging {
           }
         }
       }
-    } else {
+    } else {//二分类 或者是连续性的输出回归问题
       // Binary classification or regression
       strategy.categoricalFeaturesInfo.foreach { case (featureIndex, numCategories) => //特征序号,特征对应多少个value值
-        // If a categorical feature has only 1 category, we treat it as continuous: SPARK-9957
-        if (numCategories > 1) {
+        // If a categorical feature has only 1 category, we treat it as continuous: SPARK-9957 如果分类特征只有一个类别，我们将其视为连续的。
+        // (我到是觉得如果是只有一个分类值,那么所有值都是相同的,只有一种结论lable,那有何意义，不用分类预测了啊,样本空间有问题)
+        if (numCategories > 1) {//根据分类特征的数量,设置真实的分桶数量,挺正常的逻辑
           numBins(featureIndex) = numCategories
         }
+          //即如果numCategories是1,则该分类数还是maxPossibleBins个,将其处理成连续性的,不知道原因是什么
       }
     }
 
     // Set number of features to use per node (for random forests).
-    //每一个节点特征选择的数量
+    //随机森林,每一个节点要选择多少个特征
     val _featureSubsetStrategy = featureSubsetStrategy match {
       case "auto" => //如果是自动的,该如何处理
         if (numTrees == 1) {
@@ -192,7 +208,7 @@ private[spark] object DecisionTreeMetadata extends Logging {
           if (strategy.algo == Classification) {
             "sqrt"
           } else {
-            "onethird"
+            "onethird" //连续性特征,选择特征的三分之一
           }
         }
       case _ => featureSubsetStrategy

@@ -19,6 +19,7 @@ package org.apache.spark.mllib.tree.impurity
 
 /**
  * Factory for Impurity instances.
+  * 混乱程度的种类:熵、GINI、方差
  */
 private[mllib] object Impurities {
 

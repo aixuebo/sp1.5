@@ -48,19 +48,19 @@ object SVMDataGenerator {
 
     val sparkMaster: String = args(0)
     val outputPath: String = args(1)
-    val nexamples: Int = if (args.length > 2) args(2).toInt else 1000
-    val nfeatures: Int = if (args.length > 3) args(3).toInt else 2
-    val parts: Int = if (args.length > 4) args(4).toInt else 2
+    val nexamples: Int = if (args.length > 2) args(2).toInt else 1000 //样本数量
+    val nfeatures: Int = if (args.length > 3) args(3).toInt else 2 //特征数量
+    val parts: Int = if (args.length > 4) args(4).toInt else 2 //分区数量
 
     val sc = new SparkContext(sparkMaster, "SVMGenerator")
 
     val globalRnd = new Random(94720)
-    val trueWeights = Array.fill[Double](nfeatures + 1)(globalRnd.nextGaussian())
+    val trueWeights = Array.fill[Double](nfeatures + 1)(globalRnd.nextGaussian()) //nfeatures + 1个权重
 
-    val data: RDD[LabeledPoint] = sc.parallelize(0 until nexamples, parts).map { idx =>
+    val data: RDD[LabeledPoint] = sc.parallelize(0 until nexamples, parts).map { idx => //循环每一个样本id
       val rnd = new Random(42 + idx)
 
-      val x = Array.fill[Double](nfeatures) {
+      val x = Array.fill[Double](nfeatures) {//填充nfeatures个元素,组成一个数组
         rnd.nextDouble() * 2.0 - 1.0
       }
       val yD = blas.ddot(trueWeights.length, x, 1, trueWeights, 1) + rnd.nextGaussian() * 0.1

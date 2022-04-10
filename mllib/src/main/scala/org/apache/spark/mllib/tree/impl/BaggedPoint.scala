@@ -78,6 +78,7 @@ private[spark] object BaggedPoint {
     }
   }
 
+  //随机不放回抽样
   private def convertToBaggedRDDSamplingWithoutReplacement[Datum] (
       input: RDD[Datum],
       subsamplingRate: Double,
@@ -124,6 +125,7 @@ private[spark] object BaggedPoint {
     }
   }
 
+  //全部数据都要,即不需要抽样
   private def convertToBaggedRDDWithoutSampling[Datum] (
       input: RDD[Datum]): RDD[BaggedPoint[Datum]] = {
     input.map(datum => new BaggedPoint(datum, Array(1.0)))

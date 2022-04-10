@@ -32,7 +32,7 @@ import org.apache.spark.SparkException
  */
 private[mllib] object NumericParser {
 
-  /** Parses a string into a Double, an Array[Double], or a Seq[Any].
+  /** Parses a string into a Double, an Array[Double], or a Seq[Any],or tuple类型
     * 将字符串解析成Double, an Array[Double], or a Seq[Any].
     **/
   def parse(s: String): Any = {

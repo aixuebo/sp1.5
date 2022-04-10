@@ -86,13 +86,14 @@ final class OneVsRestModel private[ml] (
     transformSchema(dataset.schema, logging = true)
 
     // determine the input columns: these need to be passed through
-    val origCols = dataset.schema.map(f => col(f.name))
+    val origCols = dataset.schema.map(f => col(f.name)) //原始列对象Column集合
 
     // add an accumulator column to store predictions of all the models
+    //labelId,Lable对应的分数
     val accColName = "mbc$acc" + UUID.randomUUID().toString
     val initUDF = udf { () => Map[Int, Double]() }
-    val mapType = MapType(IntegerType, DoubleType, valueContainsNull = false)
-    val newDataset = dataset.withColumn(accColName, initUDF())
+    val mapType = MapType(IntegerType, DoubleType, valueContainsNull = false) //不允许有null值
+    val newDataset = dataset.withColumn(accColName, initUDF()) //新的数据集合,添加一个统计列,列名mbc$acc+uuid,列类型是Map<Int,Double>
 
     // persist if underlying dataset is not persistent.
     val handlePersistence = dataset.rdd.getStorageLevel == StorageLevel.NONE
@@ -101,11 +102,10 @@ final class OneVsRestModel private[ml] (
     }
 
     // update the accumulator column with the result of prediction of models
-    val aggregatedDataset = models.zipWithIndex.foldLeft[DataFrame](newDataset) {
+    val aggregatedDataset = models.zipWithIndex.foldLeft[DataFrame](newDataset) { //新的数据集合作为输入,去计算新追加的统计列
       case (df, (model, index)) =>
-        val rawPredictionCol = model.getRawPredictionCol
-        val columns = origCols ++ List(col(rawPredictionCol), col(accColName))
-
+        val rawPredictionCol = model.getRawPredictionCol //获取模型的rawPredictionCol字段
+        val columns = origCols ++ List(col(rawPredictionCol), col(accColName)) //追加2列
         // add temporary column to store intermediate scores and update
         val tmpColName = "mbc$tmp" + UUID.randomUUID().toString
         val updateUDF = udf { (predictions: Map[Int, Double], prediction: Vector) =>
@@ -125,14 +125,17 @@ final class OneVsRestModel private[ml] (
     }
 
     // output the index of the classifier with highest confidence as prediction
+    //labelId,Lable对应的分数  ----选择分数最高的lableid
     val labelUDF = udf { (predictions: Map[Int, Double]) =>
       predictions.maxBy(_._2)._1.toDouble
     }
 
     // output label and label metadata as prediction
+    //labelUDF传入的参数是统计列Map对象
+    //即预测的标签是哪个labelid
     aggregatedDataset
-      .withColumn($(predictionCol), labelUDF(col(accColName)).as($(predictionCol), labelMetadata))
-      .drop(accColName)
+      .withColumn($(predictionCol), labelUDF(col(accColName)).as($(predictionCol), labelMetadata)) //追加预测列predictionCol
+      .drop(accColName) //删除统计列
   }
 
   override def copy(extra: ParamMap): OneVsRestModel = {
@@ -177,9 +180,9 @@ final class OneVsRest(override val uid: String)
 
   override def fit(dataset: DataFrame): OneVsRestModel = {
     // determine number of classes either from metadata if provided, or via computation.
-    val labelSchema = dataset.schema($(labelCol))
-    val computeNumClasses: () => Int = () => {
-      val Row(maxLabelIndex: Double) = dataset.agg(max($(labelCol))).head()
+    val labelSchema = dataset.schema($(labelCol)) //分类列名
+    val computeNumClasses: () => Int = () => { //计算有多少个分类
+      val Row(maxLabelIndex: Double) = dataset.agg(max($(labelCol))).head() //一共有多少个分类
       // classes are assumed to be numbered from 0,...,maxLabelIndex
       maxLabelIndex.toInt + 1
     }
@@ -201,10 +204,10 @@ final class OneVsRest(override val uid: String)
 
       // generate new label metadata for the binary problem.
       // TODO: use when ... otherwise after SPARK-7321 is merged
-      val newLabelMeta = BinaryAttribute.defaultAttr.withName("label").toMetadata()
-      val labelColName = "mc2b$" + index
-      val labelUDFWithNewMeta = labelUDF(col($(labelCol))).as(labelColName, newLabelMeta)
-      val trainingDataset = multiclassLabeled.withColumn(labelColName, labelUDFWithNewMeta)
+      val newLabelMeta = BinaryAttribute.defaultAttr.withName("label").toMetadata() //label的元数据类型
+      val labelColName = "mc2b$" + index //新label的名字
+      val labelUDFWithNewMeta = labelUDF(col($(labelCol))).as(labelColName, newLabelMeta) //设置新label是0还是1,以及label的数据类型
+      val trainingDataset = multiclassLabeled.withColumn(labelColName, labelUDFWithNewMeta) //加入一个label特征
       val classifier = getClassifier
       val paramMap = new ParamMap()
       paramMap.put(classifier.labelCol -> labelColName)

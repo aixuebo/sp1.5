@@ -24,6 +24,11 @@ import org.apache.spark.ml.param._
 // scalastyle:off
 
 /**
+  * 定义参数name、默认参数值、get参数值、参数类型。
+  * 因为继承了Params,所以是可以set设置参数值的
+  */
+
+/**
  * Trait for shared param regParam.
  */
 private[ml] trait HasRegParam extends Params {
@@ -116,7 +121,7 @@ private[ml] trait HasPredictionCol extends Params {
 private[ml] trait HasRawPredictionCol extends Params {
 
   /**
-   * Param for raw prediction (a.k.a. confidence) column name.
+   * Param for raw prediction (a.k.a. confidence) column name.原始的分类预测label列名
    * @group param
    */
   final val rawPredictionCol: Param[String] = new Param[String](this, "rawPredictionCol", "raw prediction (a.k.a. confidence) column name") //字符串属性

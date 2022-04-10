@@ -79,6 +79,7 @@ class LogisticRegressionModel @Since("1.3.0") (
   @Since("1.0.0")
   def this(weights: Vector, intercept: Double) = this(weights, intercept, weights.size, 2)
 
+  //阈值,逻辑回归 2分类为主,默认阈值是0.5
   private var threshold: Option[Double] = Some(0.5)
 
   /**
@@ -116,6 +117,7 @@ class LogisticRegressionModel @Since("1.3.0") (
     this
   }
 
+  //返回属于第几个分类
   override protected def predictPoint(
       dataMatrix: Vector,
       weightMatrix: Vector,
@@ -123,14 +125,14 @@ class LogisticRegressionModel @Since("1.3.0") (
     require(dataMatrix.size == numFeatures)
 
     // If dataMatrix and weightMatrix have the same dimension, it's binary logistic regression.
-    if (numClasses == 2) {
-      val margin = dot(weightMatrix, dataMatrix) + intercept
-      val score = 1.0 / (1.0 + math.exp(-margin))
+    if (numClasses == 2) {//二分类
+      val margin = dot(weightMatrix, dataMatrix) + intercept //线性回归的预测值
+      val score = 1.0 / (1.0 + math.exp(-margin)) //计算逻辑回归分数
       threshold match {
-        case Some(t) => if (score > t) 1.0 else 0.0
+        case Some(t) => if (score > t) 1.0 else 0.0 //分数根据阈值 判断分数
         case None => score
       }
-    } else {
+    } else {//多分类
       /**
        * Compute and find the one with maximum margins. If the maxMargin is negative, then the
        * prediction result will be the first class.
@@ -140,23 +142,23 @@ class LogisticRegressionModel @Since("1.3.0") (
        * is positive to prevent overflow.
        */
       var bestClass = 0
-      var maxMargin = 0.0
-      val withBias = dataMatrix.size + 1 == dataWithBiasSize
-      (0 until numClasses - 1).foreach { i =>
-        var margin = 0.0
+      var maxMargin = 0.0 //计算的最大的分类分数
+      val withBias = dataMatrix.size + 1 == dataWithBiasSize //true表示有截距
+      (0 until numClasses - 1).foreach { i => //循环每一种分类   i表示第几个分类
+        var margin = 0.0 //计算属于第i个分类的分数
         dataMatrix.foreachActive { (index, value) =>
           if (value != 0.0) margin += value * weightsArray((i * dataWithBiasSize) + index)
         }
         // Intercept is required to be added into margin.
         if (withBias) {
-          margin += weightsArray((i * dataWithBiasSize) + dataMatrix.size)
+          margin += weightsArray((i * dataWithBiasSize) + dataMatrix.size) //加上截距的值
         }
-        if (margin > maxMargin) {
-          maxMargin = margin
-          bestClass = i + 1
+        if (margin > maxMargin) { //第i分类的分数目前最大
+          maxMargin = margin //设置最大的分数
+          bestClass = i + 1 //记录产生最大分类分数的分类是哪个
         }
       }
-      bestClass.toDouble
+      bestClass.toDouble //返回最大的分类
     }
   }
 
@@ -368,7 +370,7 @@ class LogisticRegressionWithLBFGS
   @Experimental
   def setNumClasses(numClasses: Int): this.type = {
     require(numClasses > 1)
-    numOfLinearPredictor = numClasses - 1
+    numOfLinearPredictor = numClasses - 1 //二分类 其实就是运算线性回归,对线性回归的结果进行逻辑运算,因此会调用线性回归方法 numOfLinearPredictor = 2(numClasses) - 1 = 1
     if (numClasses > 2) {
       optimizer.setGradient(new LogisticGradient(numClasses))
     }

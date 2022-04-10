@@ -58,8 +58,9 @@ class StreamingLinearRegressionWithSGD private[mllib] (
    * (see `StreamingLinearAlgorithm`)
    */
   @Since("1.1.0")
-  def this() = this(0.1, 50, 1.0)
+  def this() = this(0.1, 50, 1.0) //默认值
 
+  //默认是线性回归模型
   @Since("1.1.0")
   val algorithm = new LinearRegressionWithSGD(stepSize, numIterations, miniBatchFraction)
 

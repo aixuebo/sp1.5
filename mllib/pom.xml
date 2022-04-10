@@ -132,7 +132,7 @@
       </exclusions>
     </dependency>
   </dependencies>
-  <profiles>
+f
     <profile>
       <id>netlib-lgpl</id>
       <dependencies>

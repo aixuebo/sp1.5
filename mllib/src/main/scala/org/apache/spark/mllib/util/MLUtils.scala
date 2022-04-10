@@ -309,6 +309,7 @@ object MLUtils {
   /**
    * Returns a new vector with `1.0` (bias) appended to the input vector.
     * 向参数向量的最后一个位置追加一个向量值,固定值为1,返回新的向量
+    * y = vx + b ===> y = vx,其中v加入一个特征为1,x加入特征为b,即最后计算的x要求有一个截距b
    */
   @Since("1.0.0")
   def appendBias(vector: Vector): Vector = {
@@ -324,13 +325,13 @@ object MLUtils {
         val inputValues = sv.values
         val inputIndices = sv.indices
         val inputValuesLength = inputValues.length
-        val dim = sv.size
+        val dim = sv.size //原始维度,比如特征20个,则20维
         val outputValues = Array.ofDim[Double](inputValuesLength + 1)
         val outputIndices = Array.ofDim[Int](inputValuesLength + 1)
         System.arraycopy(inputValues, 0, outputValues, 0, inputValuesLength)
         System.arraycopy(inputIndices, 0, outputIndices, 0, inputValuesLength)
-        outputValues(inputValuesLength) = 1.0
-        outputIndices(inputValuesLength) = dim
+        outputValues(inputValuesLength) = 1.0 //特征值是1
+        outputIndices(inputValuesLength) = dim //第20维
         Vectors.sparse(dim + 1, outputIndices, outputValues)
       case _ => throw new IllegalArgumentException(s"Do not support vector type ${vector.getClass}")
     }

@@ -36,15 +36,17 @@ import org.apache.spark.util.random.XORShiftRandom
  *
  * This is an iterative algorithm that will make multiple passes over the data, so any RDDs given
  * to it should be cached by the user.
+  *
+  * 处理输入参数是RDD[Vector]
  */
 @Since("0.8.0")
 class KMeans private (
-    private var k: Int,
-    private var maxIterations: Int,
-    private var runs: Int,
-    private var initializationMode: String,
+    private var k: Int,//中心点数量
+    private var maxIterations: Int,//迭代次数
+    private var runs: Int,//算法执行并发度--用于计算初始化中心节点
+    private var initializationMode: String,//初始化中心节点的方式
     private var initializationSteps: Int,
-    private var epsilon: Double,
+    private var epsilon: Double,//距离到达该值时,就不用再划分数据了
     private var seed: Long) extends Serializable with Logging {
 
   /**
@@ -178,6 +180,7 @@ class KMeans private (
 
   // Initial cluster centers can be provided as a KMeansModel object rather than using the
   // random or k-means|| initializationMode
+  //给定了中心节点集合
   private var initialModel: Option[KMeansModel] = None
 
   /**
@@ -205,10 +208,10 @@ class KMeans private (
     }
 
     // Compute squared norms and cache them.
-    val norms = data.map(Vectors.norm(_, 2.0))
+    val norms = data.map(Vectors.norm(_, 2.0)) //每一个特征向量,进行归一化处理
     norms.persist()
     val zippedData = data.zip(norms).map { case (v, norm) =>
-      new VectorWithNorm(v, norm)
+      new VectorWithNorm(v, norm) //存储向量与归一化后的值的映射
     }
     val model = runAlgorithm(zippedData)
     norms.unpersist()
@@ -223,6 +226,7 @@ class KMeans private (
 
   /**
    * Implementation of K-Means algorithm.
+    * 执行算法
    */
   private def runAlgorithm(data: RDD[VectorWithNorm]): KMeansModel = {
 
@@ -238,11 +242,12 @@ class KMeans private (
       runs
     }
 
+    //初始化中心节点，或者获取给定的中心节点
     val centers = initialModel match {
-      case Some(kMeansCenters) => {
-        Array(kMeansCenters.clusterCenters.map(s => new VectorWithNorm(s)))
+      case Some(kMeansCenters) => { //给定中心节点集合
+        Array(kMeansCenters.clusterCenters.map(s => new VectorWithNorm(s))) //处理中心节点集合
       }
-      case None => {
+      case None => { //初始化中心节点
         if (initializationMode == KMeans.RANDOM) {
           initRandom(data)
         } else {
@@ -346,11 +351,13 @@ class KMeans private (
 
   /**
    * Initialize `runs` sets of cluster centers at random.
+    * 随机采样
    */
   private def initRandom(data: RDD[VectorWithNorm])
   : Array[Array[VectorWithNorm]] = {
     // Sample all the cluster centers in one pass to avoid repeated scans
-    val sample = data.takeSample(true, runs * k, new XORShiftRandom(this.seed).nextInt()).toSeq
+    //可以重复的方式抽取样本,runs*k个
+    val sample = data.takeSample(true, runs * k, new XORShiftRandom(this.seed).nextInt()).toSeq //随机抽样
     Array.tabulate(runs)(r => sample.slice(r * k, (r + 1) * k).map { v =>
       new VectorWithNorm(Vectors.dense(v.vector.toArray), v.norm)
     }.toArray)
@@ -465,7 +472,7 @@ class KMeans private (
 @Since("0.8.0")
 object KMeans {
 
-  // Initialization mode names
+  // Initialization mode names 初始化中心节点的方式
   @Since("0.8.0")
   val RANDOM = "random"
   @Since("0.8.0")
@@ -600,6 +607,7 @@ object KMeans {
  * A vector with its norm for fast distance computation.
  *
  * @see [[org.apache.spark.mllib.clustering.KMeans#fastSquaredDistance]]
+  * 持有一个向量与他的归一化norm值
  */
 private[clustering]
 class VectorWithNorm(val vector: Vector, val norm: Double) extends Serializable {

@@ -125,6 +125,10 @@ private class RandomForest (
    * Method to train a decision tree model over an RDD
    * @param input Training data: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]]
    * @return a random forest model that can be used for prediction
+    *
+    * 步骤:
+    * 1.解析元数据,有多少个特征、多少个元素,每一个特征可以拆分成多少个分桶。
+    * 2.确定每一个特征的拆分点
    */
   def run(input: RDD[LabeledPoint]): RandomForestModel = {
 
@@ -445,6 +449,7 @@ object RandomForest extends Serializable with Logging {
 
   /**
    * List of supported feature subset sampling strategies.
+    * 随机森林如何随机获取特征
    */
   @Since("1.2.0")
   val supportedFeatureSubsetStrategies: Array[String] =

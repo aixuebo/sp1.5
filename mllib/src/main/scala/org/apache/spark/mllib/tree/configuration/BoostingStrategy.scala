@@ -58,7 +58,7 @@ case class BoostingStrategy @Since("1.4.0") (
     treeStrategy.algo match {
       case Classification =>
         require(treeStrategy.numClasses == 2,
-          "Only binary classification is supported for boosting.")
+          "Only binary classification is supported for boosting.") //只支持2分类
       case Regression =>
         // nothing
       case _ =>
@@ -79,6 +79,7 @@ object BoostingStrategy {
    * Returns default configuration for the boosting algorithm
    * @param algo Learning goal.  Supported: "Classification" or "Regression"
    * @return Configuration for boosting algorithm
+    * 设置目标是回归还是分类
    */
   @Since("1.2.0")
   def defaultParams(algo: String): BoostingStrategy = {
@@ -101,7 +102,7 @@ object BoostingStrategy {
         treeStrategy.numClasses = 2
         new BoostingStrategy(treeStrategy, LogLoss)
       case Algo.Regression =>
-        new BoostingStrategy(treeStrategy, SquaredError)
+        new BoostingStrategy(treeStrategy, SquaredError) //默认用均方差算法
       case _ =>
         throw new IllegalArgumentException(s"$algo is not supported by boosting.")
     }

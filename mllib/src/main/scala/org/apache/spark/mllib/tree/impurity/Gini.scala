@@ -32,8 +32,8 @@ object Gini extends Impurity {
   /**
    * :: DeveloperApi ::
    * information calculation for multiclass classification
-   * @param counts Array[Double] with counts for each label
-   * @param totalCount sum of counts for all labels
+   * @param counts Array[Double] with counts for each label 每一个分类标签对应的样本的数量,数组size=分类数量
+   * @param totalCount sum of counts for all labels 总样本数量
    * @return information value, or 0 if totalCount = 0
    */
   @Since("1.1.0")
@@ -45,8 +45,8 @@ object Gini extends Impurity {
     val numClasses = counts.length
     var impurity = 1.0
     var classIndex = 0
-    while (classIndex < numClasses) {
-      val freq = counts(classIndex) / totalCount
+    while (classIndex < numClasses) {//循环每一个标签
+      val freq = counts(classIndex) / totalCount //计算该标签样本数量 / 总样本数量
       impurity -= freq * freq
       classIndex += 1
     }
@@ -56,6 +56,7 @@ object Gini extends Impurity {
   /**
    * :: DeveloperApi ::
    * variance calculation
+    * 方差计算方式
    * @param count number of instances
    * @param sum sum of labels
    * @param sumSquares summation of squares of the labels
